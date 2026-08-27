@@ -87,17 +87,37 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const tutorial = useGameStore((s) => s.tutorial)
   const advanceTutorial = useGameStore((s) => s.advanceTutorial)
   const skipTutorial = useGameStore((s) => s.skipTutorial)
-  const enclosure = useGameStore((s) => s.currentEnclosure)
-  const unlocked = useGameStore((s) => s.unlocked)
+  const endVisit = useGameStore((s) => s.endVisit)
   const gold = useGameStore((s) => s.gold)
-  const reputation = useGameStore((s) => s.reputation)
   const cash = useGameStore((s) => s.cash)
-  const zooName = useGameStore((s) => s.zooName)
-  const animals = useGameStore((s) => s.animals)
   const day = useGameStore((s) => s.clock.day)
   const elapsed = useGameStore((s) => s.clock.elapsed)
 
+  /*
+    구경 중에는 화면에 뿌릴 값의 출처가 통째로 바뀐다.
+    화면 구조는 내 동물원과 같으므로 컴포넌트를 따로 만들지 않고 **출처만 갈아 끼운다** —
+    카메라·틱·렌더 코드를 한 벌 더 두면 둘이 조금씩 어긋나기 시작한다.
+  */
+  const visiting = useGameStore((s) => s.visiting)
+  const myEnclosure = useGameStore((s) => s.currentEnclosure)
+  const visitEnclosure = useGameStore((s) => s.visitEnclosure)
+  const myUnlocked = useGameStore((s) => s.unlocked)
+  const myReputation = useGameStore((s) => s.reputation)
+  const myZooName = useGameStore((s) => s.zooName)
+  const myAnimals = useGameStore((s) => s.animals)
+
+  const enclosure = visiting ? visitEnclosure : myEnclosure
+  const unlocked = visiting ? visiting.unlocked : myUnlocked
+  const reputation = visiting ? visiting.reputation : myReputation
+  const zooName = visiting ? visiting.zooName : myZooName
+  const animals = useMemo(
+    () => (visiting ? visiting.animals : myAnimals),
+    [visiting, myAnimals],
+  )
+
+  // 구경 중에는 잠긴 우리를 아예 볼 수 없으므로 화면에 뜬 우리는 늘 열려 있다.
   const isOpen = unlocked.includes(enclosure)
+  const canMove = visiting ? unlocked.length > 1 : true
   const stored = useMemo(() => animals.filter((a) => a.status === 'STORED'), [animals])
   const shippingCount = useMemo(() => animals.filter((a) => a.status === 'SHIPPING').length, [animals])
   const selected = useMemo(
@@ -153,11 +173,13 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         if (store.modal === 'REPORT' || store.isDrawing) return
 
         const phase = phaseOf(store.clock.elapsed)
+        const shown = store.visiting ? store.visitEnclosure : store.currentEnclosure
         for (const [id, sim] of sims) {
           sim.update(step, {
-            reputation: store.reputation,
+            // 손님 수는 보고 있는 동물원의 명성을 따른다. 구경 중에 내 명성으로 세면 안 된다.
+            reputation: store.visiting ? store.visiting.reputation : store.reputation,
             phase,
-            active: id === store.currentEnclosure,
+            active: id === shown,
           })
         }
 
@@ -177,7 +199,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
       },
       render: () => {
         const store = useGameStore.getState()
-        const sim = sims.get(store.currentEnclosure)
+        const sim = sims.get(store.visiting ? store.visitEnclosure : store.currentEnclosure)
         if (!sim) return
         renderer.draw(ctx, {
           sim,
@@ -336,11 +358,11 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         onPointerCancel={handlePointerUp}
       />
 
-      {tutorial !== 'DONE' && (
+      {tutorial !== 'DONE' && !visiting && (
         <TutorialOverlay hint={TUTORIAL_HINTS[tutorial]} onSkip={skipTutorial} />
       )}
 
-      {!isOpen && !modal && !trayOpen && (
+      {!isOpen && !modal && !trayOpen && !visiting && (
         <LockedOverlay id={enclosure} gold={gold} onUnlock={() => unlockEnclosure(enclosure)} />
       )}
 
@@ -373,20 +395,37 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           ) : (
             <>
               <div className="hud-top-left">
-                <BitmapLabel text={`DAY ${day}`} size={34} />
-                <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
+                {visiting ? (
+                  <BitmapLabel text={`VISITING DAY ${visiting.day}`} size={26} />
+                ) : (
+                  <>
+                    <BitmapLabel text={`DAY ${day}`} size={34} />
+                    <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
+                  </>
+                )}
               </div>
 
               <div className="hud-top-right">
                 <BitmapLabel text={zooName || 'MY ZOO'} size={26} align="right" />
                 <div className="hud-purse">
-                  <IconGlyph icon={GUI.COIN} size={30} />
-                  <BitmapLabel text={`${gold}`} size={24} />
-                  <IconGlyph icon={GUI.MEDAL} size={30} />
-                  <BitmapLabel text={`${reputation}`} size={24} />
-                  {/* GUI 시트에 캐시다운 아이콘이 없다. 무지개 팔레트가 가장 '특별한' 인상을 준다. */}
-                  <IconGlyph icon={GUI.PALETTE} size={30} />
-                  <BitmapLabel text={`${cash}`} size={24} />
+                  {/* 남의 지갑은 보여 주지 않는다. 명성과 주인 아이디만 남긴다. */}
+                  {visiting ? (
+                    <>
+                      <IconGlyph icon={GUI.MEDAL} size={30} />
+                      <BitmapLabel text={`${reputation}`} size={24} />
+                      <BitmapLabel text={visiting.userId} size={20} />
+                    </>
+                  ) : (
+                    <>
+                      <IconGlyph icon={GUI.COIN} size={30} />
+                      <BitmapLabel text={`${gold}`} size={24} />
+                      <IconGlyph icon={GUI.MEDAL} size={30} />
+                      <BitmapLabel text={`${reputation}`} size={24} />
+                      {/* GUI 시트에 캐시다운 아이콘이 없다. 무지개 팔레트가 가장 '특별한' 인상을 준다. */}
+                      <IconGlyph icon={GUI.PALETTE} size={30} />
+                      <BitmapLabel text={`${cash}`} size={24} />
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -397,24 +436,30 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             </>
           )}
 
-          <div className="hud-arrow hud-arrow-left">
-            <IconButton icon={GUI.BACK} size={72} title="PREV" onClick={() => slideTo(-1)} />
-          </div>
-          <div className="hud-arrow hud-arrow-right">
-            <IconButton icon={GUI.BACK} size={72} title="NEXT" onClick={() => slideTo(1)} />
-          </div>
+          {/* 구경 중에 연 우리가 하나뿐이면 화살표 자체를 띄우지 않는다. 눌러도 갈 데가 없다. */}
+          {canMove && (
+            <>
+              <div className="hud-arrow hud-arrow-left">
+                <IconButton icon={GUI.BACK} size={72} title="PREV" onClick={() => slideTo(-1)} />
+              </div>
+              <div className="hud-arrow hud-arrow-right">
+                <IconButton icon={GUI.BACK} size={72} title="NEXT" onClick={() => slideTo(1)} />
+              </div>
+            </>
+          )}
 
           {selected && (
             <AnimalCard
               animal={selected}
               onClose={() => select(null)}
-              {...(selected.status === 'PLACED' && {
+              readOnly={visiting !== null}
+              {...(!visiting && selected.status === 'PLACED' && {
                 onStore: () => {
                   storeAnimal(selected.id)
                   select(null)
                 },
               })}
-              {...(selected.status === 'STORED' && {
+              {...(!visiting && selected.status === 'STORED' && {
                 onSell: () => {
                   sellAnimal(selected.id)
                   select(null)
@@ -427,6 +472,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             <div className="bar-group bar-left">
               {detail ? (
                 <BarButton icon={GUI.BACK} label="BACK" onClick={() => setScreen('ZOO')} />
+              ) : visiting ? (
+                <BarButton icon={GUI.BACK} label="GO HOME" onClick={endVisit} />
               ) : (
                 <BarButton
                   icon={GUI.BINOCULARS}
@@ -463,17 +510,27 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                     onClick={() => applyCameraState(clampCamera(zoomStep(cameraRef.current, -1)))}
                   />
                   {/* 배치는 상세보기에서만. 펜스 너머 멀리서 던져 넣는 그림은 어색하다. */}
-                  <BarButton
-                    icon={GUI.BOOK}
-                    label="STORAGE"
-                    data-tutorial="storage"
-                    onClick={() => {
-                      advanceTutorial('STORAGE', 'PLACE')
-                      select(null)
-                      setTrayOpen(true)
-                    }}
-                  />
+                  {!visiting && (
+                    <BarButton
+                      icon={GUI.BOOK}
+                      label="STORAGE"
+                      data-tutorial="storage"
+                      onClick={() => {
+                        advanceTutorial('STORAGE', 'PLACE')
+                        select(null)
+                        setTrayOpen(true)
+                      }}
+                    />
+                  )}
                 </>
+              ) : visiting ? (
+                /* 구경도 우리 안까지 들어가야 제맛이다. 요청서 자리에 가까이 보기를 둔다. */
+                <BarButton
+                  icon={GUI.BINOCULARS}
+                  label="INSPECT"
+                  disabled={!isOpen}
+                  onClick={() => setScreen('ZOO_DETAIL')}
+                />
               ) : (
                 <BarButton
                   icon={GUI.SCROLL}
@@ -488,9 +545,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             </div>
 
             <div className="bar-group bar-right">
-              {!detail && (
+              {!detail && !visiting && (
                 <>
                   <BarButton icon={GUI.PALETTE} label="SHOP" onClick={() => openModal('SHOP')} />
+                  <BarButton icon={GUI.MAP} label="VISIT" onClick={() => openModal('VISIT')} />
                   <BarButton icon={GUI.INFO} label="STATUS" onClick={() => openModal('STATUS')} />
                   <BarButton icon={GUI.SETTINGS} label="OPTIONS" onClick={() => openModal('OPTIONS')} />
                 </>

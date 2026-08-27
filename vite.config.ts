@@ -1,12 +1,15 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { fileURLToPath, URL } from 'node:url'
+import { zooDb } from './plugins/zooDb'
 
 /** 게임이 쓰는 고정 포트. 흔한 개발 포트(3000/5173/8080)를 피해 골랐다. */
 const GAME_PORT = 29876
 
 export default defineConfig({
-  plugins: [react()],
+  // zooDb 는 정적 서빙 옆에 /api 미들웨어를 얹어 db/ 폴더를 DB 로 쓴다.
+  // dev 와 preview 양쪽에 붙으므로 실행 절차와 포트는 그대로다.
+  plugins: [react(), zooDb()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

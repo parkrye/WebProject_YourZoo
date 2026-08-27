@@ -7,3 +7,6 @@ tsconfig.tsbuildinfo
 
 # 전처리 전 원본 에셋 (scripts/prepare-assets.py 의 입력). 리포에 두지 않는다.
 assets-source/
+
+# 동물원 공개 저장소. 로컬 서버가 쓰는 데이터라 레포에 담지 않는다.
+db/

@@ -27,3 +27,21 @@ export function neighborEnclosure(id: BiomeId, direction: -1 | 1): BiomeId {
   const next = (i + direction + n) % n
   return ENCLOSURE_ORDER[next] as BiomeId
 }
+
+/**
+ * 해금된 우리 안에서만 좌우로 순회한다.
+ *
+ * 남의 동물원을 구경할 때는 **잠긴 우리를 아예 볼 수 없어야** 한다.
+ * 내 동물원에서는 잠긴 우리도 보이는데, 거기서만 해금 안내를 띄울 수 있기 때문이다.
+ */
+export function neighborUnlocked(
+  id: BiomeId,
+  direction: -1 | 1,
+  unlocked: readonly BiomeId[],
+): BiomeId {
+  const open = ENCLOSURE_ORDER.filter((e) => unlocked.includes(e))
+  if (open.length === 0) return id
+  const i = open.indexOf(id)
+  const next = ((i < 0 ? 0 : i) + direction + open.length) % open.length
+  return open[next] as BiomeId
+}

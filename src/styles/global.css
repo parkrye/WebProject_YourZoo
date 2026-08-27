@@ -1148,3 +1148,66 @@ html, body, #root {
   margin-top: auto;
   opacity: 0.75;
 }
+
+/* ── 동물원 구경 ─────────────────────────────────────────── */
+
+.visit {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.visit-me {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 12px;
+  padding: 6px 0;
+  opacity: 0.85;
+}
+
+.visit-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 목록은 길어질 수 있다. 팝업 높이는 고정이므로 여기만 스크롤한다. */
+.visit-list {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.visit-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  background: rgba(120, 78, 34, 0.1);
+  box-shadow: inset 0 0 0 2px rgba(160, 116, 58, 0.35);
+  transition: background 0.12s ease, transform 0.08s ease;
+}
+.visit-row:hover { background: rgba(120, 78, 34, 0.2); transform: translateX(3px); }
+.visit-row:disabled { opacity: 0.5; cursor: default; transform: none; }
+
+.visit-row-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.visit-row-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}

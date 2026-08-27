@@ -1,4 +1,5 @@
 import { loadImageBitmap } from '@/store/imageDb'
+import { remoteImageUrl } from '@/net/zooApi'
 
 /**
  * 동물 그림 비트맵 캐시.
@@ -46,4 +47,26 @@ export async function ensureBitmap(id: string): Promise<ImageBitmap | null> {
 
   pending.set(id, task)
   return task
+}
+
+/**
+ * 남의 동물원 그림을 서버에서 받아 같은 캐시에 넣는다.
+ *
+ * 구경하는 동물의 그림은 내 IndexedDB 에 없다. 그렇다고 `ensureBitmap` 이
+ * 실패할 때마다 서버를 찔러 보게 하면, 방금 판 동물의 그림을 찾다가도 네트워크를 탄다.
+ * **구경에 들어갈 때 명시적으로** 미리 받아 둔다.
+ */
+export async function preloadRemote(ids: readonly string[]): Promise<void> {
+  await Promise.all(
+    ids.map(async (id) => {
+      if (bitmaps.has(id)) return
+      try {
+        const res = await fetch(remoteImageUrl(id))
+        if (!res.ok) return
+        bitmaps.set(id, await createImageBitmap(await res.blob()))
+      } catch {
+        // 못 받은 그림은 그 동물만 안 보인다. 구경 자체를 막을 이유는 없다.
+      }
+    }),
+  )
 }

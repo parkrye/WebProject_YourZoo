@@ -12,19 +12,21 @@ import { bakeSheet } from '@/render/animal/bakeSheet'
 import { advanceClock, type ClockAdvanceResult, type ClockState } from '@/domain/clock'
 import { createUserId, isUserId } from '@/domain/userId'
 import { settleDay, type DailyReport } from '@/domain/economy'
-import { neighborEnclosure } from '@/domain/enclosure'
+import { ENCLOSURE_ORDER, neighborEnclosure, neighborUnlocked } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
 import { emptyDraft, type RequestDraft } from '@/domain/requestDraft'
 import { randomTraits } from '@/domain/traits'
 import { skipsShipping, type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
-import { ensureBitmap, forgetBitmap, getBitmap, registerFromBlob } from '@/sim/imageCache'
+import { ensureBitmap, forgetBitmap, getBitmap, preloadRemote, registerFromBlob } from '@/sim/imageCache'
 import { deleteImage, putImage } from './imageDb'
 import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
+import { publishZoo, type ZooDoc } from '@/net/zooApi'
+import { getImage } from './imageDb'
 
 export type ScreenId = 'TITLE' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
-export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | null
+export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | null
 
 /**
  * 하루가 넘어갈 때의 암전 단계.
@@ -70,6 +72,10 @@ interface GameState {
   dayFade: DayFade
   /** 암전이 끝나면 처리할 날짜 넘김. 처리 전까지 시계는 멈춰 있다. */
   pendingDay: ClockAdvanceResult | null
+  /** 구경 중인 남의 동물원. null 이면 내 동물원이다. 세이브에는 넣지 않는다. */
+  visiting: ZooDoc | null
+  /** 구경 중에 보고 있는 우리. 내 `currentEnclosure` 를 건드리지 않는다. */
+  visitEnclosure: BiomeId
 
   setScreen(screen: ScreenId): void
   setDrawing(drawing: boolean): void
@@ -82,6 +88,10 @@ interface GameState {
   finishDay(): void
   /** 페이드인이 끝났다. 시계를 다시 돌린다. */
   endDayFade(): void
+  /** 남의 동물원 구경을 시작한다. 그림을 먼저 받아 두고 들어간다. */
+  startVisit(doc: ZooDoc): Promise<void>
+  /** 구경을 끝내고 내 동물원으로 돌아온다. */
+  endVisit(): void
   moveEnclosure(direction: -1 | 1): void
   setOption<K extends keyof OptionsState>(key: K, value: OptionsState[K]): void
   /** 요청서 제출. 비용을 차감하고 배송 대기 상태로 넣는다. */
@@ -134,6 +144,8 @@ const initial = {
   options: { bgm: 0.7, sfx: 0.8 },
   dayFade: 'NONE' as DayFade,
   pendingDay: null as ClockAdvanceResult | null,
+  visiting: null as ZooDoc | null,
+  visitEnclosure: 'FIELD' as BiomeId,
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -170,6 +182,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (state.isDrawing || state.modal === 'REPORT') return
     // 암전이 시작되면 정산이 끝나고 화면이 다시 밝아질 때까지 시계는 멈춘다.
     if (state.dayFade !== 'NONE') return
+    // 남의 동물원을 보는 중에 내 하루가 끝나 암전과 리포트가 끼어들면 곤란하다.
+    if (state.visiting) return
 
     const advance = advanceClock(state.clock, dt)
     if (advance.daysPassed <= 0) {
@@ -244,13 +258,38 @@ export const useGameStore = create<GameState>((set, get) => ({
       dayFade: 'HOLD',
       pendingDay: null,
     }))
+
+    // 하루가 끝날 때 한 번만 올린다. 구경하는 사람이 보는 건 '어제 자정의 동물원'이다.
+    void publishCurrentZoo()
   },
 
   endDayFade: () => set({ dayFade: 'NONE' }),
 
   moveEnclosure: (direction) => {
-    set({ currentEnclosure: neighborEnclosure(get().currentEnclosure, direction) })
+    const { visiting, visitEnclosure, currentEnclosure } = get()
+    // 구경 중에는 그 동물원이 연 우리 안에서만 돈다. 잠긴 우리는 볼 수 없다.
+    if (visiting) {
+      set({ visitEnclosure: neighborUnlocked(visitEnclosure, direction, visiting.unlocked) })
+      return
+    }
+    set({ currentEnclosure: neighborEnclosure(currentEnclosure, direction) })
   },
+
+  startVisit: async (doc) => {
+    // 남의 그림은 내 IndexedDB 에 없다. 들어가기 전에 받아 둬야 빈 우리를 보지 않는다.
+    const ids = doc.animals.flatMap((a) =>
+      a.spriteSheet ? [a.imageId, a.spriteSheet.imageId] : [a.imageId],
+    )
+    await preloadRemote(ids)
+    set({
+      visiting: doc,
+      visitEnclosure: firstUnlocked(doc.unlocked),
+      screen: 'ZOO',
+      modal: null,
+    })
+  },
+
+  endVisit: () => set({ visiting: null, screen: 'ZOO', modal: null }),
 
   setOption: (key, value) => set((s) => ({ options: { ...s.options, [key]: value } })),
 
@@ -543,4 +582,54 @@ export function startAutosave(): () => void {
     document.removeEventListener('visibilitychange', onVisibility)
     window.removeEventListener('pagehide', flush)
   }
+}
+
+/** 해금된 우리 중 첫 번째. 남의 동물원은 늘 여기서부터 본다. */
+function firstUnlocked(unlocked: readonly BiomeId[]): BiomeId {
+  return ENCLOSURE_ORDER.find((id) => unlocked.includes(id)) ?? 'FIELD'
+}
+
+/**
+ * 내 동물원을 서버에 올린다. 하루 정산 때 한 번.
+ *
+ * 배치된 동물만 올린다 — 창고에 쌓아 둔 건 구경하는 사람에게 보이지 않는다.
+ * 소지금도 담지 않는다. 남의 지갑이 보이면 자랑하려고 숫자를 부풀리는 쪽으로 놀이가 기운다.
+ *
+ * 실패해도 조용히 넘어간다. 서버가 없어도(정적 호스팅) 게임은 그대로 돌아가야 한다.
+ */
+async function publishCurrentZoo(): Promise<void> {
+  const s = useGameStore.getState()
+  if (!s.userId) return
+
+  const animals = s.animals.filter((a) => a.status === 'PLACED')
+  if (animals.length === 0) return
+
+  const images: Record<string, string> = {}
+  for (const animal of animals) {
+    await collectImage(images, animal.imageId)
+    if (animal.spriteSheet) await collectImage(images, animal.spriteSheet.imageId)
+  }
+
+  await publishZoo(
+    {
+      userId: s.userId,
+      zooName: s.zooName,
+      reputation: s.reputation,
+      day: s.clock.day,
+      unlocked: s.unlocked,
+      animals,
+    },
+    images,
+  )
+}
+
+async function collectImage(into: Record<string, string>, id: string): Promise<void> {
+  if (into[id]) return
+  const blob = await getImage(id)
+  if (!blob) return
+  into[id] = await new Promise<string>((resolve) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result))
+    reader.readAsDataURL(blob)
+  })
 }

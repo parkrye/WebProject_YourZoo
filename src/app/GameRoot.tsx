@@ -8,6 +8,7 @@ import { StatusModal } from '@/ui/modals/StatusModal'
 import { RequestModal } from '@/ui/modals/RequestModal'
 import { ReportModal } from '@/ui/modals/ReportModal'
 import { ShopModal } from '@/ui/modals/ShopModal'
+import { VisitModal } from '@/ui/modals/VisitModal'
 import { useGameStore } from '@/store/gameStore'
 
 export function GameRoot() {
@@ -33,6 +34,7 @@ export function GameRoot() {
       {modal === 'REQUEST' && <RequestModal />}
       {modal === 'REPORT' && <ReportModal />}
       {modal === 'SHOP' && <ShopModal />}
+      {modal === 'VISIT' && <VisitModal />}
     </Stage>
   )
 }
