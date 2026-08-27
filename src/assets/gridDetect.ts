@@ -27,16 +27,21 @@ export function detectFrames(source: CanvasImageSource, grid: GridSpec): Frame[]
   const rowBands = findBands(rowSums(data, sheetW, sheetH), rows)
   if (!rowBands) return uniformFrames(grid)
 
+  const paddedRows = padBands(rowBands, sheetH)
+
   const frames: Frame[] = []
-  for (const band of rowBands) {
+  for (let r = 0; r < rowBands.length; r++) {
+    const band = rowBands[r] as Band
     const colBands = findBands(colSums(data, sheetW, band.start, band.end), cols)
     if (!colBands) return uniformFrames(grid)
-    for (const col of colBands) {
+
+    const row = paddedRows[r] as Band
+    for (const col of padBands(colBands, sheetW)) {
       frames.push({
         sx: col.start,
-        sy: band.start,
+        sy: row.start,
         sw: col.end - col.start + 1,
-        sh: band.end - band.start + 1,
+        sh: row.end - row.start + 1,
       })
     }
   }
@@ -61,7 +66,14 @@ interface Band {
   end: number
 }
 
-const ALPHA_THRESHOLD = 24
+/**
+ * 이 알파 이상이면 잉크로 친다.
+ * 값이 크면 안티에일리어싱된 외곽 1~2px 가 프레임 밖으로 밀려나 테두리가 잘려 보인다.
+ */
+const ALPHA_THRESHOLD = 6
+
+/** 검출된 프레임을 이만큼 넓혀 외곽 안티에일리어싱을 품는다. 이웃 밴드와는 겹치지 않게 잘린다. */
+const FRAME_PADDING = 2
 
 /** 밴드를 쪼갤 때 가장자리에서 이만큼은 건드리지 않는다. 세리프가 잘려 나가는 걸 막는다. */
 const SPLIT_MARGIN_RATIO = 0.12
@@ -115,6 +127,23 @@ function findBands(sums: Uint32Array, expected: number): Band[] | null {
   return bands
 }
 
+/**
+ * 밴드를 FRAME_PADDING 만큼 넓힌다.
+ * 이웃 밴드 사이의 여백 절반까지만 확장해 서로 침범하지 않게 한다.
+ */
+function padBands(bands: readonly Band[], limit: number): Band[] {
+  return bands.map((band, i) => {
+    const prev = bands[i - 1]
+    const next = bands[i + 1]
+    const backRoom = prev ? Math.floor((band.start - prev.end - 1) / 2) : band.start
+    const frontRoom = next ? Math.floor((next.start - band.end - 1) / 2) : limit - 1 - band.end
+    return {
+      start: Math.max(0, band.start - Math.min(FRAME_PADDING, Math.max(0, backRoom))),
+      end: Math.min(limit - 1, band.end + Math.min(FRAME_PADDING, Math.max(0, frontRoom))),
+    }
+  })
+}
+
 function splitBands(sums: Uint32Array, threshold: number): Band[] {
   const bands: Band[] = []
   let start = -1
@@ -163,7 +192,8 @@ function splitWidest(bands: Band[], sums: Uint32Array): boolean {
     }
   }
 
-  bands.splice(target, 1, { start: band.start, end: cutAt - 1 }, { start: cutAt + 1, end: band.end })
+  // cutAt 컬럼을 버리면 글자 외곽선 한 줄이 통째로 사라진다. 앞쪽 밴드에 포함시킨다.
+  bands.splice(target, 1, { start: band.start, end: cutAt }, { start: cutAt + 1, end: band.end })
   return true
 }
 

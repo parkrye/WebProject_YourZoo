@@ -3,6 +3,9 @@ import { clamp } from '@/core/math'
 import { MAX_ANIMALS_PER_ENCLOSURE } from './balance'
 import type { AnimalTraits } from './traits'
 
+/** 동물의 행동 상태. BT 가 정하고 렌더러가 소비한다. */
+export type AnimalMotion = 'IDLE' | 'MOVE' | 'SIGNATURE'
+
 /**
  * 향후 외부 SDK 가 생성할 스프라이트 시트 메타.
  * 값이 있으면 `SheetRenderer`, `null` 이면 `ProceduralRenderer` 를 쓴다.
@@ -15,7 +18,7 @@ export interface SheetMeta {
   rows: number
   fps: number
   /** 행 순서에 대응하는 모션. 예: ['IDLE', 'MOVE', 'SIGNATURE'] */
-  motions: readonly string[]
+  motions: readonly AnimalMotion[]
 }
 
 export interface Animal {

@@ -70,14 +70,33 @@
 
 ---
 
-## M3 — 동물 AI (BT) + 배치
+## M3 — 동물 AI (BT) + 배치  ← *완료*
 
-- [ ] `ai/bt` 코어 (Sequence / Selector / Inverter / Cond / Action / Wait)
-- [ ] `ai/actions.ts` · `ai/buildTree.ts`
-- [ ] `sim/AnimalAgent.ts` — BT 10Hz, 이동 적분 60Hz
-- [ ] `render/animal/AnimalRenderer` + `ProceduralRenderer`
-- [ ] 프롭 배치 + 회피 + y정렬 가림 (레이어 3·4)
-- [ ] 서식지별 로밍 박스 구속
+- [x] `ai/bt` 코어 — Sequence(기억 유지) / Selector(우선순위, 기억 없음) / Inverter / Condition / Action
+- [x] `ai/actions.ts` · `ai/buildTree.ts` — 조건 노드가 traits 를 확률 임계로 읽는다
+- [x] `ai/types.ts` — `AgentView` 로 `ai/` ↔ `sim/` 순환 import 차단
+- [x] `sim/AnimalAgent.ts` — BT 10Hz, 이동 적분 60Hz, 프롭 회피, 로밍 박스 구속
+- [x] `sim/EnclosureSim.ts` — 우리 3개 상시 시뮬레이션 (비활성은 BT 2Hz)
+- [x] `sim/props.ts` — 바이옴 고정 시드 배치, 겹침 방지
+- [x] `sim/imageCache.ts` — 그림 Blob → ImageBitmap 캐시
+- [x] `render/animal/` — `AnimalRenderer` 인터페이스 + `ProceduralRenderer` + `SheetRenderer`(대기)
+- [x] `SceneRenderer` 레이어 2·3·4 — 프롭과 동물을 합쳐 y 오름차순 정렬
+
+> **완료 판정**: 서식지가 다른 동물 3마리(BEAST/FISH/BIRD)를 만들면 각자 하늘·땅·물
+> 영역에서만 돌아다니고, 프롭을 피하며, 시간이 지나면 위치가 바뀐다. 헤드리스 확인 완료.
+
+### 튜닝한 값
+- `SKY` 로밍 y0 `0.04 → 0.10` — HUD 텍스트와 겹쳤다
+- `WATER` 로밍 y0 `0.72 → 0.75` — 물가 잔디에 걸쳤다
+- 손님 `높이 0.26 → 0.32`, `기준선 0.83 → 0.82` — 프레임 검출로 스프라이트가
+  타이트해지면서 머리가 펜스 난간 아래로 내려가 우리 화면에서 완전히 가려졌다
+
+### 폰트 외곽선 수정 (M0 회귀)
+컷아웃 후 경계 1px 를 알파 150 으로 깎는 "페더링"이 **글자의 어두운 외곽선 자체를**
+반투명하게 만들어 테두리가 갉아먹힌 것처럼 보였다. 배경만 투명하면 되므로 페더링을 제거하고,
+잉크 판정 알파를 `24 → 6` 으로 낮추고, 검출 프레임에 2px 여백을 줬다.
+분할 시 경계 컬럼을 버리던 것도 앞쪽 밴드에 포함시켰다.
+→ 36자 중 33자가 잉크 손실 0. `V` `W` `X` 는 원본에서 획이 맞닿아 있어 경계를 공유한다.
 
 ---
 

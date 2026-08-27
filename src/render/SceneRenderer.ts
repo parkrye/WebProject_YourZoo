@@ -1,19 +1,27 @@
 import { getAssets } from '@/assets/AssetStore'
 import {
   LOGICAL_HEIGHT, LOGICAL_WIDTH, VISITOR_BASELINE_Y, VISITOR_HEIGHT,
-  type BiomeId,
+  type BiomeId, type Habitat,
 } from '@/assets/manifest'
 import { phaseBlend } from '@/domain/clock'
+import type { AnimalAgent } from '@/sim/AnimalAgent'
+import type { EnclosureSim } from '@/sim/EnclosureSim'
+import type { PlacedProp } from '@/sim/props'
 import type { VisitorAgent } from '@/sim/VisitorAgent'
+import type { ViewBox } from './animal'
 
 export interface SceneInput {
-  biome: BiomeId
+  sim: EnclosureSim
   /** 오늘 경과 초 */
   elapsed: number
-  visitors: readonly VisitorAgent[]
   /** 펜스 Y 오프셋 (화면 높이 비율). 상세보기에서 펜스를 내린다. */
   fenceOffset: number
 }
+
+/** y 정렬 대상. 프롭과 동물이 같은 목록에서 섞인다. */
+type Drawable =
+  | { kind: 'PROP'; y: number; prop: PlacedProp }
+  | { kind: 'ANIMAL'; y: number; agent: AnimalAgent }
 
 /**
  * 우리 화면의 레이어 합성.
@@ -21,59 +29,107 @@ export interface SceneInput {
  * z0 하늘 → z1 바이옴 → z2 하늘동물 → z3 땅프롭+땅동물 → z4 물프롭+물동물
  * → z5 손님 → z6 펜스   (docs/01-assets.md §3)
  *
- * 현재 수직 슬라이스는 z0 / z1 / z5 / z6 만 구현한다.
+ * z3·z4 는 프롭과 동물을 **하나의 목록으로 합쳐 y 오름차순 정렬**해 그린다.
+ * 그래야 동물이 프롭 뒤로 지나갈 때 프롭에 가려진다.
  */
 export class SceneRenderer {
-  draw(ctx: CanvasRenderingContext2D, input: SceneInput): void {
-    const w = LOGICAL_WIDTH
-    const h = LOGICAL_HEIGHT
+  private readonly buffer: Drawable[] = []
 
-    ctx.clearRect(0, 0, w, h)
-    this.drawSky(ctx, input.elapsed, w, h)
-    this.drawArea(ctx, input.biome, w, h)
-    this.drawVisitors(ctx, input.visitors, input.fenceOffset, w, h)
-    this.drawFence(ctx, input.fenceOffset, w, h)
+  draw(ctx: CanvasRenderingContext2D, input: SceneInput): void {
+    const view: ViewBox = { width: LOGICAL_WIDTH, height: LOGICAL_HEIGHT }
+    const { sim } = input
+
+    ctx.clearRect(0, 0, view.width, view.height)
+    this.drawSky(ctx, input.elapsed, view)
+    ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
+
+    this.drawSkyAnimals(ctx, sim, view)
+    this.drawSortedLayer(ctx, sim, 'LAND', view)
+    this.drawSortedLayer(ctx, sim, 'WATER', view)
+    this.drawVisitors(ctx, sim.visitors, input.fenceOffset, view)
+    ctx.drawImage(getAssets().fence, 0, input.fenceOffset * view.height, view.width, view.height)
   }
 
-  private drawSky(ctx: CanvasRenderingContext2D, elapsed: number, w: number, h: number): void {
+  private drawSky(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {
     const { sky } = getAssets()
     const blend = phaseBlend(elapsed)
 
     ctx.globalAlpha = 1
-    ctx.drawImage(sky[blend.from], 0, 0, w, h)
+    ctx.drawImage(sky[blend.from], 0, 0, view.width, view.height)
 
     if (blend.t <= 0) return
     ctx.globalAlpha = blend.t
-    ctx.drawImage(sky[blend.to], 0, 0, w, h)
+    ctx.drawImage(sky[blend.to], 0, 0, view.width, view.height)
     ctx.globalAlpha = 1
   }
 
-  private drawArea(ctx: CanvasRenderingContext2D, biome: BiomeId, w: number, h: number): void {
-    ctx.drawImage(getAssets().area[biome], 0, 0, w, h)
+  /** 하늘 동물은 원경이라 y 정렬이 의미 없다. 바이옴 배경 바로 위에 그린다. */
+  private drawSkyAnimals(ctx: CanvasRenderingContext2D, sim: EnclosureSim, view: ViewBox): void {
+    for (const agent of sim.animals) {
+      if (agent.habitat !== 'SKY') continue
+      agent.renderer?.draw(ctx, agent.toRenderState(), view)
+    }
+  }
+
+  private drawSortedLayer(
+    ctx: CanvasRenderingContext2D,
+    sim: EnclosureSim,
+    layer: Habitat,
+    view: ViewBox,
+  ): void {
+    // 프레임마다 배열을 새로 만들면 GC 압력이 커진다. 하나를 비워 재사용한다.
+    this.buffer.length = 0
+
+    for (const prop of sim.props) {
+      if (prop.layer === layer) this.buffer.push({ kind: 'PROP', y: prop.y, prop })
+    }
+    for (const agent of sim.animals) {
+      if (agent.habitat === layer) this.buffer.push({ kind: 'ANIMAL', y: agent.y, agent })
+    }
+
+    this.buffer.sort(byDepth)
+
+    for (const item of this.buffer) {
+      if (item.kind === 'PROP') {
+        this.drawProp(ctx, sim.biome, item.prop, view)
+        continue
+      }
+      item.agent.renderer?.draw(ctx, item.agent.toRenderState(), view)
+    }
+  }
+
+  private drawProp(
+    ctx: CanvasRenderingContext2D,
+    biome: BiomeId,
+    prop: PlacedProp,
+    view: ViewBox,
+  ): void {
+    const atlas = getAssets().prop[biome]
+    const frame = atlas.frame(prop.sprite)
+    const height = prop.height * view.height
+    const width = height * (frame.sw / frame.sh)
+    atlas.draw(ctx, prop.sprite, prop.x * view.width - width / 2, prop.y * view.height - height, width, height)
   }
 
   private drawVisitors(
     ctx: CanvasRenderingContext2D,
     visitors: readonly VisitorAgent[],
     fenceOffset: number,
-    w: number,
-    h: number,
+    view: ViewBox,
   ): void {
     const { visitor } = getAssets()
-    const drawH = VISITOR_HEIGHT * h
+    const drawH = VISITOR_HEIGHT * view.height
 
     for (const v of visitors) {
       // 검출된 프레임은 손님마다 종횡비가 다르다. 프레임별로 폭을 계산해야 찌그러지지 않는다.
       const frame = visitor.frame(v.spriteIndex)
-      const footY = (VISITOR_BASELINE_Y + fenceOffset + v.bobOffset) * h
+      const footY = (VISITOR_BASELINE_Y + fenceOffset + v.bobOffset) * view.height
       const sq = v.squash
       const vh = drawH * sq
       const vw = (drawH * (frame.sw / frame.sh)) / sq
-      visitor.draw(ctx, v.spriteIndex, v.x * w - vw / 2, footY - vh, vw, vh)
+      visitor.draw(ctx, v.spriteIndex, v.x * view.width - vw / 2, footY - vh, vw, vh)
     }
   }
-
-  private drawFence(ctx: CanvasRenderingContext2D, fenceOffset: number, w: number, h: number): void {
-    ctx.drawImage(getAssets().fence, 0, fenceOffset * h, w, h)
-  }
 }
+
+const byDepth = (a: Drawable, b: Drawable): number => a.y - b.y

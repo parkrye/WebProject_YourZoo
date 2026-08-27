@@ -109,9 +109,11 @@ export interface RoamBox {
 }
 
 export const ROAM_BOX: Record<Habitat, RoamBox> = {
-  SKY: { x0: 0.04, x1: 0.96, y0: 0.04, y1: 0.26 },
+  // SKY 상단은 HUD(일자·시계·우리 이름)가 차지한다. 0.04 로 두면 글자와 겹친다.
+  SKY: { x0: 0.04, x1: 0.96, y0: 0.10, y1: 0.26 },
   LAND: { x0: 0.04, x1: 0.96, y0: 0.52, y1: 0.66 },
-  WATER: { x0: 0.04, x1: 0.96, y0: 0.72, y1: 0.96 },
+  // 0.72 는 물가 잔디 경계라 동물이 뭍에 걸쳐 보인다. 확실히 물속으로 내린다.
+  WATER: { x0: 0.04, x1: 0.96, y0: 0.75, y1: 0.96 },
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -122,11 +124,34 @@ export const ROAM_BOX: Record<Habitat, RoamBox> = {
 export const FENCE_OFFSET_ZOO = 0
 export const FENCE_OFFSET_DETAIL = 0.2
 
-/** 손님의 발이 놓이는 기준선 (정규화 y). 펜스 스톤 베이스 상단. */
-export const VISITOR_BASELINE_Y = 0.83
+/**
+ * 손님의 발이 놓이는 기준선 (정규화 y). 펜스 스톤 베이스 상단.
+ * 이 값과 VISITOR_HEIGHT 의 차이가 머리 높이이고, 펜스 난간 상단(≈0.56)보다
+ * 위에 와야 "난간에 서서 들여다보는" 뒷모습으로 읽힌다.
+ */
+export const VISITOR_BASELINE_Y = 0.82
 
 /** 손님 스프라이트의 화면상 높이 (정규화). 검출된 실제 잉크 높이 기준이다. */
-export const VISITOR_HEIGHT = 0.26
+export const VISITOR_HEIGHT = 0.32
+
+// ─────────────────────────────────────────────────────────────
+// 동물 / 프롭 크기 (정규화 높이)
+// ─────────────────────────────────────────────────────────────
+
+/** 서식지별 동물 기본 높이. 하늘은 원경이라 작게, 땅은 가장 크게. */
+export const ANIMAL_HEIGHT: Record<Habitat, number> = {
+  SKY: 0.09,
+  LAND: 0.15,
+  WATER: 0.11,
+}
+
+/** y 가 클수록(카메라에 가까울수록) 크게 보이는 원근 배율 범위. */
+export const PERSPECTIVE_SCALE = { near: 1.18, far: 0.82 } as const
+
+export const PROP_HEIGHT = { LAND: 0.17, WATER: 0.1 } as const
+
+/** 우리 하나에 배치되는 프롭 개수. */
+export const PROP_COUNT = { LAND: 4, WATER: 3 } as const
 
 // ─────────────────────────────────────────────────────────────
 // 팝업 9-슬라이스 (frame 0: 표준 팝업)

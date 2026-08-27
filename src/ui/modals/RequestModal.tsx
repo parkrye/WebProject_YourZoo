@@ -10,6 +10,7 @@ import {
   type AnimalTraits, type AnimalTypeId,
 } from '@/domain/traits'
 import type { ExportedDrawing } from '@/draw/export'
+import { registerFromBlob } from '@/sim/imageCache'
 import { putImage } from '@/store/imageDb'
 import { useGameStore } from '@/store/gameStore'
 import { BitmapInput } from '@/ui/components/BitmapInput'
@@ -87,6 +88,9 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     setBusy(true)
 
     const imageId = createAnimalId()
+    // 방금 그린 그림이라 Blob 이 손에 있다. 미리 디코드해 두면 배치 즉시 렌더된다.
+    await registerFromBlob(imageId, drawing.blob)
+
     try {
       await putImage(imageId, drawing.blob)
     } catch {

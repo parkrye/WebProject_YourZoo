@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useRef } from 'react'
 import {
   FENCE_OFFSET_DETAIL, FENCE_OFFSET_ZOO, GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH,
+  type BiomeId,
 } from '@/assets/manifest'
 import { startTicker } from '@/core/ticker'
-import { createRng } from '@/core/rng'
 import { clockLabel, phaseOf } from '@/domain/clock'
-import { visitorCount } from '@/domain/economy'
-import { ENCLOSURES } from '@/domain/enclosure'
+import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
 import { SceneRenderer } from '@/render/SceneRenderer'
-import { reconcileVisitors, type VisitorAgent } from '@/sim/VisitorAgent'
+import { EnclosureSim } from '@/sim/EnclosureSim'
 import { useGameStore } from '@/store/gameStore'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
@@ -17,19 +16,32 @@ interface ZooScreenProps {
   detail: boolean
 }
 
+/** 펜스 하강/상승 트윈 속도. 값이 클수록 빨리 붙는다. */
+const FENCE_TWEEN_RESPONSE = 6
+
 export function ZooScreen({ detail }: ZooScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const renderer = useMemo(() => new SceneRenderer(), [])
-  const visitorsRef = useRef<VisitorAgent[]>([])
-  const rng = useMemo(() => createRng(0x5eed), [])
   const fenceRef = useRef(detail ? FENCE_OFFSET_DETAIL : FENCE_OFFSET_ZOO)
+
+  // 우리 3개를 모두 유지하며 계속 시뮬레이션한다. 넘겼다 돌아왔을 때 얼어 있으면 어색하다.
+  const sims = useMemo(() => {
+    const map = new Map<BiomeId, EnclosureSim>()
+    for (const id of ENCLOSURE_ORDER) map.set(id, new EnclosureSim(id))
+    return map
+  }, [])
 
   const setScreen = useGameStore((s) => s.setScreen)
   const openModal = useGameStore((s) => s.openModal)
   const moveEnclosure = useGameStore((s) => s.moveEnclosure)
   const enclosure = useGameStore((s) => s.currentEnclosure)
+  const animals = useGameStore((s) => s.animals)
   const day = useGameStore((s) => s.clock.day)
   const elapsed = useGameStore((s) => s.clock.elapsed)
+
+  useEffect(() => {
+    for (const sim of sims.values()) sim.syncAnimals(animals)
+  }, [animals, sims])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -45,27 +57,27 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         store.tickClock(step)
 
         const phase = phaseOf(store.clock.elapsed)
-        // TODO(M3): hasAnimals 는 실제 배치된 동물 수로 대체한다.
-        const target = visitorCount(store.reputation, phase, true)
-        reconcileVisitors(visitorsRef.current, target, rng)
-        for (const v of visitorsRef.current) v.update(step)
+        for (const [id, sim] of sims) {
+          sim.update(step, {
+            reputation: store.reputation,
+            phase,
+            active: id === store.currentEnclosure,
+          })
+        }
 
-        // 펜스 오프셋 트윈 (0.45s easeInOutCubic 근사)
-        fenceRef.current += (targetFence - fenceRef.current) * Math.min(1, step * 6)
+        fenceRef.current += (targetFence - fenceRef.current) * Math.min(1, step * FENCE_TWEEN_RESPONSE)
       },
       render: () => {
         const store = useGameStore.getState()
-        renderer.draw(ctx, {
-          biome: store.currentEnclosure,
-          elapsed: store.clock.elapsed,
-          visitors: visitorsRef.current,
-          fenceOffset: fenceRef.current,
-        })
+        const sim = sims.get(store.currentEnclosure)
+        if (!sim) return
+        renderer.draw(ctx, { sim, elapsed: store.clock.elapsed, fenceOffset: fenceRef.current })
       },
     })
-  }, [detail, renderer, rng])
+  }, [detail, renderer, sims])
 
   const time = clockLabel(elapsed)
+  const here = animals.filter((a) => a.enclosureId === enclosure).length
 
   return (
     <div className="screen">
@@ -82,6 +94,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
 
       <div className="hud-enclosure-name">
         <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
+        <BitmapLabel text={`ANIMALS ${here}`} size={22} align="center" />
       </div>
 
       {!detail && (

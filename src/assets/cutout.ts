@@ -13,15 +13,21 @@ export interface CutoutOptions {
   tolerance?: number
   /** 시드 픽셀(테두리)과의 RGB 제곱거리 상한. 폭주 방지용 앵커. */
   seedTolerance?: number
-  /** 경계 1px 를 반투명 처리해 계단 현상을 완화한다. */
-  feather?: boolean
 }
 
 const DEFAULTS: Required<CutoutOptions> = {
   tolerance: 900,
   seedTolerance: 14000,
-  feather: true,
 }
+
+/**
+ * 경계 픽셀의 알파는 **건드리지 않는다.**
+ *
+ * 한때 계단 현상을 완화한다고 경계 1px 를 알파 150 으로 깎았는데,
+ * 그 픽셀이 바로 글자의 어두운 외곽선이라 테두리가 갉아먹힌 것처럼 보였다.
+ * 플러드 필은 이미 외곽선에서 정확히 멈추므로 추가 처리가 필요 없다.
+ * 배경만 투명하면 된다.
+ */
 
 export function cutoutBackground(image: HTMLImageElement, options: CutoutOptions = {}): HTMLCanvasElement {
   const opt = { ...DEFAULTS, ...options }
@@ -60,8 +66,6 @@ export function cutoutBackground(image: HTMLImageElement, options: CutoutOptions
   // 시드 앵커 = 네 모서리 평균색. 배경이 국소적으로 밝아져도 여기서 크게 벗어나면 멈춘다.
   const anchor = averageCorners(px, w, h)
 
-  const cleared = new Uint8Array(w * h)
-
   while (stack.length > 0) {
     const i = stack.pop() as number
     const p = i * 4
@@ -71,7 +75,6 @@ export function cutoutBackground(image: HTMLImageElement, options: CutoutOptions
 
     if (dist2(r, g, b, anchor.r, anchor.g, anchor.b) > opt.seedTolerance) continue
 
-    cleared[i] = 1
     px[p + 3] = 0
 
     const x = i % w
@@ -93,8 +96,6 @@ export function cutoutBackground(image: HTMLImageElement, options: CutoutOptions
       stack.push(ni)
     }
   }
-
-  if (opt.feather) featherEdges(px, cleared, w, h)
 
   ctx.putImageData(img, 0, 0)
   return canvas
@@ -118,20 +119,6 @@ function averageCorners(px: Uint8ClampedArray, w: number, h: number): { r: numbe
     b += px[c + 2] as number
   }
   return { r: r / 4, g: g / 4, b: b / 4 }
-}
-
-/** 지워진 영역과 맞닿은 불투명 픽셀의 알파를 낮춰 경계를 부드럽게 한다. */
-function featherEdges(px: Uint8ClampedArray, cleared: Uint8Array, w: number, h: number): void {
-  const targets: number[] = []
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      const i = y * w + x
-      if (cleared[i]) continue
-      if (px[i * 4 + 3] === 0) continue
-      if (cleared[i - 1] || cleared[i + 1] || cleared[i - w] || cleared[i + w]) targets.push(i)
-    }
-  }
-  for (const i of targets) px[i * 4 + 3] = 150
 }
 
 // ─────────────────────────────────────────────────────────────
