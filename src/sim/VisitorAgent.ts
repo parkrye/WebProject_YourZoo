@@ -17,10 +17,13 @@ const EXIT_SPEED = 0.11
  * 미세한 좌우 스케일 흔들림. (docs/01-assets.md §2.4)
  */
 /**
- * 개체별 키 배율.
- * 손님 시트에는 어른·아이·노인이 섞여 있다. 전부 같은 크기로 그리면 그 맛이 사라진다.
+ * 개체별 키 흔들림.
+ *
+ * 손님 시트에는 어른·아이·노인이 이미 제각각 크기로 그려져 있고, 렌더러가 그 **원본
+ * 상대 크기를 그대로 살린다.** 여기서는 같은 스프라이트가 여러 명 나왔을 때만
+ * 구분되도록 아주 살짝 흔든다. 크게 잡으면 원본의 비율을 도로 망친다.
  */
-const HEIGHT_SCALE = { min: 0.72, max: 1.12 } as const
+const HEIGHT_SCALE = { min: 0.94, max: 1.06 } as const
 
 export class VisitorAgent {
   readonly spriteIndex: number

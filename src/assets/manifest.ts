@@ -149,8 +149,11 @@ export const FENCE_OFFSET_DETAIL = 0.2
  */
 export const VISITOR_BASELINE_Y = 1.03
 
-/** 손님 스프라이트의 화면상 높이 (정규화). 검출된 실제 잉크 높이 기준이다. */
-export const VISITOR_HEIGHT = 0.4
+/**
+ * 손님 높이의 기준값 (정규화).
+ * **가장 큰 스프라이트**가 이 높이가 되고, 나머지는 원본 비율만큼 작아진다.
+ */
+export const VISITOR_HEIGHT = 0.46
 
 // ─────────────────────────────────────────────────────────────
 // 동물 / 프롭 크기 (정규화 높이)

@@ -107,21 +107,21 @@ export interface TimeLighting {
 const LIGHTING: Record<SkyPhase, TimeLighting> = {
   DAY: {
     sky: { multiply: '#ffffff', alpha: 0 },
-    // 한낮은 해가 높다. 빛이 깊이 들어오고 그늘이 거의 없다.
-    enclosure: { shade: '#ffffff', shadeAlpha: 0, light: '#fff6d8', lightAlpha: 0.1, reach: 0.85 },
-    global: { multiply: '#ffffff', glow: '#ffffff', glowAlpha: 0 },
+    // 한낮은 해가 높다. 빛이 깊이 들어오고 바닥에만 옅은 그늘이 남는다.
+    enclosure: { shade: '#d8c9a8', shadeAlpha: 0.12, light: '#fff4c8', lightAlpha: 0.2, reach: 0.9 },
+    global: { multiply: '#ffffff', glow: '#fff6d8', glowAlpha: 0.04 },
   },
   AFTERNOON: {
-    sky: { multiply: '#ffd8a8', alpha: 0.25 },
-    // 해가 낮아 빛이 얕게 들고, 아래쪽부터 그늘이 깔린다.
-    enclosure: { shade: '#c98a52', shadeAlpha: 0.42, light: '#ff9a3c', lightAlpha: 0.3, reach: 0.45 },
-    global: { multiply: '#ffc79a', glow: '#ff8c42', glowAlpha: 0.1 },
+    sky: { multiply: '#ffc27a', alpha: 0.4 },
+    // 해가 낮아 빛이 얕게 들고, 아래쪽부터 그늘이 깊게 깔린다.
+    enclosure: { shade: '#a8603a', shadeAlpha: 0.55, light: '#ff8a28', lightAlpha: 0.45, reach: 0.4 },
+    global: { multiply: '#ffb47e', glow: '#ff7a2e', glowAlpha: 0.16 },
   },
   NIGHT: {
-    sky: { multiply: '#8fa0d8', alpha: 0.18 },
+    sky: { multiply: '#7d90d0', alpha: 0.3 },
     // 달빛은 약하고 차다. 바닥까지 닿지 않는다.
-    enclosure: { shade: '#2f3d6b', shadeAlpha: 0.62, light: '#9fb4ff', lightAlpha: 0.16, reach: 0.35 },
-    global: { multiply: '#7285bd', glow: '#2c3f7a', glowAlpha: 0.14 },
+    enclosure: { shade: '#1e2a55', shadeAlpha: 0.74, light: '#a8bcff', lightAlpha: 0.24, reach: 0.32 },
+    global: { multiply: '#5d70ab', glow: '#22346b', glowAlpha: 0.2 },
   },
 }
 

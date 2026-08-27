@@ -21,6 +21,13 @@ export interface AtlasOptions {
 export class Atlas {
   readonly frames: readonly Frame[]
   readonly count: number
+  /**
+   * 프레임 중 가장 큰 높이.
+   * 검출된 프레임은 스프라이트마다 크기가 다르다. 이 값으로 나누면
+   * **원본에서의 상대적 크기**를 얻는다 — 작게 그려진 아이를 어른과 같은 높이로
+   * 늘려 버리지 않으려면 이 비율을 유지해야 한다.
+   */
+  readonly maxFrameHeight: number
 
   constructor(
     readonly image: CanvasImageSource,
@@ -29,6 +36,7 @@ export class Atlas {
   ) {
     this.frames = options.detect ? detectFrames(image, grid) : uniformFrames(grid)
     this.count = this.frames.length
+    this.maxFrameHeight = this.frames.reduce((max, f) => Math.max(max, f.sh), 1)
   }
 
   frame(index: number): Frame {

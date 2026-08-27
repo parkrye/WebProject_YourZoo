@@ -50,7 +50,7 @@ export function AssetInspector() {
         ))}
       </div>
 
-      <h2 style={H2}>4. VISITORS — 검은 배경 컷아웃 확인 (원본에 알파 없음)</h2>
+      <h2 style={H2}>4. VISITORS — 게임과 같은 상대 크기. 3행이 아이라 작아야 한다</h2>
       <div style={{ ...GRID, gridTemplateColumns: 'repeat(16, 1fr)' }}>
         {Array.from({ length: visitor.count }, (_, i) => (
           <VisitorCell key={i} index={i} />
@@ -78,6 +78,10 @@ function IconCell({ index }: { index: number }) {
   )
 }
 
+/**
+ * 게임과 **같은 방식**으로 그린다 — 프레임 높이를 시트 최대 높이로 나눈 비율을 그대로 쓴다.
+ * `drawContained` 로 칸에 꽉 채우면 아이와 어른이 같은 크기가 되어 비교가 무의미해진다.
+ */
 function VisitorCell({ index }: { index: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
@@ -86,9 +90,15 @@ function VisitorCell({ index }: { index: number }) {
     const ctx = c.getContext('2d')
     if (!ctx) return
     drawChecker(ctx, c.width, c.height)
-    getAssets().visitor.drawContained(ctx, index, 0, 0, c.width, c.height)
+
+    const { visitor } = getAssets()
+    const frame = visitor.frame(index)
+    const h = c.height * (frame.sh / visitor.maxFrameHeight)
+    const w = h * (frame.sw / frame.sh)
+    // 발을 바닥에 맞춰야 키 차이가 눈에 들어온다.
+    visitor.draw(ctx, index, (c.width - w) / 2, c.height - h, w, h)
   }, [index])
-  return <canvas ref={ref} width={60} height={60} />
+  return <canvas ref={ref} width={70} height={96} />
 }
 
 function drawChecker(ctx: CanvasRenderingContext2D, w: number, h: number): void {

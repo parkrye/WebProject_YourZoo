@@ -264,10 +264,12 @@ export class SceneRenderer {
     const drawH = VISITOR_HEIGHT * view.height
 
     for (const v of visitors) {
-      // 검출된 프레임은 손님마다 종횡비가 다르다. 프레임별로 폭을 계산해야 찌그러지지 않는다.
-      // 키 배율은 개체마다 다르다 — 어른·아이·노인이 섞여 있는 게 이 시트의 맛이다.
+      // 검출된 프레임은 손님마다 크기가 다르다. 그대로 같은 높이로 그리면
+      // **작게 그려진 아이가 어른만큼 커진다.** 원본에서의 상대 크기를 그대로 살린다.
+      // 실측: 행별 밴드 높이 235 / 224 / 168(아이) / 188.
       const frame = visitor.frame(v.spriteIndex)
-      const own = drawH * v.heightScale
+      const relative = frame.sh / visitor.maxFrameHeight
+      const own = drawH * relative * v.heightScale
       const footY = (VISITOR_BASELINE_Y + fenceOffset + v.bobOffset) * view.height
       const sq = v.squash
       const vh = own * sq
