@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { GUI, PALETTE_COLORS } from '@/assets/manifest'
 import { DrawingCanvas, type DrawingCanvasHandle } from '@/draw/DrawingCanvas'
 import type { ExportedDrawing } from '@/draw/export'
@@ -8,10 +8,11 @@ import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
 import { PaletteMenu } from '@/ui/components/PaletteMenu'
 import { Popup } from '@/ui/components/Popup'
+import { useGameStore } from '@/store/gameStore'
 
-const CANVAS_DISPLAY = 430
+const CANVAS_DISPLAY = 420
 const POPUP_WIDTH = 900
-const POPUP_HEIGHT = 720
+const POPUP_HEIGHT = 800
 
 interface DrawModalProps {
   templateId: TemplateId
@@ -29,6 +30,12 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
   const [history, setHistory] = useState({ canUndo: false, canRedo: false, isEmpty: true })
   const [busy, setBusy] = useState(false)
 
+  // 그리는 동안에는 시계를 멈춘다. 한 장에 몇 분이 걸리기도 한다.
+  useEffect(() => {
+    useGameStore.getState().setDrawing(true)
+    return () => useGameStore.getState().setDrawing(false)
+  }, [])
+
   const activeColorIcon =
     PALETTE_COLORS.find((c) => c.hex === color)?.icon ?? GUI.PENCIL
 
@@ -43,7 +50,13 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
 
   return (
     <Popup title="DRAW ANIMAL" width={POPUP_WIDTH} height={POPUP_HEIGHT} onClose={onClose}>
-      <div className="draw-layout">
+      <div className="draw-column">
+        <div className="draw-hint">
+          <BitmapLabel text={tool === 'ERASER' ? 'ERASER' : 'PENCIL'} size={20} />
+          <BitmapLabel text="DRAW YOUR ANIMAL FACING RIGHT" size={20} />
+        </div>
+
+        <div className="draw-layout">
         <DrawingCanvas
           ref={boardRef}
           tool={tool}
@@ -56,34 +69,34 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
         <div className="draw-tools">
           <IconButton
             icon={tool === 'PENCIL' ? activeColorIcon : GUI.PENCIL}
-            size={62}
+            size={54}
             title="PENCIL"
             onClick={() => setTool('PENCIL')}
           />
           <div className="palette-anchor">
-            <IconButton icon={GUI.PALETTE} size={62} title="PALETTE" onClick={() => setPaletteOpen((v) => !v)} />
+            <IconButton icon={GUI.PALETTE} size={54} title="PALETTE" onClick={() => setPaletteOpen((v) => !v)} />
             {paletteOpen && (
               <PaletteMenu selected={color} onSelect={setColor} onClose={() => setPaletteOpen(false)} />
             )}
           </div>
-          <IconButton icon={GUI.ERASER} size={62} title="ERASER" onClick={() => setTool('ERASER')} />
+          <IconButton icon={GUI.ERASER} size={54} title="ERASER" onClick={() => setTool('ERASER')} />
           <IconButton
             icon={GUI.TRASH}
-            size={62}
+            size={54}
             title="CLEAR ALL"
             disabled={history.isEmpty}
             onClick={() => boardRef.current?.clearAll()}
           />
           <IconButton
             icon={GUI.UNDO}
-            size={62}
+            size={54}
             title="UNDO"
             disabled={!history.canUndo}
             onClick={() => boardRef.current?.undo()}
           />
           <IconButton
             icon={GUI.REDO}
-            size={62}
+            size={54}
             title="REDO"
             disabled={!history.canRedo}
             onClick={() => boardRef.current?.redo()}
@@ -91,17 +104,13 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
           <div className="draw-tools-spacer" />
           <IconButton
             icon={GUI.CONFIRM}
-            size={72}
+            size={64}
             title="DONE"
             disabled={history.isEmpty || busy}
             onClick={() => void finish()}
           />
         </div>
-      </div>
-
-      <div className="draw-hint">
-        <BitmapLabel text={tool === 'ERASER' ? 'ERASER' : 'PENCIL'} size={22} />
-        <BitmapLabel text="DRAW YOUR ANIMAL FACING RIGHT" size={20} />
+        </div>
       </div>
     </Popup>
   )

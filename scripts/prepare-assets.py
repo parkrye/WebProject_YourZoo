@@ -23,38 +23,45 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-# 원본 파일명 -> (출력 경로, 검은 배경 제거 여부)
-LAYOUT: dict[str, tuple[str, bool]] = {
-    "bg_sky_day.png": ("bg/sky-day.png", False),
-    "bg_sky_afternoon.png": ("bg/sky-afternoon.png", False),
-    "bg_sky_night.png": ("bg/sky-night.png", False),
-    "bg_area_field.png": ("bg/area-field.png", False),
-    "bg_area_desert.png": ("bg/area-desert.png", False),
+# 원본 파일명 -> (출력 경로, 검은 배경 제거 임계 밝기 | None)
+#
+# 임계값은 **파일마다 다르다.** 배경은 어디나 순수 검정(밝기 0)이지만
+# 그림 쪽에서 가장 어두운 부분이 얼마나 어두운지가 다르기 때문이다.
+# 손님 시트는 검은 머리카락이 밝기 17 부터 시작해서, 30 으로 잡았더니 머리가 뚫렸다.
+LAYOUT: dict[str, tuple[str, int | None]] = {
+    "bg_sky_day.png": ("bg/sky-day.png", None),
+    "bg_sky_afternoon.png": ("bg/sky-afternoon.png", None),
+    "bg_sky_night.png": ("bg/sky-night.png", None),
+    "bg_area_field.png": ("bg/area-field.png", None),
+    "bg_area_desert.png": ("bg/area-desert.png", None),
     # 상단이 투명해야 하늘이 비치는데 알파가 없다.
-    "bg_area_ice.png": ("bg/area-ice.png", True),
-    "bg_forward_fence.png": ("bg/fence.png", False),
-    "sprite_icon_font.png": ("sprite/icon-font.png", False),
-    "sprite_icon_gui.png": ("sprite/icon-gui.png", False),
-    "sprite_ui_popup.png": ("sprite/ui-popup.png", False),
-    "sprite_prop_field.png": ("sprite/prop-field.png", False),
-    "sprite_prop_desert.png": ("sprite/prop-desert.png", True),
-    "sprite_prop_ice.png": ("sprite/prop-ice.png", False),
-    "sprite_human_visitor.png": ("sprite/human-visitor.png", True),
+    "bg_area_ice.png": ("bg/area-ice.png", 24),
+    "bg_forward_fence.png": ("bg/fence.png", None),
+    "sprite_icon_font.png": ("sprite/icon-font.png", None),
+    "sprite_icon_gui.png": ("sprite/icon-gui.png", None),
+    "sprite_ui_popup.png": ("sprite/ui-popup.png", None),
+    "sprite_prop_field.png": ("sprite/prop-field.png", None),
+    "sprite_prop_desert.png": ("sprite/prop-desert.png", 24),
+    "sprite_prop_ice.png": ("sprite/prop-ice.png", None),
+    # 검은 머리카락이 밝기 17 부터다. 그보다 확실히 아래로 잡는다.
+    "sprite_human_visitor.png": ("sprite/human-visitor.png", 10),
 }
 
 OUT_ROOT = Path("src/assets/images")
+AUDIO_OUT = Path("src/assets/audio")
 
-# 이 밝기 미만이면 배경 후보. 캐릭터의 검은 옷보다는 어둡고 배경보다는 밝게 잡는다.
-DARK_THRESHOLD = 34
-# 경계 픽셀의 알파를 밝기에 비례해 낮추는 구간. 검은 테두리가 남는 걸 막는다.
-FEATHER_RANGE = DARK_THRESHOLD * 3
+# 오디오는 손댈 게 없다. 있으면 그대로 옮긴다.
+AUDIO_FILES = (
+    "bgm-title", "bgm-day", "bgm-afternoon", "bgm-night", "bgm-drawing",
+    "sting-report", "sting-reward",
+)
 
 
 def luminance(rgb: np.ndarray) -> np.ndarray:
     return rgb[..., 0] * 0.299 + rgb[..., 1] * 0.587 + rgb[..., 2] * 0.114
 
 
-def cut_black_background(image: Image.Image) -> Image.Image:
+def cut_black_background(image: Image.Image, threshold: int) -> Image.Image:
     """
     테두리에서 시작하는 플러드필로 **바깥과 연결된** 어두운 영역만 지운다.
 
@@ -65,7 +72,7 @@ def cut_black_background(image: Image.Image) -> Image.Image:
     h, w = rgb.shape[:2]
     lum = luminance(rgb.astype(np.float32))
 
-    dark = lum < DARK_THRESHOLD
+    dark = lum < threshold
     cleared = np.zeros((h, w), dtype=bool)
     queue: deque[tuple[int, int]] = deque()
 
@@ -92,19 +99,13 @@ def cut_black_background(image: Image.Image) -> Image.Image:
         if x < w - 1:
             seed(y, x + 1)
 
+    # 배경으로 판정된 픽셀만 투명하게 만든다. 나머지는 절대 건드리지 않는다.
+    #
+    # 한때 경계 픽셀의 알파를 밝기에 비례해 낮추는 페더링을 넣었다가
+    # **캐릭터 몸이 통째로 반투명해졌다.** 손님 스프라이트는 옷이 대부분 어두워서
+    # 외곽 픽셀 거의 전부가 페더링 대상이 됐기 때문이다.
+    # 검은 테두리가 1px 남는 편이 몸이 비쳐 보이는 것보다 낫다.
     alpha = np.where(cleared, 0, 255).astype(np.uint8)
-
-    # 지워진 영역과 맞닿은 어두운 픽셀은 배경이 섞인 안티에일리어싱 경계다.
-    # 밝기에 비례해 알파를 낮추면 검은 테두리가 사라진다.
-    neighbours = np.zeros((h, w), dtype=bool)
-    neighbours[1:, :] |= cleared[:-1, :]
-    neighbours[:-1, :] |= cleared[1:, :]
-    neighbours[:, 1:] |= cleared[:, :-1]
-    neighbours[:, :-1] |= cleared[:, 1:]
-
-    edge = neighbours & ~cleared & (lum < FEATHER_RANGE)
-    ramp = np.clip(lum / FEATHER_RANGE * 255, 0, 255).astype(np.uint8)
-    alpha[edge] = ramp[edge]
 
     return Image.fromarray(np.dstack([rgb, alpha]), mode="RGBA")
 
@@ -126,7 +127,7 @@ def main() -> int:
         print(f"원본 디렉터리를 찾을 수 없다: {source}")
         return 1
 
-    for name, (relative, needs_cut) in LAYOUT.items():
+    for name, (relative, threshold) in LAYOUT.items():
         src = source / name
         if not src.exists():
             print(f"  [건너뜀] {name} 없음")
@@ -134,13 +135,13 @@ def main() -> int:
 
         image = Image.open(src)
         before = image.mode
-        image = cut_black_background(image) if needs_cut else image.convert("RGBA")
+        image = cut_black_background(image, threshold) if threshold else image.convert("RGBA")
 
         out = OUT_ROOT / relative
         out.parent.mkdir(parents=True, exist_ok=True)
         image.save(out, optimize=True)
 
-        mark = "컷아웃" if needs_cut else "그대로"
+        mark = f"컷아웃 <{threshold}" if threshold else "그대로"
         print(f"  {name:26s} {before:5s} -> {relative:24s} [{mark}] alpha0={alpha_zero_ratio(image):.1f}%")
 
     print(f"\n완료. 출력: {OUT_ROOT}")

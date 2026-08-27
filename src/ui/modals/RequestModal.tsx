@@ -16,6 +16,7 @@ import { useGameStore } from '@/store/gameStore'
 import { BitmapInput } from '@/ui/components/BitmapInput'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
+import { IconGlyph } from '@/ui/components/IconGlyph'
 import { Popup } from '@/ui/components/Popup'
 import { Slider } from '@/ui/components/Slider'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
@@ -149,20 +150,20 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
         />
 
         <FieldLabel text="DRAWING" />
-        <div className="drawing-slot">
+        {/* 슬롯 자체가 버튼이다. 비어 있는 칸을 눌렀는데 아무 일도 없으면 막힌 느낌이 든다. */}
+        <div className="drawing-slot" onClick={() => setDrawOpen(true)}>
           {previewUrl ? (
             <img src={previewUrl} alt="animal" className="drawing-preview" />
           ) : (
-            <BitmapLabel text="NO DRAWING" size={22} align="center" />
+            <BitmapLabel text="TAP TO DRAW" size={22} align="center" />
           )}
         </div>
-        <div className="row">
-          <IconButton icon={GUI.PENCIL} size={58} title="DRAW" onClick={() => setDrawOpen(true)} />
+        <button type="button" className="labeled-button" onClick={() => setDrawOpen(true)}>
+          <IconGlyph icon={GUI.PENCIL} size={44} />
           <BitmapLabel text={drawing ? 'REDRAW' : 'DRAW'} size={22} />
-        </div>
+        </button>
 
         <FieldLabel text={`ARRIVES IN ${SHIPPING_DAYS} DAY`} />
-        <BitmapLabel text="THEN PLACE IT FROM STORAGE" size={18} />
       </section>
 
       <section className="request-col request-col-wide">

@@ -3,6 +3,7 @@ import { loadAssets } from '@/assets/AssetStore'
 import { BootScreen } from '@/app/BootScreen'
 import { GameRoot } from '@/app/GameRoot'
 import { startAutosave } from '@/store/gameStore'
+import { useGameAudio } from '@/audio/useGameAudio'
 import { AssetInspector } from '@/dev/AssetInspector'
 
 export function App() {
@@ -25,6 +26,8 @@ export function App() {
       cancelled = true
     }
   }, [])
+
+  useGameAudio()
 
   useEffect(() => {
     if (!ready) return

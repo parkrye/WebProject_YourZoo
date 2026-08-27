@@ -9,7 +9,9 @@ import { advanceClock, type ClockState } from '@/domain/clock'
 import { settleDay, type DailyReport } from '@/domain/economy'
 import { neighborEnclosure } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
+import { skipsShipping, type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
+import { audio } from '@/audio/AudioManager'
 import { forgetBitmap } from '@/sim/imageCache'
 import { deleteImage } from './imageDb'
 import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
@@ -27,6 +29,9 @@ interface GameState {
   modal: ModalId
   /** 플레이어가 지은 동물원 이름. A-Z / 0-9 / 공백만 가능. */
   zooName: string
+  /** 그림판이 열려 있는가. 시계를 멈출지 판단하는 데 쓴다. */
+  isDrawing: boolean
+  tutorial: TutorialStep
   gold: number
   reputation: number
   clock: ClockState
@@ -38,6 +43,9 @@ interface GameState {
   options: OptionsState
 
   setScreen(screen: ScreenId): void
+  setDrawing(drawing: boolean): void
+  advanceTutorial(from: TutorialStep, to: TutorialStep): void
+  skipTutorial(): void
   openModal(modal: Exclude<ModalId, null>): void
   closeModal(): void
   tickClock(dt: number): void
@@ -70,6 +78,8 @@ const initial = {
   screen: 'TITLE' as ScreenId,
   modal: null as ModalId,
   zooName: '',
+  isDrawing: false,
+  tutorial: 'DONE' as TutorialStep,
   gold: START_GOLD,
   reputation: START_REPUTATION,
   clock: { day: 1, elapsed: 0 } as ClockState,
@@ -85,18 +95,32 @@ export const useGameStore = create<GameState>((set, get) => ({
   ...initial,
 
   setScreen: (screen) => set({ screen, modal: null }),
+  setDrawing: (isDrawing) => set({ isDrawing }),
+
+  // 플레이어가 실제로 그 행동을 했을 때만 넘어간다. 엉뚱한 단계에서 건너뛰지 않도록 from 을 확인한다.
+  advanceTutorial: (from, to) => {
+    if (get().tutorial !== from) return
+    set({ tutorial: to })
+  },
+
+  skipTutorial: () => set({ tutorial: 'DONE' }),
   openModal: (modal) => set({ modal }),
   closeModal: () => set({ modal: null }),
 
   /**
    * 게임 시계. 자정을 넘기면 정산하고 결과 팝업을 띄운다.
    *
-   * **모달이 열려 있으면 시간이 흐르지 않는다.** 그림 한 장 그리는 데 몇 분이 걸리는데
-   * 그동안 하루가 지나가면 플레이어가 손해를 본다.
+   * 멈추는 경우는 둘뿐이다.
+   *   - **그림판** — 한 장 그리는 데 몇 분이 걸린다. 그동안 하루가 지나가면 손해다
+   *   - **정산 팝업** — 결과를 읽는 중에 다음 자정이 오면 곤란하다
+   *
+   * 요청서나 운영 현황을 잠깐 여는 정도로는 멈추지 않는다.
+   * 열어 두기만 하면 시간이 멈추니 그걸 이용해 무한정 버틸 수 있었다.
    */
   tickClock: (dt) => {
     const state = get()
-    if (state.modal !== null || state.screen === 'TITLE') return
+    if (state.screen !== 'ZOO' && state.screen !== 'ZOO_DETAIL') return
+    if (state.isDrawing || state.modal === 'REPORT') return
 
     const { next, daysPassed } = advanceClock(state.clock, dt)
     if (daysPassed <= 0) {
@@ -162,8 +186,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   orderAnimal: (animal) => {
-    if (!get().canOrderAnimal()) return false
-    set((s) => ({ gold: s.gold - ANIMAL_CREATE_COST, animals: [...s.animals, animal] }))
+    const state = get()
+    if (!state.canOrderAnimal()) return false
+
+    // 튜토리얼 첫 동물은 배송을 건너뛴다. 하루를 기다리게 하면 흐름이 끊긴다.
+    const placed = skipsShipping(state.tutorial)
+      ? { ...animal, status: 'STORED' as const }
+      : animal
+
+    set((s) => ({
+      gold: s.gold - ANIMAL_CREATE_COST,
+      animals: [...s.animals, placed],
+      tutorial: s.tutorial === 'DRAW' ? 'STORAGE' : s.tutorial,
+    }))
     return true
   },
 
@@ -173,11 +208,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!target || target.status !== 'STORED') return false
     if (!get().canPlaceIn(enclosureId)) return false
 
-    set({
-      animals: animals.map((a) =>
+    set((s) => ({
+      animals: s.animals.map((a) =>
         a.id === id ? { ...a, status: 'PLACED' as const, enclosureId } : a,
       ),
-    })
+      tutorial: s.tutorial === 'PLACE' ? 'DONE' : s.tutorial,
+    }))
     return true
   },
 
@@ -203,6 +239,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     // 넘긴 동물은 동물원을 떠난다. 그림도 더는 참조되지 않는다.
     void deleteImage(animal.imageId)
     forgetBitmap(animal.imageId)
+
+    audio.playSting('REWARD')
 
     set((s) => ({
       gold: s.gold + order.rewardGold,
@@ -248,7 +286,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   confirmZooName: (name) => {
     // 첫날부터 게시판이 비어 있으면 탭이 왜 있는지 알 수 없다. 하나는 깔고 시작한다.
     const firstOrder = createOrder(createAnimalId(), 1, START_REPUTATION, createRng(0xa11ce))
-    set({ zooName: name, orders: [firstOrder], screen: 'ZOO' })
+    set({ zooName: name, orders: [firstOrder], screen: 'ZOO', tutorial: 'ORDER' })
   },
 
   continueGame: () => {
@@ -259,6 +297,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       screen: 'ZOO',
       modal: null,
       zooName: save.zooName ?? '',
+      tutorial: save.tutorial ?? 'DONE',
       gold: save.gold,
       reputation: save.reputation,
       clock: save.clock,
@@ -278,6 +317,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       version: 2,
       savedAt: Date.now(),
       zooName: s.zooName,
+      tutorial: s.tutorial,
       gold: s.gold,
       reputation: s.reputation,
       clock: s.clock,
@@ -309,6 +349,7 @@ function saveKey(state: GameState): string {
     // 배치/창고 이동도 즉시 저장 대상이다.
     state.animals.filter((a) => a.status === 'PLACED').length,
     state.orders.length,
+    state.tutorial,
     state.unlocked.length,
     state.currentEnclosure,
   ].join('|')

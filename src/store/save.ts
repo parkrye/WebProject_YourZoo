@@ -2,6 +2,7 @@ import type { BiomeId } from '@/assets/manifest'
 import type { Animal } from '@/domain/animal'
 import type { DailyReport } from '@/domain/economy'
 import type { Order } from '@/domain/orders'
+import type { TutorialStep } from '@/domain/tutorial'
 import type { ClockState } from '@/domain/clock'
 
 /**
@@ -15,6 +16,7 @@ export interface SaveV2 {
   version: 2
   savedAt: number
   zooName: string
+  tutorial: TutorialStep
   gold: number
   reputation: number
   clock: ClockState

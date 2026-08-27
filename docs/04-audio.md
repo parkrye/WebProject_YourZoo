@@ -1,7 +1,29 @@
-# 사운드 요청서
+# 사운드
 
-아직 오디오 에셋이 없다. 아래 목록을 생성해 `assets-source/audio/` 에 넣으면
-`scripts/prepare-assets.py` 가 `src/assets/audio/` 로 옮기고 코드가 물린다.
+**에셋 도착. 연결 완료.** 원본은 `<원본 디렉터리>/audio/` 에 두고
+`scripts/prepare-assets.py` 가 `src/assets/audio/` 로 옮긴다.
+
+## 재생 규칙
+
+`src/audio/AudioManager.ts` 와 `useGameAudio.ts` 가 담당한다.
+
+| 상황 | 곡 |
+|---|---|
+| 타이틀 · 이름 짓기 | `bgm-title` |
+| 우리 화면 (시간대 따라) | `bgm-day` / `bgm-afternoon` / `bgm-night` |
+| 그림판 | `bgm-drawing` — **다른 무엇보다 우선한다.** 그리는 중에 곡이 바뀌면 집중이 끊긴다 |
+| 자정 정산 팝업 | `sting-report` |
+| 의뢰 완료 | `sting-reward` |
+
+곡 전환은 0.9초 크로스페이드다. 하루가 180초뿐이라 시간대마다 뚝 끊기면 특히 거슬린다.
+
+브라우저는 사용자가 화면을 한 번 건드리기 전까지 소리를 막는다.
+그래서 첫 재생 요청은 보류해 두었다가 첫 입력에 되살린다 —
+그러지 않으면 타이틀 BGM 이 조용히 실패하고 아무도 이유를 모른다.
+
+---
+
+## 아래는 이 에셋을 만들 때 쓴 요청서다 (교체·추가 시 참고)
 
 ## 공통 사양
 

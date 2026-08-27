@@ -14,10 +14,13 @@ import {
 import { EnclosureSim } from '@/sim/EnclosureSim'
 import { useGameStore } from '@/store/gameStore'
 import { AnimalThumb } from '@/ui/components/AnimalThumb'
+import { BarButton } from '@/ui/components/BarButton'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
 import { AnimalCard } from '@/ui/panels/AnimalCard'
 import { StorageTray, type DragState } from '@/ui/panels/StorageTray'
+import { TutorialOverlay } from '@/ui/panels/TutorialOverlay'
+import { TUTORIAL_HINTS } from '@/domain/tutorial'
 
 interface ZooScreenProps {
   detail: boolean
@@ -65,6 +68,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const storeAnimal = useGameStore((s) => s.storeAnimal)
   const sellAnimal = useGameStore((s) => s.sellAnimal)
   const canPlaceIn = useGameStore((s) => s.canPlaceIn)
+  const modal = useGameStore((s) => s.modal)
+  const tutorial = useGameStore((s) => s.tutorial)
+  const advanceTutorial = useGameStore((s) => s.advanceTutorial)
+  const skipTutorial = useGameStore((s) => s.skipTutorial)
   const enclosure = useGameStore((s) => s.currentEnclosure)
   const unlocked = useGameStore((s) => s.unlocked)
   const gold = useGameStore((s) => s.gold)
@@ -95,7 +102,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     if (detail) return
     applyCameraState(createCamera())
     setTool('CURSOR')
-    setTrayOpen(false)
     select(null)
   }, [detail, applyCameraState, select])
 
@@ -121,7 +127,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
       fixedUpdate: (step) => {
         const store = useGameStore.getState()
         store.tickClock(step)
-        if (store.modal !== null) return
+        // 정산 팝업이 떠 있는 동안에는 화면도 멈춰 있어야 결과를 읽기 편하다.
+        if (store.modal === 'REPORT' || store.isDrawing) return
 
         const phase = phaseOf(store.clock.elapsed)
         for (const [id, sim] of sims) {
@@ -175,7 +182,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   }, [])
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>): void => {
-    if (!detail || event.button !== 0) return
+    if (event.button !== 0) return
+    if (!detail) return
 
     if (tool === 'PAN') {
       event.currentTarget.setPointerCapture(event.pointerId)
@@ -267,130 +275,136 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         onPointerCancel={handlePointerUp}
       />
 
-      {!isOpen && <LockedOverlay id={enclosure} gold={gold} onUnlock={() => unlockEnclosure(enclosure)} />}
-
-      <div className="hud-top-left">
-        <BitmapLabel text={`DAY ${day}`} size={34} />
-        <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
-      </div>
-
-      <div className="hud-enclosure-name">
-        <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
-        <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
-      </div>
-
-      {dropError && (
-        <div className="drop-error">
-          <BitmapLabel text={dropError} size={28} align="center" />
-        </div>
+      {tutorial !== 'DONE' && (
+        <TutorialOverlay hint={TUTORIAL_HINTS[tutorial]} onSkip={skipTutorial} />
       )}
 
-      {detail && selected && (
-        <AnimalCard
-          animal={selected}
-          onClose={() => select(null)}
-          {...(selected.status === 'PLACED' && {
-            onStore: () => {
-              storeAnimal(selected.id)
-              select(null)
-            },
-          })}
-          {...(selected.status === 'STORED' && {
-            onSell: () => {
-              sellAnimal(selected.id)
-              select(null)
-            },
-          })}
-        />
+      {!isOpen && !modal && (
+        <LockedOverlay id={enclosure} gold={gold} onUnlock={() => unlockEnclosure(enclosure)} />
       )}
 
-      {detail && trayOpen && (
-        <StorageTray
-          stored={stored}
-          shippingCount={shippingCount}
-          onSelect={(animal) => select(animal.id)}
-          onDragStart={setDrag}
-          onDragMove={setDrag}
-          onDragEnd={handleDrop}
-          onClose={() => setTrayOpen(false)}
-        />
-      )}
-
-      {drag && (
-        <div
-          className="drag-ghost"
-          style={{ left: drag.clientX - DRAG_GHOST_SIZE / 2, top: drag.clientY - DRAG_GHOST_SIZE / 2 }}
-        >
-          <AnimalThumb imageId={drag.animal.imageId} size={DRAG_GHOST_SIZE} />
-        </div>
-      )}
-
-      {!detail && (
+      {/*
+        팝업이 떠 있는 동안에는 HUD 를 통째로 감춘다.
+        아래에서 버튼과 바가 비쳐 보이면 무엇을 눌러야 할지 헷갈리고,
+        실제로 우리 이동 화살표가 팝업 옆에서 활성인 채로 남아 있었다.
+      */}
+      {!modal && (
         <>
+          <div className="hud-top-left">
+            <BitmapLabel text={`DAY ${day}`} size={34} />
+            <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
+          </div>
+
+          <div className="hud-enclosure-name">
+            <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
+            <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
+          </div>
+
           <div className="hud-arrow hud-arrow-left">
-            <IconButton icon={GUI.BACK} size={78} title="PREV" onClick={() => slideTo(-1)} />
+            <IconButton icon={GUI.BACK} size={72} title="PREV" onClick={() => slideTo(-1)} />
           </div>
           <div className="hud-arrow hud-arrow-right">
-            <IconButton icon={GUI.BACK} size={78} title="NEXT" onClick={() => slideTo(1)} />
+            <IconButton icon={GUI.BACK} size={72} title="NEXT" onClick={() => slideTo(1)} />
           </div>
+
+          {dropError && (
+            <div className="drop-error">
+              <BitmapLabel text={dropError} size={28} align="center" />
+            </div>
+          )}
+
+          {selected && (
+            <AnimalCard
+              animal={selected}
+              onClose={() => select(null)}
+              {...(selected.status === 'PLACED' && {
+                onStore: () => {
+                  storeAnimal(selected.id)
+                  select(null)
+                },
+              })}
+              {...(selected.status === 'STORED' && {
+                onSell: () => {
+                  sellAnimal(selected.id)
+                  select(null)
+                },
+              })}
+            />
+          )}
+
+          {trayOpen && (
+            <StorageTray
+              stored={stored}
+              shippingCount={shippingCount}
+              onSelect={(animal) => select(animal.id)}
+              onDragStart={setDrag}
+              onDragMove={setDrag}
+              onDragEnd={handleDrop}
+              onClose={() => setTrayOpen(false)}
+            />
+          )}
+
+          {drag && (
+            <div
+              className="drag-ghost"
+              style={{ left: drag.clientX - DRAG_GHOST_SIZE / 2, top: drag.clientY - DRAG_GHOST_SIZE / 2 }}
+            >
+              <AnimalThumb imageId={drag.animal.imageId} size={DRAG_GHOST_SIZE} />
+            </div>
+          )}
+
           <div className="hud-bottom-bar">
-            <IconButton
-              icon={GUI.BINOCULARS}
-              size={72}
-              title="DETAIL"
-              disabled={!isOpen}
-              onClick={() => setScreen('ZOO_DETAIL')}
-            />
-            <IconButton
+            {detail ? (
+              <>
+                <BarButton icon={GUI.BACK} label="BACK" onClick={() => setScreen('ZOO')} />
+                <BarButton
+                  icon={GUI.CURSOR}
+                  label="SELECT"
+                  active={tool === 'CURSOR'}
+                  onClick={() => setTool('CURSOR')}
+                />
+                <BarButton icon={GUI.HAND} label="PAN" active={tool === 'PAN'} onClick={() => setTool('PAN')} />
+                <BarButton
+                  icon={GUI.ZOOM_IN}
+                  label="ZOOM IN"
+                  onClick={() => applyCameraState(zoomStep(cameraRef.current, 1))}
+                />
+                <BarButton
+                  icon={GUI.ZOOM_OUT}
+                  label="ZOOM OUT"
+                  disabled={camera.zoom <= MIN_ZOOM}
+                  onClick={() => applyCameraState(clampCamera(zoomStep(cameraRef.current, -1)))}
+                />
+              </>
+            ) : (
+              <BarButton icon={GUI.BINOCULARS} label="INSPECT" disabled={!isOpen} onClick={() => setScreen('ZOO_DETAIL')} />
+            )}
+
+            <div className="bar-spacer" />
+
+            <BarButton
               icon={GUI.SCROLL}
-              size={72}
-              title="REQUEST"
-              onClick={() => openModal('REQUEST')}
+              label="REQUEST"
+              data-tutorial="request"
+              onClick={() => {
+                advanceTutorial('ORDER', 'DRAW')
+                openModal('REQUEST')
+              }}
             />
-            <IconButton icon={GUI.INFO} size={72} title="STATUS" onClick={() => openModal('STATUS')} />
-            <IconButton icon={GUI.SETTINGS} size={72} title="OPTIONS" onClick={() => openModal('OPTIONS')} />
+            <BarButton
+              icon={GUI.BOOK}
+              label="STORAGE"
+              data-tutorial="storage"
+              active={trayOpen}
+              onClick={() => {
+                advanceTutorial('STORAGE', 'PLACE')
+                setTrayOpen((open) => !open)
+              }}
+            />
+            <BarButton icon={GUI.INFO} label="STATUS" onClick={() => openModal('STATUS')} />
+            <BarButton icon={GUI.SETTINGS} label="OPTIONS" onClick={() => openModal('OPTIONS')} />
           </div>
         </>
-      )}
-
-      {detail && (
-        <div className="hud-bottom-bar">
-          <IconButton icon={GUI.BACK} size={72} title="BACK" onClick={() => setScreen('ZOO')} />
-          <IconButton
-            icon={GUI.CURSOR}
-            size={72}
-            title="CURSOR"
-            disabled={tool === 'CURSOR'}
-            onClick={() => setTool('CURSOR')}
-          />
-          <IconButton
-            icon={GUI.HAND}
-            size={72}
-            title="PAN"
-            disabled={tool === 'PAN'}
-            onClick={() => setTool('PAN')}
-          />
-          <IconButton
-            icon={GUI.ZOOM_IN}
-            size={72}
-            title="ZOOM IN"
-            onClick={() => applyCameraState(zoomStep(cameraRef.current, 1))}
-          />
-          <IconButton
-            icon={GUI.ZOOM_OUT}
-            size={72}
-            title="ZOOM OUT"
-            disabled={camera.zoom <= MIN_ZOOM}
-            onClick={() => applyCameraState(clampCamera(zoomStep(cameraRef.current, -1)))}
-          />
-          <IconButton
-            icon={GUI.BOOK}
-            size={72}
-            title="STORAGE"
-            onClick={() => setTrayOpen((open) => !open)}
-          />
-          <IconButton icon={GUI.SETTINGS} size={72} title="OPTIONS" onClick={() => openModal('OPTIONS')} />
-        </div>
       )}
     </div>
   )

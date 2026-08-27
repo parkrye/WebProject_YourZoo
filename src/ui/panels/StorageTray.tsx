@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import type { Animal } from '@/domain/animal'
 import { AnimalThumb } from '@/ui/components/AnimalThumb'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
@@ -6,6 +6,8 @@ import { BitmapLabel } from '@/ui/components/BitmapLabel'
 const THUMB_SIZE = 72
 /** 이 거리를 넘겨야 드래그로 친다. 그 아래는 선택 클릭이다. */
 const DRAG_THRESHOLD = 6
+/** 퇴장 애니메이션 길이. CSS 의 tray-out 과 맞춰야 한다. */
+const EXIT_MS = 180
 
 export interface DragState {
   animal: Animal
@@ -38,6 +40,14 @@ export function StorageTray({
 }: StorageTrayProps) {
   const originRef = useRef<{ x: number; y: number } | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [closing, setClosing] = useState(false)
+
+  // 열릴 때 올라왔으면 닫힐 때도 같은 길로 내려가야 한다. 즉시 언마운트하면 뿅 사라진다.
+  const requestClose = useCallback(() => {
+    if (closing) return
+    setClosing(true)
+    window.setTimeout(onClose, EXIT_MS)
+  }, [closing, onClose])
 
   const handlePointerDown = (event: React.PointerEvent): void => {
     if (event.button !== 0) return
@@ -82,12 +92,12 @@ export function StorageTray({
   return (
     // 드래그 중에는 트레이를 비쳐 보이게 한다. 물 영역이 트레이에 가려
     // "어디에 놓는지" 가 보이지 않으면 물 동물을 배치할 수 없다.
-    <div className={draggingId ? 'storage-tray is-dragging' : 'storage-tray'}>
+    <div className={trayClass(draggingId !== null, closing)}>
       <div className="storage-tray-head">
         <BitmapLabel text={`STORAGE ${stored.length}`} size={24} />
         {shippingCount > 0 && <BitmapLabel text={`SHIPPING ${shippingCount}`} size={20} />}
         <BitmapLabel text="DRAG TO PLACE" size={18} />
-        <button type="button" className="storage-tray-close text-button" onClick={onClose}>
+        <button type="button" className="storage-tray-close text-button" onClick={requestClose}>
           <BitmapLabel text="CLOSE" size={20} />
         </button>
       </div>
@@ -111,4 +121,10 @@ export function StorageTray({
       </div>
     </div>
   )
+}
+
+function trayClass(dragging: boolean, closing: boolean): string {
+  return ['storage-tray', dragging ? 'is-dragging' : '', closing ? 'is-closing' : '']
+    .filter(Boolean)
+    .join(' ')
 }
