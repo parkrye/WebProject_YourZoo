@@ -16,10 +16,12 @@ export function ReportModal() {
   return (
     <Popup title={`DAY ${report.day} REPORT`} width={860} height={620} onClose={closeModal}>
       <div className="report">
+        {report.arrivedCount > 0 && <ReportRow label="ARRIVED" value={report.arrivedCount} tone="plus" />}
         <ReportRow label="VISITORS" value={report.visitors} />
         <ReportRow label="TICKETS" value={report.ticketIncome} tone="plus" />
         <ReportRow label="VIEWING" value={report.viewIncome} tone="plus" />
         <ReportRow label="UPKEEP" value={report.upkeep} tone="minus" />
+        {report.storedCount > 0 && <ReportRow label="IN STORAGE" value={report.storedCount} />}
 
         <div className="report-divider" />
 

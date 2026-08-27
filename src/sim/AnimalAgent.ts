@@ -28,6 +28,8 @@ export class AnimalAgent implements AgentView {
   facing: 1 | -1 = 1
   /** 비트맵 로드가 끝나면 EnclosureSim 이 채운다. 그 전까지는 그리지 않는다. */
   renderer: AnimalRenderer | null = null
+  /** 그림의 가로/세로 비. 히트 박스 계산에 필요하다. 비트맵과 함께 채워진다. */
+  aspect = 1
 
   private vx = 0
   private vy = 0
@@ -59,6 +61,16 @@ export class AnimalAgent implements AgentView {
 
   get roam(): RoamBox {
     return ROAM_BOX[this.animal.traits.habitat]
+  }
+
+  /** 드롭한 자리에 내려놓는다. 로밍 박스를 벗어나면 안쪽으로 당긴다. */
+  placeAt(x: number, y: number): void {
+    const box = this.roam
+    this.x = clamp(x, box.x0, box.x1)
+    this.y = clamp(y, box.y0, box.y1)
+    this.target = null
+    this.motion = 'IDLE'
+    this.motionTime = 0
   }
 
   setTarget(x: number, y: number): void {
@@ -101,6 +113,22 @@ export class AnimalAgent implements AgentView {
     this.y = clamp(this.y, box.y0, box.y1)
 
     if (Math.abs(this.vx) > 0.001) this.facing = this.vx < 0 ? -1 : 1
+  }
+
+  /**
+   * 커서로 집을 수 있는 영역 (정규화 좌표).
+   * 발밑이 기준이므로 y 는 `[y - 높이, y]`, x 는 중앙 정렬이다.
+   * 화면이 가로로 길어 정규화 x 폭은 종횡비를 한 번 더 환산해야 한다.
+   */
+  get hitBox(): { left: number; right: number; top: number; bottom: number } {
+    const state = this.toRenderState()
+    const halfWidth = (state.scale * this.aspect * ASPECT) / 2
+    return {
+      left: state.x - halfWidth,
+      right: state.x + halfWidth,
+      top: state.y - state.scale,
+      bottom: state.y,
+    }
   }
 
   /** 현재 속도 / 최대 속도. 렌더러가 애니메이션 세기를 정하는 데 쓴다. */

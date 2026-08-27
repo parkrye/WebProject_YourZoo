@@ -21,18 +21,40 @@ export interface SheetMeta {
   motions: readonly AnimalMotion[]
 }
 
+/**
+ * 동물의 생애 단계.
+ *
+ * `SHIPPING` 요청서 제출 후 배송 중. 아무 효과가 없다.
+ * `STORED`   창고 도착. 사육비 절반을 내지만 수입도 명성도 없다.
+ * `PLACED`   우리에 배치됨. 손님을 부르고 수입을 만든다.
+ */
+export type AnimalStatus = 'SHIPPING' | 'STORED' | 'PLACED'
+
 export interface Animal {
   readonly id: string
   /** A-Z / 0-9 / 공백 만 허용. 폰트 제약. */
   readonly name: string
-  readonly enclosureId: BiomeId
+  readonly status: AnimalStatus
+  /** `PLACED` 일 때만 값이 있다. */
+  readonly enclosureId: BiomeId | null
   /** 플레이어가 그린 그림의 IndexedDB 키 */
   readonly imageId: string
   readonly traits: AnimalTraits
   /** SDK 연동 전까지 항상 null */
   readonly spriteSheet: SheetMeta | null
-  readonly bornDay: number
+  /** 요청서를 제출한 날 */
+  readonly orderedDay: number
+  /** 창고에 도착하는 날 */
+  readonly arrivalDay: number
   readonly appeal: number
+}
+
+export function isPlaced(animal: Animal): boolean {
+  return animal.status === 'PLACED'
+}
+
+export function placedIn(animals: readonly Animal[], enclosureId: BiomeId): Animal[] {
+  return animals.filter((a) => a.status === 'PLACED' && a.enclosureId === enclosureId)
 }
 
 export interface AppealInput {
@@ -67,6 +89,7 @@ export function computeAppeal({ traits, colorCount, sameHabitatCount }: AppealIn
 export function countHabitat(animals: readonly Animal[], enclosureId: BiomeId, habitat: Habitat): number {
   let n = 0
   for (const a of animals) {
+    if (a.status !== 'PLACED') continue
     if (a.enclosureId === enclosureId && a.traits.habitat === habitat) n++
   }
   return n

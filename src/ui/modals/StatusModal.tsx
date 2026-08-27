@@ -15,6 +15,10 @@ export function StatusModal() {
   const unlocked = useGameStore((s) => s.unlocked)
   const day = useGameStore((s) => s.clock.day)
 
+  const placed = animals.filter((a) => a.status === 'PLACED').length
+  const storedCount = animals.filter((a) => a.status === 'STORED').length
+  const shipping = animals.filter((a) => a.status === 'SHIPPING').length
+
   // 오늘 자정에 정산될 예상치. 지난 정산 결과보다 지금 상태를 판단하는 데 쓸모 있다.
   const forecast = settleDay({ day, animals, unlocked, reputation })
 
@@ -32,7 +36,15 @@ export function StatusModal() {
           </div>
           <div className="stat-row">
             <IconButton icon={GUI.BOOK} size={52} />
-            <BitmapLabel text={`ANIMALS ${animals.length}`} size={30} />
+            <BitmapLabel text={`PLACED ${placed}`} size={30} />
+          </div>
+          <div className="stat-row">
+            <BitmapLabel text="IN STORAGE" size={24} />
+            <BitmapLabel text={`${storedCount}`} size={24} />
+          </div>
+          <div className="stat-row">
+            <BitmapLabel text="SHIPPING" size={24} />
+            <BitmapLabel text={`${shipping}`} size={24} />
           </div>
 
           <div className="field-label">
@@ -40,7 +52,7 @@ export function StatusModal() {
           </div>
           {ENCLOSURE_ORDER.map((id) => {
             const open = unlocked.includes(id)
-            const count = animals.filter((a) => a.enclosureId === id).length
+            const count = animals.filter((a) => a.status === 'PLACED' && a.enclosureId === id).length
             return (
               <div key={id} className="stat-row">
                 <BitmapLabel text={ENCLOSURES[id].label} size={24} />

@@ -12,7 +12,19 @@ export const START_GOLD = 200
 export const START_REPUTATION = 0
 
 export const ANIMAL_CREATE_COST = 50
+/** 동물을 판매할 때 제작비의 절반을 돌려준다. 잘못 만든 동물을 되돌릴 수 있어야 한다. */
+export const ANIMAL_SELL_REFUND = Math.floor(ANIMAL_CREATE_COST / 2)
+
+/** 요청서를 제출하고 창고에 도착하기까지 걸리는 일수. */
+export const SHIPPING_DAYS = 1
+
 export const ANIMAL_UPKEEP_PER_DAY = 8
+/**
+ * 창고 보관 사육비. 배치의 절반.
+ * 공짜로 두면 적자를 피하려고 전부 창고에 넣어두는 플레이가 생기고,
+ * 배치와 같게 두면 초반 소지금으로는 잠시 빼두는 것조차 버겁다.
+ */
+export const STORED_UPKEEP_PER_DAY = Math.floor(ANIMAL_UPKEEP_PER_DAY / 2)
 export const TICKET_PRICE = 5
 export const VIEW_INCOME_PER_APPEAL = 0.5
 

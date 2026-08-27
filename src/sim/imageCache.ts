@@ -13,6 +13,12 @@ export function getBitmap(id: string): ImageBitmap | null {
   return bitmaps.get(id) ?? null
 }
 
+/** 동물을 방출했을 때 호출한다. 메모리에 남겨둘 이유가 없다. */
+export function forgetBitmap(id: string): void {
+  bitmaps.get(id)?.close()
+  bitmaps.delete(id)
+}
+
 /** 이미 Blob 을 손에 들고 있을 때(방금 그린 직후) 디코드를 앞당긴다. */
 export async function registerFromBlob(id: string, blob: Blob): Promise<void> {
   try {

@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  FENCE_OFFSET_DETAIL, FENCE_OFFSET_ZOO, GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH,
+  FENCE_OFFSET_DETAIL, FENCE_OFFSET_ZOO, GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH, ROAM_BOX,
   type BiomeId,
 } from '@/assets/manifest'
 import { startTicker } from '@/core/ticker'
 import { UNLOCK_COST } from '@/domain/balance'
 import { clockLabel, phaseOf } from '@/domain/clock'
 import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
-import { SceneRenderer } from '@/render/SceneRenderer'
+import { SceneRenderer, type EnclosureTransition } from '@/render/SceneRenderer'
 import {
-  clampCamera, createCamera, MIN_ZOOM, panCamera, zoomStep, type Camera,
+  clampCamera, createCamera, MIN_ZOOM, panCamera, screenToScene, zoomStep, type Camera,
 } from '@/render/camera'
 import { EnclosureSim } from '@/sim/EnclosureSim'
 import { useGameStore } from '@/store/gameStore'
+import { AnimalThumb } from '@/ui/components/AnimalThumb'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
+import { AnimalCard } from '@/ui/panels/AnimalCard'
+import { StorageTray, type DragState } from '@/ui/panels/StorageTray'
 
 interface ZooScreenProps {
   detail: boolean
@@ -24,6 +27,9 @@ type DetailTool = 'CURSOR' | 'PAN'
 
 /** 펜스 하강/상승 트윈 속도. 값이 클수록 빨리 붙는다. */
 const FENCE_TWEEN_RESPONSE = 6
+const DRAG_GHOST_SIZE = 96
+/** 우리를 넘길 때 옆으로 미는 시간(초). */
+const SLIDE_DURATION = 0.42
 
 export function ZooScreen({ detail }: ZooScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -35,7 +41,14 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const cameraRef = useRef<Camera>(createCamera())
   const [camera, setCamera] = useState<Camera>(cameraRef.current)
   const [tool, setTool] = useState<DetailTool>('CURSOR')
-  const dragRef = useRef<{ x: number; y: number } | null>(null)
+  const panRef = useRef<{ x: number; y: number } | null>(null)
+
+  const [trayOpen, setTrayOpen] = useState(false)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selectedIdRef = useRef<string | null>(null)
+  const [drag, setDrag] = useState<DragState | null>(null)
+  const [dropError, setDropError] = useState<string | null>(null)
+  const transitionRef = useRef<EnclosureTransition | null>(null)
 
   // 우리 3개를 모두 유지하며 계속 시뮬레이션한다. 넘겼다 돌아왔을 때 얼어 있으면 어색하다.
   const sims = useMemo(() => {
@@ -48,6 +61,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const openModal = useGameStore((s) => s.openModal)
   const moveEnclosure = useGameStore((s) => s.moveEnclosure)
   const unlockEnclosure = useGameStore((s) => s.unlockEnclosure)
+  const placeAnimal = useGameStore((s) => s.placeAnimal)
+  const storeAnimal = useGameStore((s) => s.storeAnimal)
+  const sellAnimal = useGameStore((s) => s.sellAnimal)
+  const canPlaceIn = useGameStore((s) => s.canPlaceIn)
   const enclosure = useGameStore((s) => s.currentEnclosure)
   const unlocked = useGameStore((s) => s.unlocked)
   const gold = useGameStore((s) => s.gold)
@@ -56,22 +73,41 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const elapsed = useGameStore((s) => s.clock.elapsed)
 
   const isOpen = unlocked.includes(enclosure)
+  const stored = useMemo(() => animals.filter((a) => a.status === 'STORED'), [animals])
+  const shippingCount = useMemo(() => animals.filter((a) => a.status === 'SHIPPING').length, [animals])
+  const selected = useMemo(
+    () => animals.find((a) => a.id === selectedId) ?? null,
+    [animals, selectedId],
+  )
+
+  const select = useCallback((id: string | null) => {
+    selectedIdRef.current = id
+    setSelectedId(id)
+  }, [])
 
   const applyCameraState = useCallback((next: Camera) => {
     cameraRef.current = next
     setCamera(next)
   }, [])
 
-  // 상세보기를 벗어나면 카메라를 원위치시킨다. 확대된 채로 우리 화면에 돌아가면 안 된다.
+  // 상세보기를 벗어나면 카메라·선택·트레이를 원위치시킨다.
   useEffect(() => {
     if (detail) return
     applyCameraState(createCamera())
     setTool('CURSOR')
-  }, [detail, applyCameraState])
+    setTrayOpen(false)
+    select(null)
+  }, [detail, applyCameraState, select])
 
   useEffect(() => {
     for (const sim of sims.values()) sim.syncAnimals(animals)
   }, [animals, sims])
+
+  useEffect(() => {
+    if (!dropError) return
+    const timer = window.setTimeout(() => setDropError(null), 1800)
+    return () => window.clearTimeout(timer)
+  }, [dropError])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -97,6 +133,12 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         }
 
         fenceRef.current += (targetFence - fenceRef.current) * Math.min(1, step * FENCE_TWEEN_RESPONSE)
+
+        const transition = transitionRef.current
+        if (transition) {
+          transition.progress += step / SLIDE_DURATION
+          if (transition.progress >= 1) transitionRef.current = null
+        }
       },
       render: () => {
         const store = useGameStore.getState()
@@ -107,46 +149,109 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           elapsed: store.clock.elapsed,
           fenceOffset: fenceRef.current,
           camera: cameraRef.current,
+          selectedId: selectedIdRef.current,
+          transition: transitionRef.current,
         })
       },
     })
   }, [detail, renderer, sims])
 
+  /** 뷰포트 좌표를 씬의 정규화 좌표로 바꾼다. Stage 의 CSS 축소를 되돌려야 한다. */
+  const toScene = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    if (clientX < rect.left || clientX > rect.right || clientY < rect.top || clientY > rect.bottom) {
+      return null
+    }
+    const scale = LOGICAL_WIDTH / rect.width
+    return screenToScene(
+      cameraRef.current,
+      (clientX - rect.left) * scale,
+      (clientY - rect.top) * scale,
+      LOGICAL_WIDTH,
+      LOGICAL_HEIGHT,
+    )
+  }, [])
+
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>): void => {
-    if (!detail || tool !== 'PAN' || event.button !== 0) return
-    event.currentTarget.setPointerCapture(event.pointerId)
-    dragRef.current = { x: event.clientX, y: event.clientY }
+    if (!detail || event.button !== 0) return
+
+    if (tool === 'PAN') {
+      event.currentTarget.setPointerCapture(event.pointerId)
+      panRef.current = { x: event.clientX, y: event.clientY }
+      return
+    }
+
+    const scene = toScene(event.clientX, event.clientY)
+    const sim = sims.get(enclosure)
+    if (!scene || !sim) return
+    const picked = sim.pickAnimal(scene.x, scene.y)
+    select(picked?.id ?? null)
   }
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>): void => {
-    const drag = dragRef.current
-    if (!drag) return
+    const origin = panRef.current
+    if (!origin) return
 
-    // Stage 가 CSS 로 축소되어 있으므로 화면 픽셀을 논리 픽셀로 환산한다.
     const rect = event.currentTarget.getBoundingClientRect()
     const scale = LOGICAL_WIDTH / rect.width
 
     applyCameraState(
       panCamera(
         cameraRef.current,
-        (event.clientX - drag.x) * scale,
-        (event.clientY - drag.y) * scale,
+        (event.clientX - origin.x) * scale,
+        (event.clientY - origin.y) * scale,
         LOGICAL_WIDTH,
         LOGICAL_HEIGHT,
       ),
     )
-    dragRef.current = { x: event.clientX, y: event.clientY }
+    panRef.current = { x: event.clientX, y: event.clientY }
   }
 
   const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>): void => {
-    dragRef.current = null
+    panRef.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId)
     }
   }
 
+  /** 창고에서 끌어온 동물을 우리에 내려놓는다. 서식지와 정원을 함께 본다. */
+  /** 좌우 전환. 스토어를 바꾸기 전에 나가는 우리를 붙잡아 슬라이드를 시작한다. */
+  const slideTo = (direction: 1 | -1): void => {
+    if (transitionRef.current) return
+    const from = sims.get(enclosure)
+    if (from) transitionRef.current = { from, direction, progress: 0 }
+    select(null)
+    moveEnclosure(direction)
+  }
+
+  const handleDrop = (state: DragState): void => {
+    setDrag(null)
+
+    const scene = toScene(state.clientX, state.clientY)
+    if (!scene) return
+
+    const box = ROAM_BOX[state.animal.traits.habitat]
+    const inside =
+      scene.x >= box.x0 && scene.x <= box.x1 && scene.y >= box.y0 && scene.y <= box.y1
+    if (!inside) {
+      setDropError(`DROP IN ${state.animal.traits.habitat} AREA`)
+      return
+    }
+
+    if (!canPlaceIn(enclosure)) {
+      setDropError('ENCLOSURE IS FULL')
+      return
+    }
+
+    // 스토어가 갱신되면 EnclosureSim 이 새 에이전트를 만든다. 그 전에 시작 위치를 알려 둔다.
+    sims.get(enclosure)?.setSpawnHint(state.animal.id, scene.x, scene.y)
+    if (placeAnimal(state.animal.id, enclosure)) select(state.animal.id)
+  }
+
   const time = clockLabel(elapsed)
-  const here = animals.filter((a) => a.enclosureId === enclosure).length
+  const here = animals.filter((a) => a.status === 'PLACED' && a.enclosureId === enclosure).length
   const canPan = detail && tool === 'PAN'
 
   return (
@@ -169,22 +274,64 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
       </div>
 
-      <div className="hud-top-right">
-        <IconButton icon={GUI.SETTINGS} size={64} title="OPTIONS" onClick={() => openModal('OPTIONS')} />
-      </div>
-
       <div className="hud-enclosure-name">
         <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
         <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
       </div>
 
+      {dropError && (
+        <div className="drop-error">
+          <BitmapLabel text={dropError} size={28} align="center" />
+        </div>
+      )}
+
+      {detail && selected && (
+        <AnimalCard
+          animal={selected}
+          onClose={() => select(null)}
+          {...(selected.status === 'PLACED' && {
+            onStore: () => {
+              storeAnimal(selected.id)
+              select(null)
+            },
+          })}
+          {...(selected.status === 'STORED' && {
+            onSell: () => {
+              sellAnimal(selected.id)
+              select(null)
+            },
+          })}
+        />
+      )}
+
+      {detail && trayOpen && (
+        <StorageTray
+          stored={stored}
+          shippingCount={shippingCount}
+          onSelect={(animal) => select(animal.id)}
+          onDragStart={setDrag}
+          onDragMove={setDrag}
+          onDragEnd={handleDrop}
+          onClose={() => setTrayOpen(false)}
+        />
+      )}
+
+      {drag && (
+        <div
+          className="drag-ghost"
+          style={{ left: drag.clientX - DRAG_GHOST_SIZE / 2, top: drag.clientY - DRAG_GHOST_SIZE / 2 }}
+        >
+          <AnimalThumb imageId={drag.animal.imageId} size={DRAG_GHOST_SIZE} />
+        </div>
+      )}
+
       {!detail && (
         <>
           <div className="hud-arrow hud-arrow-left">
-            <IconButton icon={GUI.BACK} size={78} title="PREV" onClick={() => moveEnclosure(-1)} />
+            <IconButton icon={GUI.BACK} size={78} title="PREV" onClick={() => slideTo(-1)} />
           </div>
           <div className="hud-arrow hud-arrow-right">
-            <IconButton icon={GUI.BACK} size={78} title="NEXT" onClick={() => moveEnclosure(1)} />
+            <IconButton icon={GUI.BACK} size={78} title="NEXT" onClick={() => slideTo(1)} />
           </div>
           <div className="hud-bottom-bar">
             <IconButton
@@ -198,10 +345,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
               icon={GUI.SCROLL}
               size={72}
               title="REQUEST"
-              disabled={!isOpen}
               onClick={() => openModal('REQUEST')}
             />
             <IconButton icon={GUI.INFO} size={72} title="STATUS" onClick={() => openModal('STATUS')} />
+            <IconButton icon={GUI.SETTINGS} size={72} title="OPTIONS" onClick={() => openModal('OPTIONS')} />
           </div>
         </>
       )}
@@ -236,6 +383,13 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             disabled={camera.zoom <= MIN_ZOOM}
             onClick={() => applyCameraState(clampCamera(zoomStep(cameraRef.current, -1)))}
           />
+          <IconButton
+            icon={GUI.BOOK}
+            size={72}
+            title="STORAGE"
+            onClick={() => setTrayOpen((open) => !open)}
+          />
+          <IconButton icon={GUI.SETTINGS} size={72} title="OPTIONS" onClick={() => openModal('OPTIONS')} />
         </div>
       )}
     </div>

@@ -3,6 +3,7 @@ import {
   LOGICAL_HEIGHT, LOGICAL_WIDTH, VISITOR_BASELINE_Y, VISITOR_HEIGHT,
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
+import { easeInOutCubic } from '@/core/math'
 import { phaseBlend } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
@@ -19,6 +20,19 @@ export interface SceneInput {
   fenceOffset: number
   /** 상세보기 확대·팬. 우리 화면에서는 zoom 1, 중심 0.5. */
   camera: Camera
+  /** 커서로 집은 동물. 발밑에 링을 그린다. */
+  selectedId?: string | null
+  /** 우리를 넘기는 중이면 두 씬을 나란히 밀어 보여준다. */
+  transition?: EnclosureTransition | null
+}
+
+export interface EnclosureTransition {
+  /** 빠져나가는 우리 */
+  from: EnclosureSim
+  /** 1 이면 새 우리가 오른쪽에서 들어온다. */
+  direction: 1 | -1
+  /** 0..1 */
+  progress: number
 }
 
 /** y 정렬 대상. 프롭과 동물이 같은 목록에서 섞인다. */
@@ -40,15 +54,39 @@ type Drawable =
  */
 export class SceneRenderer {
   private readonly buffer: Drawable[] = []
+  private selectedId: string | null = null
 
   draw(ctx: CanvasRenderingContext2D, input: SceneInput): void {
     const view: ViewBox = { width: LOGICAL_WIDTH, height: LOGICAL_HEIGHT }
-    const { sim } = input
 
     // 카메라 변환 밖에서 지워야 확대 상태에서도 화면 전체가 깨끗해진다.
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, view.width, view.height)
-    applyCamera(ctx, input.camera, view.width, view.height)
+    this.selectedId = input.selectedId ?? null
+
+    const transition = input.transition
+    if (!transition) {
+      this.drawScene(ctx, input.sim, input, view, 0)
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      return
+    }
+
+    // 나가는 우리와 들어오는 우리를 화면 폭만큼 벌려 함께 민다.
+    const eased = easeInOutCubic(transition.progress)
+    const shift = transition.direction * view.width
+    this.drawScene(ctx, transition.from, input, view, -eased * shift)
+    this.drawScene(ctx, input.sim, input, view, (1 - eased) * shift)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+  }
+
+  private drawScene(
+    ctx: CanvasRenderingContext2D,
+    sim: EnclosureSim,
+    input: SceneInput,
+    view: ViewBox,
+    offsetX: number,
+  ): void {
+    applyCamera(ctx, input.camera, view.width, view.height, offsetX)
 
     this.drawSky(ctx, input.elapsed, view)
     ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
@@ -58,7 +96,6 @@ export class SceneRenderer {
     this.drawSortedLayer(ctx, sim, 'WATER', view)
     ctx.drawImage(getAssets().fence, 0, input.fenceOffset * view.height, view.width, view.height)
     this.drawVisitors(ctx, sim.visitors, input.fenceOffset, view)
-    ctx.setTransform(1, 0, 0, 1, 0, 0)
   }
 
   private drawSky(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {
@@ -78,7 +115,7 @@ export class SceneRenderer {
   private drawSkyAnimals(ctx: CanvasRenderingContext2D, sim: EnclosureSim, view: ViewBox): void {
     for (const agent of sim.animals) {
       if (agent.habitat !== 'SKY') continue
-      agent.renderer?.draw(ctx, agent.toRenderState(), view)
+      this.drawAgent(ctx, agent, view)
     }
   }
 
@@ -105,8 +142,34 @@ export class SceneRenderer {
         this.drawProp(ctx, sim.biome, item.prop, view)
         continue
       }
-      item.agent.renderer?.draw(ctx, item.agent.toRenderState(), view)
+      this.drawAgent(ctx, item.agent, view)
     }
+  }
+
+  private drawAgent(ctx: CanvasRenderingContext2D, agent: AnimalAgent, view: ViewBox): void {
+    if (!agent.renderer) return
+    const state = agent.toRenderState()
+    if (agent.id === this.selectedId) this.drawSelectionRing(ctx, agent, state.scale, view)
+    agent.renderer.draw(ctx, state, view)
+  }
+
+  /** 선택 표시. 동물을 가리지 않도록 발밑에 납작한 링만 그린다. */
+  private drawSelectionRing(
+    ctx: CanvasRenderingContext2D,
+    agent: AnimalAgent,
+    scale: number,
+    view: ViewBox,
+  ): void {
+    const box = agent.hitBox
+    const radiusX = ((box.right - box.left) / 2) * view.width
+    ctx.save()
+    ctx.translate(agent.x * view.width, agent.y * view.height)
+    ctx.strokeStyle = '#ffd766'
+    ctx.lineWidth = Math.max(2, scale * view.height * 0.03)
+    ctx.beginPath()
+    ctx.ellipse(0, 0, Math.max(12, radiusX * 0.62), Math.max(5, radiusX * 0.24), 0, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
   }
 
   private drawProp(

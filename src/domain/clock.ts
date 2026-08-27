@@ -37,7 +37,11 @@ export interface PhaseBlend {
   t: number
 }
 
-const CROSSFADE_SEC = 12
+/**
+ * 시간대 크로스페이드 길이.
+ * 하루가 180초뿐이라 길게 잡으면 늘 어중간한 색으로 보인다. 짧게 끊어야 전환이 읽힌다.
+ */
+const CROSSFADE_SEC = 4
 
 export function phaseBlend(elapsed: number): PhaseBlend {
   const from = phaseOf(elapsed)
@@ -50,12 +54,13 @@ export function phaseBlend(elapsed: number): PhaseBlend {
 
 /**
  * HUD 표기용 시각. 하루 180초를 24시간에 매핑하되, 게임 시작이 06:00 이 되도록 이동한다.
+ *
+ * **분은 버리고 시 단위로 내린다.** 하루가 180초라 분까지 보여주면 숫자가 1초에도
+ * 여러 번 바뀌어 화면이 산만해진다. 시 단위면 7.5초에 한 번만 갱신된다.
  * 폰트에 콜론이 없으므로 시/분을 분리해 반환한다.
  */
 export function clockLabel(elapsed: number): { hh: string; mm: string } {
   const dayFraction = elapsed / DAY_DURATION_SEC
-  const minutesOfDay = Math.floor(((dayFraction * 24 + 6) % 24) * 60)
-  const hh = Math.floor(minutesOfDay / 60)
-  const mm = minutesOfDay % 60
-  return { hh: String(hh).padStart(2, '0'), mm: String(mm).padStart(2, '0') }
+  const hour = Math.floor((dayFraction * 24 + 6) % 24)
+  return { hh: String(hour).padStart(2, '0'), mm: '00' }
 }

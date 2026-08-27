@@ -1,8 +1,7 @@
-import { useEffect, useRef, type ReactNode } from 'react'
-import { getAssets } from '@/assets/AssetStore'
+import type { ReactNode } from 'react'
 import { GUI, POPUP_INSET } from '@/assets/manifest'
-import { drawPopupFrame } from '@/render/NineSlice'
 import { BitmapLabel } from './BitmapLabel'
+import { FrameCanvas } from './FrameCanvas'
 import { IconButton } from './IconButton'
 
 interface PopupProps {
@@ -20,24 +19,10 @@ interface PopupProps {
  * 발바닥 엠블럼이 박혀 있어서, 거기에 제목을 얹으면 글자와 겹친다.
  */
 export function Popup({ title, width, height, onClose, children }: PopupProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const dpr = window.devicePixelRatio || 1
-    canvas.width = width * dpr
-    canvas.height = height * dpr
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    ctx.scale(dpr, dpr)
-    drawPopupFrame(ctx, getAssets().popup, 0, 0, width, height)
-  }, [width, height])
-
   return (
     <div className="popup-backdrop" onPointerDown={onClose}>
       <div className="popup" style={{ width, height }} onPointerDown={(e) => e.stopPropagation()}>
-        <canvas ref={canvasRef} className="popup-frame" style={{ width, height }} />
+        <FrameCanvas width={width} height={height} />
         <div
           className="popup-body"
           style={{

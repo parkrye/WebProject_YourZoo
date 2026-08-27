@@ -168,7 +168,7 @@ export const ANIMAL_HEIGHT: Record<Habitat, number> = {
 /** y 가 클수록(카메라에 가까울수록) 크게 보이는 원근 배율 범위. */
 export const PERSPECTIVE_SCALE = { near: 1.18, far: 0.82 } as const
 
-export const PROP_HEIGHT = { LAND: 0.17, WATER: 0.1 } as const
+export const PROP_HEIGHT = { LAND: 0.115, WATER: 0.07 } as const
 
 /** 우리 하나에 배치되는 프롭 개수. */
 export const PROP_COUNT = { LAND: 4, WATER: 3 } as const

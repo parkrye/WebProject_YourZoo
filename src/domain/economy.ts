@@ -1,10 +1,10 @@
 import type { BiomeId, SkyPhase } from '@/assets/manifest'
 import { clamp } from '@/core/math'
-import type { Animal } from './animal'
+import { placedIn, type Animal } from './animal'
 import {
   ANIMAL_UPKEEP_PER_DAY, DAY_DURATION_SEC, MAX_VISITORS_PER_ENCLOSURE, OVERCROWD_PENALTY,
   OVERCROWD_THRESHOLD, PHASE_END, REPUTATION_PER_APPEAL, REPUTATION_PER_VISITOR,
-  TICKET_PRICE, VIEW_INCOME_PER_APPEAL, VISITOR_PHASE_MULTIPLIER,
+  STORED_UPKEEP_PER_DAY, TICKET_PRICE, VIEW_INCOME_PER_APPEAL, VISITOR_PHASE_MULTIPLIER,
 } from './balance'
 
 /** 명성과 시간대로부터 해당 우리의 동시 관람객 수를 구한다. */
@@ -46,7 +46,12 @@ export interface DailyReport {
   reputationDelta: number
   /** 하루 평균 관람객 합계 */
   visitors: number
+  /** 우리에 배치된 동물 수 */
   animalCount: number
+  /** 창고 보관 수 */
+  storedCount: number
+  /** 이 정산으로 창고에 도착한 수 */
+  arrivedCount: number
 }
 
 export interface SettleInput {
@@ -54,13 +59,17 @@ export interface SettleInput {
   animals: readonly Animal[]
   unlocked: readonly BiomeId[]
   reputation: number
+  /** 이 정산에서 배송이 완료된 동물 수. 리포트 표시용. */
+  arrivedCount?: number
 }
 
 /**
  * 자정 정산. 하루치 수지와 명성 변화를 계산한다.
  * @see docs/00-overview.md §4.3
  */
-export function settleDay({ day, animals, unlocked, reputation }: SettleInput): DailyReport {
+export function settleDay({
+  day, animals, unlocked, reputation, arrivedCount = 0,
+}: SettleInput): DailyReport {
   const multiplier = averageVisitorMultiplier()
 
   let ticketIncome = 0
@@ -68,7 +77,7 @@ export function settleDay({ day, animals, unlocked, reputation }: SettleInput): 
   let overcrowdPenalty = 0
 
   for (const biome of unlocked) {
-    const inBiome = animals.filter((a) => a.enclosureId === biome)
+    const inBiome = placedIn(animals, biome)
     if (inBiome.length === 0) continue
 
     const average = clamp(
@@ -83,9 +92,14 @@ export function settleDay({ day, animals, unlocked, reputation }: SettleInput): 
     overcrowdPenalty += Math.max(0, inBiome.length - OVERCROWD_THRESHOLD) * OVERCROWD_PENALTY
   }
 
-  const totalAppeal = animals.reduce((sum, a) => sum + a.appeal, 0)
+  // 수입과 명성은 **배치된 동물만** 만든다. 창고에 쌓아두면 돈이 되지 않는다.
+  const placed = animals.filter((a) => a.status === 'PLACED')
+  const stored = animals.filter((a) => a.status === 'STORED')
+
+  const totalAppeal = placed.reduce((sum, a) => sum + a.appeal, 0)
   const viewIncome = Math.round(totalAppeal * VIEW_INCOME_PER_APPEAL)
-  const upkeep = animals.length * ANIMAL_UPKEEP_PER_DAY
+  // 배송 중인 동물은 아직 우리 것이 아니므로 사육비를 물리지 않는다.
+  const upkeep = placed.length * ANIMAL_UPKEEP_PER_DAY + stored.length * STORED_UPKEEP_PER_DAY
   const reputationDelta = Math.round(totalAppeal * REPUTATION_PER_APPEAL) - overcrowdPenalty
 
   return {
@@ -96,6 +110,8 @@ export function settleDay({ day, animals, unlocked, reputation }: SettleInput): 
     net: ticketIncome + viewIncome - upkeep,
     reputationDelta,
     visitors,
-    animalCount: animals.length,
+    animalCount: placed.length,
+    storedCount: stored.length,
+    arrivedCount,
   }
 }

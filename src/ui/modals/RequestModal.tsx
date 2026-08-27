@@ -2,8 +2,7 @@ import { useMemo, useState } from 'react'
 import { GUI } from '@/assets/manifest'
 import { createRng } from '@/core/rng'
 import { computeAppeal, countHabitat, createAnimalId, type Animal } from '@/domain/animal'
-import { ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH } from '@/domain/balance'
-import { ENCLOSURES } from '@/domain/enclosure'
+import { ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
 import {
   ANIMAL_TYPE_ORDER, DIETS, HABITATS, TRAIT_KEYS, TRAIT_LABELS,
   randomTraits, traitsFromType, withTrait,
@@ -51,12 +50,11 @@ interface NewAnimalFormProps {
 }
 
 function NewAnimalForm({ onDone }: NewAnimalFormProps) {
-  const gold = useGameStore((s) => s.gold)
   const enclosureId = useGameStore((s) => s.currentEnclosure)
   const animals = useGameStore((s) => s.animals)
   const day = useGameStore((s) => s.clock.day)
-  const addAnimal = useGameStore((s) => s.addAnimal)
-  const canAdd = useGameStore((s) => s.canAddAnimal)
+  const orderAnimal = useGameStore((s) => s.orderAnimal)
+  const canOrder = useGameStore((s) => s.canOrderAnimal)
 
   const [name, setName] = useState('')
   const [drawing, setDrawing] = useState<ExportedDrawing | null>(null)
@@ -79,9 +77,8 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     sameHabitatCount: countHabitat(animals, enclosureId, traits.habitat),
   })
 
-  const affordable = gold >= ANIMAL_CREATE_COST
-  const roomLeft = canAdd(enclosureId)
-  const ready = name.trim().length > 0 && drawing !== null && affordable && roomLeft && !busy
+  const affordable = canOrder()
+  const ready = name.trim().length > 0 && drawing !== null && affordable && !busy
 
   const submit = async (): Promise<void> => {
     if (!ready || !drawing) return
@@ -101,16 +98,19 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     const animal: Animal = {
       id: createAnimalId(),
       name: name.trim(),
-      enclosureId,
+      // 제출한 동물은 바로 우리에 들어가지 않는다. 배송 → 창고 → 배치 순이다.
+      status: 'SHIPPING',
+      enclosureId: null,
       imageId,
       traits,
       spriteSheet: null,
-      bornDay: day,
+      orderedDay: day,
+      arrivalDay: day + SHIPPING_DAYS,
       appeal,
     }
 
     setBusy(false)
-    if (addAnimal(animal)) onDone()
+    if (orderAnimal(animal)) onDone()
   }
 
   const reroll = (): void => {
@@ -145,7 +145,8 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
           <BitmapLabel text={drawing ? 'REDRAW' : 'DRAW'} size={22} />
         </div>
 
-        <FieldLabel text={`PLACE IN ${ENCLOSURES[enclosureId].label}`} />
+        <FieldLabel text={`ARRIVES IN ${SHIPPING_DAYS} DAY`} />
+        <BitmapLabel text="THEN PLACE IT FROM STORAGE" size={18} />
       </section>
 
       <section className="request-col request-col-wide">
@@ -213,7 +214,6 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
         <BitmapLabel text={`COST ${ANIMAL_CREATE_COST}`} size={26} />
         <BitmapLabel text={`APPEAL ${appeal}`} size={26} />
         {!affordable && <BitmapLabel text="NOT ENOUGH GOLD" size={22} />}
-        {affordable && !roomLeft && <BitmapLabel text="FULL" size={22} />}
         <div className="request-actions">
           <IconButton
             icon={GUI.SUBMIT}

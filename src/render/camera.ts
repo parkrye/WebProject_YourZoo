@@ -56,16 +56,37 @@ export function panCamera(
   })
 }
 
-/** 캔버스 변환 행렬에 카메라를 적용한다. */
+/**
+ * 논리 픽셀 좌표를 정규화 씬 좌표로 되돌린다.
+ * 커서로 동물을 집을 때 쓴다. `applyCamera` 의 역함수여야 한다.
+ */
+export function screenToScene(
+  camera: Camera,
+  px: number,
+  py: number,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  return {
+    x: (px - width / 2 + camera.x * width * camera.zoom) / (camera.zoom * width),
+    y: (py - height / 2 + camera.y * height * camera.zoom) / (camera.zoom * height),
+  }
+}
+
+/**
+ * 캔버스 변환 행렬에 카메라를 적용한다.
+ * `offsetX` 는 화면 픽셀 단위 가로 이동으로, 우리 전환 슬라이드에 쓴다.
+ */
 export function applyCamera(
   ctx: CanvasRenderingContext2D,
   camera: Camera,
   width: number,
   height: number,
+  offsetX = 0,
 ): void {
   ctx.setTransform(
     camera.zoom, 0, 0, camera.zoom,
-    width / 2 - camera.x * width * camera.zoom,
+    width / 2 - camera.x * width * camera.zoom + offsetX,
     height / 2 - camera.y * height * camera.zoom,
   )
 }

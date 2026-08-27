@@ -1,13 +1,16 @@
 import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
-import type { Animal } from '@/domain/animal'
+import { placedIn, type Animal } from '@/domain/animal'
 import {
-  ANIMAL_CREATE_COST, MAX_ANIMALS_PER_ENCLOSURE, START_GOLD, START_REPUTATION, UNLOCK_COST,
+  ANIMAL_CREATE_COST, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
+  START_GOLD, START_REPUTATION, UNLOCK_COST,
 } from '@/domain/balance'
 import { advanceClock, type ClockState } from '@/domain/clock'
 import { settleDay, type DailyReport } from '@/domain/economy'
 import { neighborEnclosure } from '@/domain/enclosure'
-import { clearSave, loadSave, writeSave, type SaveV1 } from './save'
+import { forgetBitmap } from '@/sim/imageCache'
+import { deleteImage } from './imageDb'
+import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
 
 export type ScreenId = 'TITLE' | 'ZOO' | 'ZOO_DETAIL'
 export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | null
@@ -35,14 +38,22 @@ interface GameState {
   tickClock(dt: number): void
   moveEnclosure(direction: -1 | 1): void
   setOption<K extends keyof OptionsState>(key: K, value: OptionsState[K]): void
-  addAnimal(animal: Animal): boolean
-  canAddAnimal(enclosureId: BiomeId): boolean
+  /** 요청서 제출. 비용을 차감하고 배송 대기 상태로 넣는다. */
+  orderAnimal(animal: Animal): boolean
+  canOrderAnimal(): boolean
+  /** 창고에서 우리로. 서식지·정원이 맞지 않으면 false. */
+  placeAnimal(id: string, enclosureId: BiomeId): boolean
+  /** 우리에서 창고로. */
+  storeAnimal(id: string): boolean
+  /** 창고에서 판매. 제작비의 절반을 돌려받는다. */
+  sellAnimal(id: string): boolean
+  canPlaceIn(enclosureId: BiomeId): boolean
   unlockEnclosure(id: BiomeId): boolean
   isUnlocked(id: BiomeId): boolean
 
   startNewGame(): void
   continueGame(): boolean
-  snapshot(): SaveV1
+  snapshot(): SaveV2
 }
 
 const initial = {
@@ -83,21 +94,35 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     let gold = state.gold
     let reputation = state.reputation
+    let animals = state.animals
     let report: DailyReport | null = null
 
     // 탭이 오래 비활성이었다면 여러 날이 한 번에 넘어갈 수 있다.
     for (let i = 0; i < daysPassed; i++) {
+      const today = state.clock.day + i + 1
+
+      // 배송 완료 처리를 정산보다 먼저 한다. 도착한 동물은 그날부터 창고 사육비를 낸다.
+      const arriving = animals.filter((a) => a.status === 'SHIPPING' && a.arrivalDay <= today)
+      if (arriving.length > 0) {
+        animals = animals.map((a) =>
+          a.status === 'SHIPPING' && a.arrivalDay <= today
+            ? { ...a, status: 'STORED' as const }
+            : a,
+        )
+      }
+
       report = settleDay({
         day: state.clock.day + i,
-        animals: state.animals,
+        animals,
         unlocked: state.unlocked,
         reputation,
+        arrivedCount: arriving.length,
       })
       gold = Math.max(0, gold + report.net)
       reputation = Math.max(0, reputation + report.reputationDelta)
     }
 
-    set({ clock: next, gold, reputation, lastReport: report, modal: 'REPORT' })
+    set({ clock: next, gold, reputation, animals, lastReport: report, modal: 'REPORT' })
   },
 
   moveEnclosure: (direction) => {
@@ -108,16 +133,60 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   isUnlocked: (id) => get().unlocked.includes(id),
 
-  canAddAnimal: (enclosureId) => {
-    const { gold, animals, unlocked } = get()
+  canOrderAnimal: () => get().gold >= ANIMAL_CREATE_COST,
+
+  canPlaceIn: (enclosureId) => {
+    const { animals, unlocked } = get()
     if (!unlocked.includes(enclosureId)) return false
-    if (gold < ANIMAL_CREATE_COST) return false
-    return animals.filter((a) => a.enclosureId === enclosureId).length < MAX_ANIMALS_PER_ENCLOSURE
+    return placedIn(animals, enclosureId).length < MAX_ANIMALS_PER_ENCLOSURE
   },
 
-  addAnimal: (animal) => {
-    if (!get().canAddAnimal(animal.enclosureId)) return false
+  orderAnimal: (animal) => {
+    if (!get().canOrderAnimal()) return false
     set((s) => ({ gold: s.gold - ANIMAL_CREATE_COST, animals: [...s.animals, animal] }))
+    return true
+  },
+
+  placeAnimal: (id, enclosureId) => {
+    const { animals } = get()
+    const target = animals.find((a) => a.id === id)
+    if (!target || target.status !== 'STORED') return false
+    if (!get().canPlaceIn(enclosureId)) return false
+
+    set({
+      animals: animals.map((a) =>
+        a.id === id ? { ...a, status: 'PLACED' as const, enclosureId } : a,
+      ),
+    })
+    return true
+  },
+
+  storeAnimal: (id) => {
+    const { animals } = get()
+    const target = animals.find((a) => a.id === id)
+    if (!target || target.status !== 'PLACED') return false
+
+    set({
+      animals: animals.map((a) =>
+        a.id === id ? { ...a, status: 'STORED' as const, enclosureId: null } : a,
+      ),
+    })
+    return true
+  },
+
+  sellAnimal: (id) => {
+    const { animals } = get()
+    const target = animals.find((a) => a.id === id)
+    if (!target || target.status !== 'STORED') return false
+
+    // 그림은 더 이상 참조되지 않는다. 저장소와 메모리 양쪽에서 지운다.
+    void deleteImage(target.imageId)
+    forgetBitmap(target.imageId)
+
+    set((s) => ({
+      gold: s.gold + ANIMAL_SELL_REFUND,
+      animals: s.animals.filter((a) => a.id !== id),
+    }))
     return true
   },
 
@@ -159,7 +228,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   snapshot: () => {
     const s = get()
     return {
-      version: 1,
+      version: 2,
       savedAt: Date.now(),
       gold: s.gold,
       reputation: s.reputation,
@@ -188,6 +257,8 @@ function saveKey(state: GameState): string {
     state.reputation,
     state.clock.day,
     state.animals.length,
+    // 배치/창고 이동도 즉시 저장 대상이다.
+    state.animals.filter((a) => a.status === 'PLACED').length,
     state.unlocked.length,
     state.currentEnclosure,
   ].join('|')
