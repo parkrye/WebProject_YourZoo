@@ -5,7 +5,7 @@ import {
   ANIMAL_CREATE_COST, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
   START_GEMS, START_GOLD, START_REPUTATION, UNLOCK_COST,
 } from '@/domain/balance'
-import { advanceClock, type ClockState } from '@/domain/clock'
+import { advanceClock, type ClockAdvanceResult, type ClockState } from '@/domain/clock'
 import { settleDay, type DailyReport } from '@/domain/economy'
 import { neighborEnclosure } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
@@ -20,6 +20,15 @@ import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
 
 export type ScreenId = 'TITLE' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
 export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | null
+
+/**
+ * 하루가 넘어갈 때의 암전 단계.
+ *
+ * `OUT` 어두워지는 중 (시계 정지, 정산 대기)
+ * `HOLD` 완전히 어두움. 정산이 끝났고 리포트가 떠 있다
+ * `IN` 다시 밝아지는 중
+ */
+export type DayFade = 'NONE' | 'OUT' | 'HOLD' | 'IN'
 
 export interface OptionsState {
   bgm: number
@@ -49,6 +58,10 @@ interface GameState {
   /** 최근 정산 기록. 운영 현황에서 되짚어 볼 수 있다. */
   reports: DailyReport[]
   options: OptionsState
+  /** 하루가 넘어갈 때의 암전 단계. 세이브에는 넣지 않는다. */
+  dayFade: DayFade
+  /** 암전이 끝나면 처리할 날짜 넘김. 처리 전까지 시계는 멈춰 있다. */
+  pendingDay: ClockAdvanceResult | null
 
   setScreen(screen: ScreenId): void
   setDrawing(drawing: boolean): void
@@ -57,6 +70,10 @@ interface GameState {
   openModal(modal: Exclude<ModalId, null>): void
   closeModal(): void
   tickClock(dt: number): void
+  /** 화면이 완전히 어두워졌다. 밀어 둔 정산을 지금 처리한다. */
+  finishDay(): void
+  /** 페이드인이 끝났다. 시계를 다시 돌린다. */
+  endDayFade(): void
   moveEnclosure(direction: -1 | 1): void
   setOption<K extends keyof OptionsState>(key: K, value: OptionsState[K]): void
   /** 요청서 제출. 비용을 차감하고 배송 대기 상태로 넣는다. */
@@ -102,6 +119,8 @@ const initial = {
   lastReport: null as DailyReport | null,
   reports: [] as DailyReport[],
   options: { bgm: 0.7, sfx: 0.8 },
+  dayFade: 'NONE' as DayFade,
+  pendingDay: null as ClockAdvanceResult | null,
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -118,7 +137,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   skipTutorial: () => set({ tutorial: 'DONE' }),
   openModal: (modal) => set({ modal }),
-  closeModal: () => set({ modal: null }),
+  // 정산 팝업을 닫는 건 하루 연출의 마지막 단계다. 닫히면서 화면이 다시 밝아진다.
+  closeModal: () =>
+    set((s) => (s.dayFade === 'HOLD' ? { modal: null, dayFade: 'IN' } : { modal: null })),
 
   /**
    * 게임 시계. 자정을 넘기면 정산하고 결과 팝업을 띄운다.
@@ -134,12 +155,31 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     if (state.screen !== 'ZOO' && state.screen !== 'ZOO_DETAIL') return
     if (state.isDrawing || state.modal === 'REPORT') return
+    // 암전이 시작되면 정산이 끝나고 화면이 다시 밝아질 때까지 시계는 멈춘다.
+    if (state.dayFade !== 'NONE') return
 
-    const { next, daysPassed } = advanceClock(state.clock, dt)
-    if (daysPassed <= 0) {
-      set({ clock: next })
+    const advance = advanceClock(state.clock, dt)
+    if (advance.daysPassed <= 0) {
+      set({ clock: advance.next })
       return
     }
+
+    // 정산은 화면이 완전히 어두워진 뒤에 한다. 하늘과 소지금이 눈앞에서 튀면 하루가 끝난 느낌이 없다.
+    set({ dayFade: 'OUT', pendingDay: advance })
+  },
+
+  /**
+   * 밀어 둔 하루 정산.
+   *
+   * 시계를 여기서 한 번에 넘긴다 — 암전 동안 시계를 멈춰 둔 덕분에
+   * 정산과 날짜 넘김이 같은 `set` 안에서 원자적으로 일어난다.
+   */
+  finishDay: () => {
+    const state = get()
+    const pending = state.pendingDay
+    // 페이드가 두 번 끝났다고 두 번 정산할 수는 없다.
+    if (!pending) return
+    const { next, daysPassed } = pending
 
     let gold = state.gold
     let reputation = state.reputation
@@ -188,8 +228,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       lastReport: report,
       reports: report ? [report, ...s.reports].slice(0, REPORT_HISTORY) : s.reports,
       modal: 'REPORT',
+      dayFade: 'HOLD',
+      pendingDay: null,
     }))
   },
+
+  endDayFade: () => set({ dayFade: 'NONE' }),
 
   moveEnclosure: (direction) => {
     set({ currentEnclosure: neighborEnclosure(get().currentEnclosure, direction) })
@@ -322,6 +366,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       screen: 'ZOO',
       modal: null,
+      dayFade: 'NONE',
+      pendingDay: null,
       zooName: save.zooName ?? '',
       tutorial: save.tutorial ?? 'DONE',
       gold: save.gold,
@@ -407,6 +453,9 @@ export function startAutosave(): () => void {
     const state = useGameStore.getState()
     // 타이틀과 이름 짓기 중에는 저장하지 않는다. 기존 세이브를 덮으면 안 된다.
     if (state.screen === 'TITLE' || state.screen === 'NAMING') return
+    // 암전 중에는 시계가 어제 끝에 멈춰 있고 정산은 아직 안 끝났다.
+    // 이때 저장하면 다시 켰을 때 같은 날을 한 번 더 정산한다.
+    if (state.dayFade === 'OUT') return
     writeSave(state.snapshot())
   }
 

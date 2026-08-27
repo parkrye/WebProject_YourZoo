@@ -1,3 +1,4 @@
+import { DayFade } from './DayFade'
 import { Stage } from './Stage'
 import { NamingScreen } from '@/ui/screens/NamingScreen'
 import { TitleScreen } from '@/ui/screens/TitleScreen'
@@ -22,6 +23,9 @@ export function GameRoot() {
         새로 만들어져 동물과 손님 위치가 전부 초기화된다. 반드시 같은 자리에서 prop 만 바꾼다.
       */}
       {(screen === 'ZOO' || screen === 'ZOO_DETAIL') && <ZooScreen detail={screen === 'ZOO_DETAIL'} />}
+
+      {/* 암전은 화면과 HUD 위, 팝업 아래에 깔린다. 리포트는 검은 화면 위에서 읽는다. */}
+      <DayFade />
 
       {modal === 'OPTIONS' && <OptionsModal />}
       {modal === 'STATUS' && <StatusModal />}

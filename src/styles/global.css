@@ -245,6 +245,17 @@ html, body, #root {
   place-items: center;
   background: rgba(0, 0, 0, 0.5);
   animation: backdrop-in 0.16s ease-out both;
+  /* 하루 넘김 암전(45)보다 위. 리포트는 검은 화면 위에서 읽어야 한다. */
+  z-index: 60;
+}
+
+/* 하루가 넘어갈 때의 암전. 알파는 rAF 가 직접 물린다 — DayFade.tsx 참고. */
+.day-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+  z-index: 45;
 }
 
 /* 팝업은 하단 도구 바 쪽에서 솟아오른다. 대부분 거기 버튼으로 열리기 때문이다. */
