@@ -68,36 +68,30 @@ export function clockLabel(elapsed: number): { hh: string; mm: string } {
 /**
  * 시간대 조명. 층마다 **다른 정도로** 반응한다.
  *
- *   `sky`   하늘은 늘 좀 밝다. 색만 살짝 얹고 밝기는 오히려 되살린다
- *   `area`  바닥·프롭·동물은 색 약간 + 밝기 약간 + 그늘 약간. 관찰 대상이라 너무 어두워지면 안 된다
- *   `fence` 울타리와 손님은 시간을 그대로 따른다. 밤엔 확실히 어둡고 저녁엔 확실히 붉다
+ *   `sky`   하늘 — 시간대 밝기만 살짝
+ *   `area`  우리 안(바닥·프롭·동물) — 밝기 약간 + 색 약간 + **부분적으로 비추는 조명 영역**
+ *   `fence` 울타리 밖(울타리·손님) — 밝기와 색을 그대로 받는다
  *
  * 한 겹으로 화면 전체를 덮으면 이 차이가 사라져 전부 같이 어두워지기만 한다.
  */
 export interface SkyLight {
-  readonly tint: string
-  readonly tintAlpha: number
-  /** 되살릴 밝기. 하늘이 가라앉지 않게 한다. */
-  readonly lift: number
+  /** 1 이면 그대로, 낮을수록 어둡다. */
+  readonly brightness: number
 }
 
 export interface AreaLight {
+  readonly brightness: number
   readonly tint: string
   readonly tintAlpha: number
-  /** 그늘 세기 */
-  readonly shade: number
-  /** 위에서 내려오는 빛 */
-  readonly light: string
-  readonly lightAlpha: number
-  /** 빛이 닿는 깊이 (0..1) */
-  readonly reach: number
+  /** 우리 안 몇 군데를 비추는 조명. 밤에 뚜렷하고 낮엔 없다. */
+  readonly spotColor: string
+  readonly spotAlpha: number
 }
 
 export interface FenceLight {
+  readonly brightness: number
   readonly tint: string
   readonly tintAlpha: number
-  /** 어둡게 하는 정도. 밤엔 크게, 낮엔 0. */
-  readonly shade: number
 }
 
 export interface TimeLighting {
@@ -108,21 +102,21 @@ export interface TimeLighting {
 
 const LIGHTING: Record<SkyPhase, TimeLighting> = {
   DAY: {
-    sky: { tint: '#ffffff', tintAlpha: 0, lift: 0 },
-    area: { tint: '#fff4d0', tintAlpha: 0.08, shade: 0.06, light: '#fff4c8', lightAlpha: 0.16, reach: 0.9 },
-    fence: { tint: '#fff2cc', tintAlpha: 0.1, shade: 0 },
+    sky: { brightness: 1 },
+    area: { brightness: 1, tint: '#fff4d0', tintAlpha: 0.06, spotColor: '#ffe9a8', spotAlpha: 0 },
+    fence: { brightness: 1, tint: '#fff2cc', tintAlpha: 0.08 },
   },
   AFTERNOON: {
-    // 노을은 하늘 이미지가 이미 붉다. 색만 조금 더 얹고 밝기는 지킨다.
-    sky: { tint: '#ffb877', tintAlpha: 0.2, lift: 0.06 },
-    area: { tint: '#e8a165', tintAlpha: 0.3, shade: 0.2, light: '#ff9840', lightAlpha: 0.26, reach: 0.5 },
+    // 하늘 이미지가 이미 노을이다. 밝기만 살짝 떨어뜨린다.
+    sky: { brightness: 0.95 },
+    area: { brightness: 0.88, tint: '#e8a165', tintAlpha: 0.22, spotColor: '#ffc070', spotAlpha: 0.07 },
     // 울타리는 관람로 쪽이라 석양을 정면으로 받는다.
-    fence: { tint: '#ff8a3c', tintAlpha: 0.5, shade: 0.22 },
+    fence: { brightness: 0.8, tint: '#ff8a3c', tintAlpha: 0.5 },
   },
   NIGHT: {
-    sky: { tint: '#8fa4e0', tintAlpha: 0.12, lift: 0.1 },
-    area: { tint: '#6d80c0', tintAlpha: 0.34, shade: 0.3, light: '#a8bcff', lightAlpha: 0.2, reach: 0.4 },
-    fence: { tint: '#4a5c9e', tintAlpha: 0.55, shade: 0.5 },
+    sky: { brightness: 0.86 },
+    area: { brightness: 0.66, tint: '#6d80c0', tintAlpha: 0.28, spotColor: '#ffc98a', spotAlpha: 0.2 },
+    fence: { brightness: 0.46, tint: '#4a5c9e', tintAlpha: 0.55 },
   },
 }
 
@@ -135,23 +129,18 @@ export function timeLighting(elapsed: number): TimeLighting {
 
   const t = blend.t
   return {
-    sky: {
-      tint: mixHex(from.sky.tint, to.sky.tint, t),
-      tintAlpha: lerpNum(from.sky.tintAlpha, to.sky.tintAlpha, t),
-      lift: lerpNum(from.sky.lift, to.sky.lift, t),
-    },
+    sky: { brightness: lerpNum(from.sky.brightness, to.sky.brightness, t) },
     area: {
+      brightness: lerpNum(from.area.brightness, to.area.brightness, t),
       tint: mixHex(from.area.tint, to.area.tint, t),
       tintAlpha: lerpNum(from.area.tintAlpha, to.area.tintAlpha, t),
-      shade: lerpNum(from.area.shade, to.area.shade, t),
-      light: mixHex(from.area.light, to.area.light, t),
-      lightAlpha: lerpNum(from.area.lightAlpha, to.area.lightAlpha, t),
-      reach: lerpNum(from.area.reach, to.area.reach, t),
+      spotColor: mixHex(from.area.spotColor, to.area.spotColor, t),
+      spotAlpha: lerpNum(from.area.spotAlpha, to.area.spotAlpha, t),
     },
     fence: {
+      brightness: lerpNum(from.fence.brightness, to.fence.brightness, t),
       tint: mixHex(from.fence.tint, to.fence.tint, t),
       tintAlpha: lerpNum(from.fence.tintAlpha, to.fence.tintAlpha, t),
-      shade: lerpNum(from.fence.shade, to.fence.shade, t),
     },
   }
 }

@@ -95,9 +95,8 @@ export class SceneRenderer {
     const light = timeLighting(input.elapsed)
 
     this.drawSky(ctx, input.elapsed, view)
-    // 하늘은 색만 얹고 밝기를 되살린다. 늘 좀 밝아야 한다.
-    if (light.sky.tintAlpha > 0) fill(ctx, view, 'multiply', light.sky.tint, light.sky.tintAlpha)
-    if (light.sky.lift > 0) fill(ctx, view, 'lighter', '#ffffff', light.sky.lift)
+    // 하늘은 시간대 이미지가 이미 다르다. 밝기만 살짝 얹는다.
+    dim(ctx, view, light.sky.brightness)
 
     ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
     this.drawSkyAnimals(ctx, sim, view)
@@ -113,23 +112,33 @@ export class SceneRenderer {
   /**
    * 우리 안쪽 조명.
    *
-   * 색과 그늘을 **약하게** 얹고 위에서 내려오는 빛을 세로 그라디언트로 더한다.
-   * 여기는 플레이어가 들여다보는 곳이라 시간에 맞춰 어두워지되 형체는 남아야 한다.
+   * 밝기와 색을 **약하게만** 얹는다. 여기는 플레이어가 들여다보는 곳이라
+   * 시간에 맞춰 어두워지되 형체는 남아야 한다.
+   * 그 위에 **몇 군데를 비추는 조명**을 얹어, 어두울수록 빛 웅덩이가 도드라지게 한다.
    */
   private drawAreaLight(ctx: CanvasRenderingContext2D, light: AreaLight, view: ViewBox): void {
+    dim(ctx, view, light.brightness)
     if (light.tintAlpha > 0) fill(ctx, view, 'multiply', light.tint, light.tintAlpha)
-    if (light.shade > 0) fill(ctx, view, 'multiply', '#5b5f78', light.shade)
-
-    if (light.lightAlpha <= 0) return
-    const gradient = ctx.createLinearGradient(0, 0, 0, view.height * light.reach)
-    gradient.addColorStop(0, light.light)
-    gradient.addColorStop(1, 'rgba(0,0,0,0)')
+    if (light.spotAlpha <= 0) return
 
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
-    ctx.globalAlpha = light.lightAlpha
-    ctx.fillStyle = gradient
-    ctx.fillRect(0, 0, view.width, view.height)
+    for (const spot of AREA_SPOTS) {
+      const cx = spot.x * view.width
+      const cy = spot.y * view.height
+      const r = spot.radius * view.width
+
+      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+      gradient.addColorStop(0, light.spotColor)
+      gradient.addColorStop(0.55, light.spotColor)
+      gradient.addColorStop(1, 'rgba(0,0,0,0)')
+
+      ctx.globalAlpha = light.spotAlpha * spot.strength
+      ctx.fillStyle = gradient
+      ctx.beginPath()
+      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.fill()
+    }
     ctx.restore()
   }
 
@@ -155,15 +164,16 @@ export class SceneRenderer {
     lctx.drawImage(getAssets().fence, 0, fenceOffset * view.height, view.width, view.height)
     this.drawVisitors(lctx, sim.visitors, fenceOffset, view)
 
+    lctx.globalCompositeOperation = 'multiply'
     if (light.tintAlpha > 0) {
-      lctx.globalCompositeOperation = 'multiply'
       lctx.globalAlpha = light.tintAlpha
       lctx.fillStyle = light.tint
       lctx.fillRect(0, 0, view.width, view.height)
     }
-    if (light.shade > 0) {
-      lctx.globalAlpha = light.shade
-      lctx.fillStyle = '#1c2340'
+    if (light.brightness < 1) {
+      const v = Math.round(light.brightness * 255)
+      lctx.globalAlpha = 1
+      lctx.fillStyle = `rgb(${v},${v},${v})`
       lctx.fillRect(0, 0, view.width, view.height)
     }
     lctx.globalCompositeOperation = 'source-over'
@@ -331,4 +341,23 @@ function fill(
   ctx.fillStyle = color
   ctx.fillRect(0, 0, view.width, view.height)
   ctx.restore()
+}
+
+/**
+ * 우리 안에서 조명이 비추는 자리.
+ *
+ * 등불 에셋이 없으므로 빛 웅덩이만 놓는다. 좌우는 울타리 기둥 안쪽,
+ * 가운데는 우리 한복판 — 실제로 조명을 세울 법한 자리다.
+ */
+const AREA_SPOTS = [
+  { x: 0.2, y: 0.6, radius: 0.16, strength: 1 },
+  { x: 0.52, y: 0.56, radius: 0.2, strength: 0.85 },
+  { x: 0.82, y: 0.6, radius: 0.16, strength: 1 },
+] as const
+
+/** 밝기를 곱연산으로 떨어뜨린다. 1 이면 아무것도 하지 않는다. */
+function dim(ctx: CanvasRenderingContext2D, view: ViewBox, brightness: number): void {
+  if (brightness >= 1) return
+  const v = Math.round(brightness * 255)
+  fill(ctx, view, 'multiply', `rgb(${v},${v},${v})`, 1)
 }
