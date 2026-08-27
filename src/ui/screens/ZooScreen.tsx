@@ -18,6 +18,7 @@ import { AnimalThumb } from '@/ui/components/AnimalThumb'
 import { BarButton } from '@/ui/components/BarButton'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
+import { IconGlyph } from '@/ui/components/IconGlyph'
 import { AnimalCard } from '@/ui/panels/AnimalCard'
 import { StorageTray, type DragState } from '@/ui/panels/StorageTray'
 import { TutorialOverlay } from '@/ui/panels/TutorialOverlay'
@@ -76,6 +77,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const enclosure = useGameStore((s) => s.currentEnclosure)
   const unlocked = useGameStore((s) => s.unlocked)
   const gold = useGameStore((s) => s.gold)
+  const reputation = useGameStore((s) => s.reputation)
+  const zooName = useGameStore((s) => s.zooName)
   const animals = useGameStore((s) => s.animals)
   const day = useGameStore((s) => s.clock.day)
   const elapsed = useGameStore((s) => s.clock.elapsed)
@@ -298,6 +301,16 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
           </div>
 
+          <div className="hud-top-right">
+            <BitmapLabel text={zooName || 'MY ZOO'} size={26} align="right" />
+            <div className="hud-purse">
+              <IconGlyph icon={GUI.COIN} size={30} />
+              <BitmapLabel text={`${gold}`} size={24} />
+              <IconGlyph icon={GUI.MEDAL} size={30} />
+              <BitmapLabel text={`${reputation}`} size={24} />
+            </div>
+          </div>
+
           <div className="hud-enclosure-name">
             <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
             <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
@@ -357,55 +370,78 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           )}
 
           <div className="hud-bottom-bar">
-            {detail ? (
-              <>
+            <div className="bar-group bar-left">
+              {detail ? (
                 <BarButton icon={GUI.BACK} label="BACK" onClick={() => setScreen('ZOO')} />
+              ) : (
                 <BarButton
-                  icon={GUI.CURSOR}
-                  label="SELECT"
-                  active={tool === 'CURSOR'}
-                  onClick={() => setTool('CURSOR')}
+                  icon={GUI.BINOCULARS}
+                  label="INSPECT"
+                  data-tutorial="inspect"
+                  disabled={!isOpen}
+                  onClick={() => {
+                    advanceTutorial('INSPECT', 'STORAGE')
+                    setScreen('ZOO_DETAIL')
+                  }}
                 />
-                <BarButton icon={GUI.HAND} label="PAN" active={tool === 'PAN'} onClick={() => setTool('PAN')} />
-                <BarButton
-                  icon={GUI.ZOOM_IN}
-                  label="ZOOM IN"
-                  onClick={() => applyCameraState(zoomStep(cameraRef.current, 1))}
-                />
-                <BarButton
-                  icon={GUI.ZOOM_OUT}
-                  label="ZOOM OUT"
-                  disabled={camera.zoom <= MIN_ZOOM}
-                  onClick={() => applyCameraState(clampCamera(zoomStep(cameraRef.current, -1)))}
-                />
-              </>
-            ) : (
-              <BarButton icon={GUI.BINOCULARS} label="INSPECT" disabled={!isOpen} onClick={() => setScreen('ZOO_DETAIL')} />
-            )}
+              )}
+            </div>
 
-            <div className="bar-spacer" />
+            <div className="bar-group bar-center">
+              {detail ? (
+                <>
+                  <BarButton
+                    icon={GUI.CURSOR}
+                    label="SELECT"
+                    active={tool === 'CURSOR'}
+                    onClick={() => setTool('CURSOR')}
+                  />
+                  <BarButton icon={GUI.HAND} label="PAN" active={tool === 'PAN'} onClick={() => setTool('PAN')} />
+                  <BarButton
+                    icon={GUI.ZOOM_IN}
+                    label="ZOOM IN"
+                    onClick={() => applyCameraState(zoomStep(cameraRef.current, 1))}
+                  />
+                  <BarButton
+                    icon={GUI.ZOOM_OUT}
+                    label="ZOOM OUT"
+                    disabled={camera.zoom <= MIN_ZOOM}
+                    onClick={() => applyCameraState(clampCamera(zoomStep(cameraRef.current, -1)))}
+                  />
+                </>
+              ) : (
+                <BarButton
+                  icon={GUI.SCROLL}
+                  label="REQUEST"
+                  data-tutorial="request"
+                  onClick={() => {
+                    advanceTutorial('ORDER', 'DRAW')
+                    openModal('REQUEST')
+                  }}
+                />
+              )}
 
-            <BarButton
-              icon={GUI.SCROLL}
-              label="REQUEST"
-              data-tutorial="request"
-              onClick={() => {
-                advanceTutorial('ORDER', 'DRAW')
-                openModal('REQUEST')
-              }}
-            />
-            <BarButton
-              icon={GUI.BOOK}
-              label="STORAGE"
-              data-tutorial="storage"
-              active={trayOpen}
-              onClick={() => {
-                advanceTutorial('STORAGE', 'PLACE')
-                setTrayOpen((open) => !open)
-              }}
-            />
-            <BarButton icon={GUI.INFO} label="STATUS" onClick={() => openModal('STATUS')} />
-            <BarButton icon={GUI.SETTINGS} label="OPTIONS" onClick={() => openModal('OPTIONS')} />
+              <BarButton
+                icon={GUI.BOOK}
+                label="STORAGE"
+                data-tutorial="storage"
+                active={trayOpen}
+                onClick={() => {
+                  advanceTutorial('STORAGE', 'PLACE')
+                  setTrayOpen((open) => !open)
+                }}
+              />
+            </div>
+
+            {/* 상세보기는 관찰에 집중하는 화면이다. 시스템 버튼까지 늘어놓을 이유가 없다. */}
+            <div className="bar-group bar-right">
+              {!detail && (
+                <>
+                  <BarButton icon={GUI.INFO} label="STATUS" onClick={() => openModal('STATUS')} />
+                  <BarButton icon={GUI.SETTINGS} label="OPTIONS" onClick={() => openModal('OPTIONS')} />
+                </>
+              )}
+            </div>
           </div>
         </>
       )}

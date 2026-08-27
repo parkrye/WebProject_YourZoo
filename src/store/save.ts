@@ -26,6 +26,7 @@ export interface SaveV2 {
   animals: Animal[]
   orders: Order[]
   lastReport: DailyReport | null
+  reports: DailyReport[]
   options: { bgm: number; sfx: number }
 }
 

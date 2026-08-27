@@ -2,13 +2,24 @@ import { GUI } from '@/assets/manifest'
 import { averageVisitorMultiplier, settleDay } from '@/domain/economy'
 import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
 import { UNLOCK_COST } from '@/domain/balance'
+import { useState } from 'react'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
 import { Popup } from '@/ui/components/Popup'
+import { Tabs, type TabItem } from '@/ui/components/Tabs'
 import { useGameStore } from '@/store/gameStore'
 
+type StatusTab = 'NOW' | 'REPORTS'
+
+const TABS: readonly TabItem<StatusTab>[] = [
+  { id: 'NOW', label: 'OVERVIEW' },
+  { id: 'REPORTS', label: 'REPORTS' },
+]
+
 export function StatusModal() {
+  const [tab, setTab] = useState<StatusTab>('NOW')
   const closeModal = useGameStore((s) => s.closeModal)
+  const reports = useGameStore((s) => s.reports)
   const gold = useGameStore((s) => s.gold)
   const reputation = useGameStore((s) => s.reputation)
   const animals = useGameStore((s) => s.animals)
@@ -25,6 +36,27 @@ export function StatusModal() {
 
   return (
     <Popup title={zooName || 'ZOO STATUS'} width={1000} height={800} onClose={closeModal}>
+      <Tabs items={TABS} active={tab} onChange={setTab} />
+
+      {tab === 'REPORTS' ? (
+        <div className="orders-list">
+          {reports.length === 0 && <BitmapLabel text="NO REPORTS YET" size={26} />}
+          {reports.map((r) => (
+            <div key={r.day} className="order-row">
+              <div className="report-history-head">
+                <BitmapLabel text={`DAY ${r.day}`} size={24} />
+                <BitmapLabel text={`VISITORS ${r.visitors}`} size={18} />
+                <BitmapLabel text={`TICKETS ${r.ticketIncome}`} size={18} />
+                <BitmapLabel text={`VIEWING ${r.viewIncome}`} size={18} />
+                <BitmapLabel text={`UPKEEP ${r.upkeep}`} size={18} />
+                <div className={r.net < 0 ? 'report-net is-minus' : 'report-net is-plus'}>
+                  <BitmapLabel text={`NET ${Math.abs(r.net)}`} size={22} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div className="status-layout">
         <section className="status-col">
           <div className="stat-row">
@@ -99,6 +131,7 @@ export function StatusModal() {
           </div>
         </section>
       </div>
+      )}
     </Popup>
   )
 }

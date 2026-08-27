@@ -1,15 +1,36 @@
+import { useEffect, useState } from 'react'
 import { GUI } from '@/assets/manifest'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
 import { Popup } from '@/ui/components/Popup'
 import { useGameStore } from '@/store/gameStore'
 
-/** 자정 정산 결과. 이 팝업이 떠 있는 동안 시계는 멈춘다. */
+/** 자동으로 닫히기까지의 시간(초). 매일 뜨는 팝업이라 손이 가지 않아야 한다. */
+const AUTO_CLOSE_SEC = 10
+
+/**
+ * 자정 정산 결과. 이 팝업이 떠 있는 동안 시계는 멈춘다.
+ * 하루가 180초뿐이라 매일 직접 닫게 하면 성가시다. 읽을 시간만 주고 알아서 닫는다.
+ * 지난 기록은 운영 현황에서 다시 볼 수 있다.
+ */
 export function ReportModal() {
   const closeModal = useGameStore((s) => s.closeModal)
   const report = useGameStore((s) => s.lastReport)
   const gold = useGameStore((s) => s.gold)
   const reputation = useGameStore((s) => s.reputation)
+  const [remaining, setRemaining] = useState(AUTO_CLOSE_SEC)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setRemaining((left) => {
+        if (left > 1) return left - 1
+        window.clearInterval(timer)
+        closeModal()
+        return 0
+      })
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [closeModal])
 
   if (!report) return null
 
@@ -47,7 +68,8 @@ export function ReportModal() {
         </div>
 
         <div className="report-actions">
-          <IconButton icon={GUI.CONFIRM} size={72} title="OK" onClick={closeModal} />
+          <BitmapLabel text={`CLOSING IN ${remaining}`} size={18} />
+          <IconButton icon={GUI.CONFIRM} size={64} title="OK" onClick={closeModal} />
         </div>
       </div>
     </Popup>

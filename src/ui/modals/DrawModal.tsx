@@ -1,19 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
-import { GUI, PALETTE_COLORS } from '@/assets/manifest'
+import { GUI, PALETTE_COLORS, type GuiIcon } from '@/assets/manifest'
 import { DrawingCanvas, type DrawingCanvasHandle } from '@/draw/DrawingCanvas'
 import type { ExportedDrawing } from '@/draw/export'
 import type { DrawTool } from '@/draw/history'
 import type { TemplateId } from '@/domain/templates'
+import { useGameStore } from '@/store/gameStore'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
-import { IconButton } from '@/ui/components/IconButton'
 import { IconGlyph } from '@/ui/components/IconGlyph'
 import { PaletteMenu } from '@/ui/components/PaletteMenu'
 import { Popup } from '@/ui/components/Popup'
-import { useGameStore } from '@/store/gameStore'
 
-const CANVAS_DISPLAY = 400
-const POPUP_WIDTH = 820
-const POPUP_HEIGHT = 640
+const CANVAS_DISPLAY = 420
+const POPUP_WIDTH = 720
+const POPUP_HEIGHT = 700
 
 interface DrawModalProps {
   templateId: TemplateId
@@ -23,6 +22,13 @@ interface DrawModalProps {
 
 const FIRST_COLOR = PALETTE_COLORS[0].hex
 
+/**
+ * 그림판.
+ *
+ * 도구는 **캔버스 위 가로 툴바**에 갈래별로 묶는다. 세로 한 줄로 늘어놓았더니
+ * 도구가 하나 늘 때마다 아래쪽이 화면 밖으로 밀렸고, 어떤 버튼이 무슨 갈래인지도 읽히지 않았다.
+ * 그리기 / 색 / 편집 세 묶음으로 나누고 완료는 따로 떼어 둔다.
+ */
 export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
   const boardRef = useRef<DrawingCanvasHandle>(null)
   const [tool, setTool] = useState<DrawTool>('PENCIL')
@@ -37,8 +43,7 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
     return () => useGameStore.getState().setDrawing(false)
   }, [])
 
-  const activeColorIcon =
-    PALETTE_COLORS.find((c) => c.hex === color)?.icon ?? GUI.PENCIL
+  const activeColorIcon = PALETTE_COLORS.find((c) => c.hex === color)?.icon ?? GUI.PENCIL
 
   const finish = async (): Promise<void> => {
     if (busy) return
@@ -52,75 +57,105 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
   return (
     <Popup title="DRAW ANIMAL" width={POPUP_WIDTH} height={POPUP_HEIGHT} onClose={onClose}>
       <div className="draw-column">
-        <div className="draw-hint">
-          <BitmapLabel text={tool === 'ERASER' ? 'ERASER' : 'PENCIL'} size={20} />
-          <BitmapLabel text="DRAW YOUR ANIMAL FACING RIGHT" size={20} />
-        </div>
+        <div className="draw-toolbar">
+          <div className="tool-group">
+            <ToolButton
+              icon={activeColorIcon}
+              label="PENCIL"
+              active={tool === 'PENCIL'}
+              onClick={() => setTool('PENCIL')}
+            />
+            <ToolButton
+              icon={GUI.MAP}
+              label="FILL"
+              active={tool === 'FILL'}
+              onClick={() => setTool('FILL')}
+            />
+            <ToolButton
+              icon={GUI.ERASER}
+              label="ERASE"
+              active={tool === 'ERASER'}
+              onClick={() => setTool('ERASER')}
+            />
+          </div>
 
-        <div className="draw-layout">
-        <DrawingCanvas
-          ref={boardRef}
-          tool={tool}
-          color={color}
-          templateId={templateId}
-          displaySize={CANVAS_DISPLAY}
-          onHistoryChange={setHistory}
-        />
-
-        <div className="draw-tools">
-          <IconButton
-            icon={tool === 'PENCIL' ? activeColorIcon : GUI.PENCIL}
-            size={54}
-            title="PENCIL"
-            onClick={() => setTool('PENCIL')}
-          />
-          <div className="palette-anchor">
-            <IconButton icon={GUI.PALETTE} size={54} title="PALETTE" onClick={() => setPaletteOpen((v) => !v)} />
+          <div className="tool-group palette-anchor">
+            <ToolButton icon={GUI.PALETTE} label="COLOR" onClick={() => setPaletteOpen((v) => !v)} />
+            <span className="color-chip" style={{ background: color }} />
             {paletteOpen && (
               <PaletteMenu selected={color} onSelect={setColor} onClose={() => setPaletteOpen(false)} />
             )}
           </div>
-          <IconButton icon={GUI.ERASER} size={54} title="ERASER" onClick={() => setTool('ERASER')} />
-          <IconButton
-            icon={GUI.TRASH}
-            size={54}
-            title="CLEAR ALL"
-            disabled={history.isEmpty}
-            onClick={() => boardRef.current?.clearAll()}
-          />
-          <IconButton
-            icon={GUI.UNDO}
-            size={54}
-            title="UNDO"
-            disabled={!history.canUndo}
-            onClick={() => boardRef.current?.undo()}
-          />
-          <IconButton
-            icon={GUI.REDO}
-            size={54}
-            title="REDO"
-            disabled={!history.canRedo}
-            onClick={() => boardRef.current?.redo()}
-          />
-        </div>
+
+          <div className="tool-group">
+            <ToolButton
+              icon={GUI.UNDO}
+              label="UNDO"
+              disabled={!history.canUndo}
+              onClick={() => boardRef.current?.undo()}
+            />
+            <ToolButton
+              icon={GUI.REDO}
+              label="REDO"
+              disabled={!history.canRedo}
+              onClick={() => boardRef.current?.redo()}
+            />
+            <ToolButton
+              icon={GUI.TRASH}
+              label="CLEAR"
+              disabled={history.isEmpty}
+              onClick={() => boardRef.current?.clearAll()}
+            />
+          </div>
         </div>
 
-        {/*
-          완성은 툴이 아니라 결정이다. 세로 툴바 맨 아래에 두었더니
-          아이콘이 하나 늘 때마다 화면 밖으로 밀려 아예 보이지 않았다.
-        */}
+        <div className="draw-stage">
+          <DrawingCanvas
+            ref={boardRef}
+            tool={tool}
+            color={color}
+            templateId={templateId}
+            displaySize={CANVAS_DISPLAY}
+            onHistoryChange={setHistory}
+          />
+        </div>
+
         <div className="draw-actions">
+          <BitmapLabel text="DRAW YOUR ANIMAL FACING RIGHT" size={17} />
           <button
             type="button"
             className="labeled-button is-primary"
             disabled={history.isEmpty || busy}
             onClick={() => void finish()}
           >
-            <IconGlyph icon={GUI.CONFIRM} size={40} />
-            <BitmapLabel text="DONE" size={22} />
+            <IconGlyph icon={GUI.CONFIRM} size={38} />
+            <BitmapLabel text="DONE" size={21} />
           </button>
         </div>
       </div>
     </Popup>
+  )
+}
+
+interface ToolButtonProps {
+  icon: GuiIcon
+  label: string
+  active?: boolean
+  disabled?: boolean
+  onClick: () => void
+}
+
+function ToolButton({ icon, label, active = false, disabled = false, onClick }: ToolButtonProps) {
+  return (
+    <button
+      type="button"
+      className={active ? 'tool-button is-active' : 'tool-button'}
+      disabled={disabled}
+      title={label}
+      onClick={onClick}
+    >
+      <IconGlyph icon={icon} size={40} />
+      <BitmapLabel text={label} size={13} align="center" />
+    </button>
   )
 }

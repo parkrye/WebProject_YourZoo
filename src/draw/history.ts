@@ -1,4 +1,4 @@
-export type DrawTool = 'PENCIL' | 'ERASER'
+export type DrawTool = 'PENCIL' | 'ERASER' | 'FILL'
 
 export interface StrokeCommand {
   kind: 'STROKE'
@@ -9,11 +9,19 @@ export interface StrokeCommand {
   points: number[]
 }
 
+export interface FillCommand {
+  kind: 'FILL'
+  /** 캔버스 논리 좌표 */
+  x: number
+  y: number
+  color: string
+}
+
 export interface ClearCommand {
   kind: 'CLEAR'
 }
 
-export type DrawCommand = StrokeCommand | ClearCommand
+export type DrawCommand = StrokeCommand | FillCommand | ClearCommand
 
 /**
  * 커맨드가 이만큼 쌓이면 앞쪽 절반을 비트맵으로 구워 baseline 에 합친다.
@@ -102,7 +110,90 @@ export function applyCommand(ctx: CanvasRenderingContext2D, command: DrawCommand
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height)
     return
   }
+  if (command.kind === 'FILL') {
+    floodFill(ctx, command)
+    return
+  }
   drawStroke(ctx, command)
+}
+
+/** 색이 얼마나 달라야 경계로 볼지. 안티에일리어싱된 선 안쪽까지 채우도록 넉넉히 잡는다. */
+const FILL_TOLERANCE = 60
+
+/**
+ * 페인트통.
+ *
+ * 클릭한 지점과 **같은 색으로 이어진** 영역을 칠한다. 선으로 둘러싸인 안쪽만 채워지고
+ * 선 바깥으로 새지 않는다. 알파도 비교 대상에 넣어야 빈 캔버스(투명)를 칠할 수 있다.
+ */
+function floodFill(ctx: CanvasRenderingContext2D, command: FillCommand): void {
+  const { width, height } = ctx.canvas
+  const startX = Math.floor(command.x)
+  const startY = Math.floor(command.y)
+  if (startX < 0 || startY < 0 || startX >= width || startY >= height) return
+
+  const image = ctx.getImageData(0, 0, width, height)
+  const px = image.data
+  const target = readPixel(px, (startY * width + startX) * 4)
+  const fill = parseColor(command.color)
+  if (matches(target, fill, 0)) return
+
+  const visited = new Uint8Array(width * height)
+  const stack: number[] = [startY * width + startX]
+  visited[startY * width + startX] = 1
+
+  while (stack.length > 0) {
+    const index = stack.pop() as number
+    const offset = index * 4
+    if (!matches(readPixel(px, offset), target, FILL_TOLERANCE)) continue
+
+    px[offset] = fill[0]
+    px[offset + 1] = fill[1]
+    px[offset + 2] = fill[2]
+    px[offset + 3] = 255
+
+    const x = index % width
+    const y = (index / width) | 0
+    if (x > 0) push(index - 1)
+    if (x < width - 1) push(index + 1)
+    if (y > 0) push(index - width)
+    if (y < height - 1) push(index + width)
+  }
+
+  ctx.putImageData(image, 0, 0)
+
+  function push(next: number): void {
+    if (visited[next]) return
+    visited[next] = 1
+    stack.push(next)
+  }
+}
+
+type Rgba = readonly [number, number, number, number]
+
+function readPixel(px: Uint8ClampedArray, offset: number): Rgba {
+  return [px[offset] as number, px[offset + 1] as number, px[offset + 2] as number, px[offset + 3] as number]
+}
+
+function matches(a: Rgba, b: Rgba, tolerance: number): boolean {
+  // 둘 다 사실상 투명하면 색이 달라도 같은 영역으로 본다.
+  if (a[3] < 16 && b[3] < 16) return true
+  if (Math.abs(a[3] - b[3]) > tolerance) return false
+  return (
+    Math.abs(a[0] - b[0]) <= tolerance &&
+    Math.abs(a[1] - b[1]) <= tolerance &&
+    Math.abs(a[2] - b[2]) <= tolerance
+  )
+}
+
+function parseColor(hex: string): Rgba {
+  const value = hex.replace('#', '')
+  return [
+    parseInt(value.slice(0, 2), 16),
+    parseInt(value.slice(2, 4), 16),
+    parseInt(value.slice(4, 6), 16),
+    255,
+  ]
 }
 
 /** 점 목록을 이차 베지어로 부드럽게 이어 그린다. 점 하나짜리 탭은 원으로 찍는다. */

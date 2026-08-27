@@ -15,6 +15,8 @@ export interface PlacedProp {
   /** 동물이 침범하지 못하는 반경 (정규화 x) */
   readonly radius: number
   readonly layer: Habitat
+  /** 물에 뜬 프롭의 흔들림 위상. 전부 같은 박자로 움직이면 기계적으로 보인다. */
+  readonly bobPhase: number
 }
 
 /** 바이옴마다 고정 배치. 우리를 넘겼다 돌아와도 같은 자리에 있어야 한다. */
@@ -57,6 +59,7 @@ function placeLayer(
       x: spot.x,
       y: spot.y,
       height,
+      bobPhase: rng() * Math.PI * 2,
       // 프롭 발밑 회피 반경. 화면 비율 때문에 정규화 x 로 환산해야 원이 된다.
       radius: height * ASPECT * 0.34,
       layer,
@@ -82,3 +85,6 @@ function findSpot(
 
   return candidate
 }
+
+/** 물에 뜬 프롭의 상하 진폭(정규화 y)과 주기. 배와 뗏목이 잔물결에 흔들리는 정도. */
+export const PROP_BOB = { amplitude: 0.006, speed: 1.5, tilt: 0.035 } as const

@@ -95,8 +95,17 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
 
   const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>): void => {
     if (event.button !== 0) return
-    event.currentTarget.setPointerCapture(event.pointerId)
     const [x, y] = toLocal(event)
+
+    // 페인트통은 한 번의 클릭으로 끝난다. 끌 게 없으니 스트로크를 시작하지 않는다.
+    if (tool === 'FILL') {
+      historyRef.current.push({ kind: 'FILL', x, y, color })
+      replay()
+      notify()
+      return
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId)
     strokeRef.current = {
       kind: 'STROKE',
       tool,

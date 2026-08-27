@@ -40,6 +40,8 @@ interface GameState {
   animals: Animal[]
   orders: Order[]
   lastReport: DailyReport | null
+  /** 최근 정산 기록. 운영 현황에서 되짚어 볼 수 있다. */
+  reports: DailyReport[]
   options: OptionsState
 
   setScreen(screen: ScreenId): void
@@ -88,6 +90,7 @@ const initial = {
   animals: [] as Animal[],
   orders: [] as Order[],
   lastReport: null as DailyReport | null,
+  reports: [] as DailyReport[],
   options: { bgm: 0.7, sfx: 0.8 },
 }
 
@@ -166,7 +169,16 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
-    set({ clock: next, gold, reputation, animals, orders, lastReport: report, modal: 'REPORT' })
+    set((s) => ({
+      clock: next,
+      gold,
+      reputation,
+      animals,
+      orders,
+      lastReport: report,
+      reports: report ? [report, ...s.reports].slice(0, REPORT_HISTORY) : s.reports,
+      modal: 'REPORT',
+    }))
   },
 
   moveEnclosure: (direction) => {
@@ -197,7 +209,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => ({
       gold: s.gold - ANIMAL_CREATE_COST,
       animals: [...s.animals, placed],
-      tutorial: s.tutorial === 'DRAW' ? 'STORAGE' : s.tutorial,
+      tutorial: s.tutorial === 'DRAW' ? 'INSPECT' : s.tutorial,
     }))
     return true
   },
@@ -306,6 +318,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       animals: save.animals,
       orders: save.orders ?? [],
       lastReport: save.lastReport,
+      reports: save.reports ?? [],
       options: save.options ?? initial.options,
     })
     return true
@@ -326,10 +339,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       animals: s.animals,
       orders: s.orders,
       lastReport: s.lastReport,
+      reports: s.reports,
       options: s.options,
     }
   },
 }))
+
+/** 운영 현황에 남겨 두는 정산 기록 수. */
+const REPORT_HISTORY = 7
 
 const AUTOSAVE_INTERVAL_MS = 15000
 

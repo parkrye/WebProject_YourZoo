@@ -7,7 +7,7 @@ import { easeInOutCubic } from '@/core/math'
 import { phaseBlend } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
-import type { PlacedProp } from '@/sim/props'
+import { PROP_BOB, type PlacedProp } from '@/sim/props'
 import type { VisitorAgent } from '@/sim/VisitorAgent'
 import type { ViewBox } from './animal'
 import { applyCamera, type Camera } from './camera'
@@ -55,6 +55,7 @@ type Drawable =
 export class SceneRenderer {
   private readonly buffer: Drawable[] = []
   private selectedId: string | null = null
+  private time = 0
 
   draw(ctx: CanvasRenderingContext2D, input: SceneInput): void {
     const view: ViewBox = { width: LOGICAL_WIDTH, height: LOGICAL_HEIGHT }
@@ -63,6 +64,7 @@ export class SceneRenderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, view.width, view.height)
     this.selectedId = input.selectedId ?? null
+    this.time = input.elapsed
 
     const transition = input.transition
     if (!transition) {
@@ -182,7 +184,21 @@ export class SceneRenderer {
     const frame = atlas.frame(prop.sprite)
     const height = prop.height * view.height
     const width = height * (frame.sw / frame.sh)
-    atlas.draw(ctx, prop.sprite, prop.x * view.width - width / 2, prop.y * view.height - height, width, height)
+    const x = prop.x * view.width
+    const y = prop.y * view.height
+
+    // 땅 프롭은 가만히 있는다. 물에 뜬 것만 잔물결에 흔들린다.
+    if (prop.layer !== 'WATER') {
+      atlas.draw(ctx, prop.sprite, x - width / 2, y - height, width, height)
+      return
+    }
+
+    const wave = this.time * PROP_BOB.speed + prop.bobPhase
+    ctx.save()
+    ctx.translate(x, y + Math.sin(wave) * PROP_BOB.amplitude * view.height)
+    ctx.rotate(Math.sin(wave * 0.7) * PROP_BOB.tilt)
+    atlas.draw(ctx, prop.sprite, -width / 2, -height, width, height)
+    ctx.restore()
   }
 
   private drawVisitors(

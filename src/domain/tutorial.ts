@@ -7,6 +7,7 @@
 export type TutorialStep =
   | 'ORDER'      // 요청 버튼을 눌러 보라
   | 'DRAW'       // 이름과 그림을 채워 제출하라
+  | 'INSPECT'    // 우리 안으로 들어가라
   | 'STORAGE'    // 창고를 열어 보라
   | 'PLACE'      // 끌어다 우리에 놓아라
   | 'DONE'
@@ -29,10 +30,15 @@ export const TUTORIAL_HINTS: Record<Exclude<TutorialStep, 'DONE'>, TutorialHint>
     title: 'DESIGN IT',
     body: 'NAME IT, PICK A TEMPLATE, DRAW IT FACING RIGHT, THEN SUBMIT.',
   },
+  INSPECT: {
+    target: '[data-tutorial="inspect"]',
+    title: 'IT ARRIVED',
+    body: 'STEP INTO THE ENCLOSURE TO PLACE IT.',
+  },
   STORAGE: {
     target: '[data-tutorial="storage"]',
-    title: 'IT ARRIVED',
-    body: 'YOUR FIRST ANIMAL IS IN STORAGE. OPEN IT.',
+    title: 'OPEN STORAGE',
+    body: 'YOUR FIRST ANIMAL IS WAITING THERE.',
   },
   PLACE: {
     target: '.storage-item',
