@@ -52,17 +52,24 @@ export function phaseBlend(elapsed: number): PhaseBlend {
   return { from, to, t }
 }
 
+/** 화면에 표시하는 하루의 시작과 끝. 동물원 운영 시간이다. */
+export const OPEN_HOUR = 9
+export const CLOSE_HOUR = 22
+
 /**
- * HUD 표기용 시각. 하루 180초를 24시간에 매핑하되, 게임 시작이 06:00 이 되도록 이동한다.
+ * HUD 표기용 시각. 하루 180초를 **운영 시간(09~22시)** 에 매핑한다.
+ *
+ * 자정을 넘기지 않으므로 24시간을 한 바퀴 돌릴 이유가 없다 —
+ * 문 여는 시각에 시작해 문 닫는 시각에 하루가 끝나는 게 읽기 쉽다.
  *
  * **분은 버리고 시 단위로 내린다.** 하루가 180초라 분까지 보여주면 숫자가 1초에도
- * 여러 번 바뀌어 화면이 산만해진다. 시 단위면 7.5초에 한 번만 갱신된다.
+ * 여러 번 바뀌어 화면이 산만해진다. 시 단위면 14초에 한 번만 갱신된다.
  * 폰트에 콜론이 없으므로 시/분을 분리해 반환한다.
  */
 export function clockLabel(elapsed: number): { hh: string; mm: string } {
-  const dayFraction = elapsed / DAY_DURATION_SEC
-  const hour = Math.floor((dayFraction * 24 + 6) % 24)
-  return { hh: String(hour).padStart(2, '0'), mm: '00' }
+  const dayFraction = clamp01(elapsed / DAY_DURATION_SEC)
+  const hour = Math.floor(OPEN_HOUR + dayFraction * (CLOSE_HOUR - OPEN_HOUR))
+  return { hh: String(Math.min(hour, CLOSE_HOUR)).padStart(2, '0'), mm: '00' }
 }
 
 /**
@@ -109,13 +116,13 @@ const LIGHTING: Record<SkyPhase, TimeLighting> = {
   AFTERNOON: {
     // 하늘 이미지가 이미 노을이다. 밝기만 살짝 떨어뜨린다.
     sky: { brightness: 0.95 },
-    area: { brightness: 0.88, tint: '#e8a165', tintAlpha: 0.22, spotColor: '#ffc070', spotAlpha: 0.07 },
+    area: { brightness: 0.88, tint: '#e8a165', tintAlpha: 0.22, spotColor: '#ffc070', spotAlpha: 0.1 },
     // 울타리는 관람로 쪽이라 석양을 정면으로 받는다.
     fence: { brightness: 0.8, tint: '#ff8a3c', tintAlpha: 0.5 },
   },
   NIGHT: {
     sky: { brightness: 0.86 },
-    area: { brightness: 0.66, tint: '#6d80c0', tintAlpha: 0.28, spotColor: '#ffc98a', spotAlpha: 0.2 },
+    area: { brightness: 0.66, tint: '#6d80c0', tintAlpha: 0.28, spotColor: '#ffcf96', spotAlpha: 0.3 },
     fence: { brightness: 0.46, tint: '#4a5c9e', tintAlpha: 0.55 },
   },
 }
