@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { getAssets } from '@/assets/AssetStore'
-import { GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH } from '@/assets/manifest'
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from '@/assets/manifest'
 import { hasSave } from '@/store/save'
 import { useGameStore } from '@/store/gameStore'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
-import { IconButton } from '@/ui/components/IconButton'
 
 export function TitleScreen() {
   const startNewGame = useGameStore((s) => s.startNewGame)
@@ -40,7 +39,10 @@ export function TitleScreen() {
           <button type="button" className="text-button" onClick={startNewGame}>
             <BitmapLabel text="NEW GAME" size={44} align="center" />
           </button>
-          <IconButton icon={GUI.SETTINGS} size={84} title="OPTIONS" onClick={() => openModal('OPTIONS')} />
+          {/* 타이틀 메뉴는 텍스트 버튼으로 통일한다. 여기만 아이콘이면 시각적으로 튄다. */}
+          <button type="button" className="text-button" onClick={() => openModal('OPTIONS')}>
+            <BitmapLabel text="OPTIONS" size={44} align="center" />
+          </button>
         </div>
       </div>
     </div>

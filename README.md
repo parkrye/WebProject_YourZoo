@@ -58,10 +58,11 @@ http://localhost:5173/?dev=assets
 ## 에셋 파이프라인
 
 ```bash
-python scripts/prepare-assets.py assets-source
+python scripts/prepare-assets.py <원본 디렉터리>
 ```
 
-원본(`assets-source/`)을 게임이 쓰는 형태로 전처리해 `src/assets/images/` 에 넣는다.
+원본을 게임이 쓰는 형태로 전처리해 `src/assets/images/` 에 넣는다.
+전처리 결과만 리포에 두고 원본은 두지 않는다 (`.gitignore` 의 `assets-source/`).
 알파가 없던 셋(`bg_area_ice`, `sprite_prop_desert`, `sprite_human_visitor`)의 검은 배경을
 여기서 한 번만 지운다. 런타임에는 배경을 손대는 코드가 없다.
 

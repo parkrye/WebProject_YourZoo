@@ -6,9 +6,9 @@
 ## 0. 에셋 파이프라인
 
 ```
-assets-source/*.png          원본 (에셋 제작자가 준 그대로)
+<원본 디렉터리>/*.png        에셋 제작자가 준 그대로 (리포에 두지 않는다)
         │
-        │  python scripts/prepare-assets.py assets-source
+        │  python scripts/prepare-assets.py <원본 디렉터리>
         ↓
 src/assets/images/           게임이 쓰는 형태 (알파 정리 완료)
 ├─ bg/     sky-{day,afternoon,night}.png · area-{field,desert,ice}.png · fence.png

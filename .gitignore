@@ -5,5 +5,5 @@ dist/
 .DS_Store
 tsconfig.tsbuildinfo
 
-# 전처리 전 원본 에셋. scripts/prepare-assets.py 의 입력.
-# 리포에 둘지 여부는 팀 정책에 따라 결정할 것.
+# 전처리 전 원본 에셋 (scripts/prepare-assets.py 의 입력). 리포에 두지 않는다.
+assets-source/

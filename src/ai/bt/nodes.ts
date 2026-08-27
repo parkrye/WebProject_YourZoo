@@ -87,26 +87,3 @@ export function condition<B>(predicate: (blackboard: B) => boolean): BtNode<B> {
 export function action<B>(fn: (blackboard: B) => Status): BtNode<B> {
   return { tick: fn }
 }
-
-export function inverter<B>(child: BtNode<B>): BtNode<B> {
-  return {
-    tick(blackboard) {
-      const status = child.tick(blackboard)
-      if (status === 'SUCCESS') return 'FAILURE'
-      if (status === 'FAILURE') return 'SUCCESS'
-      return 'RUNNING'
-    },
-    reset: () => child.reset?.(),
-  }
-}
-
-/** 항상 성공. 실패하면 곤란한 가지의 끝에 붙인다. */
-export function succeed<B>(child: BtNode<B>): BtNode<B> {
-  return {
-    tick(blackboard) {
-      const status = child.tick(blackboard)
-      return status === 'RUNNING' ? 'RUNNING' : 'SUCCESS'
-    },
-    reset: () => child.reset?.(),
-  }
-}

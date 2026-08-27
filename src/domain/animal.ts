@@ -72,10 +72,6 @@ export function countHabitat(animals: readonly Animal[], enclosureId: BiomeId, h
   return n
 }
 
-export function animalsIn(animals: readonly Animal[], enclosureId: BiomeId): Animal[] {
-  return animals.filter((a) => a.enclosureId === enclosureId)
-}
-
 export function createAnimalId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   return `a_${Date.now().toString(36)}_${Math.floor(Math.random() * 1e6).toString(36)}`

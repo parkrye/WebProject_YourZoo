@@ -2,6 +2,7 @@ import {
   ANIMAL_HEIGHT, LOGICAL_HEIGHT, LOGICAL_WIDTH, PERSPECTIVE_SCALE, ROAM_BOX,
   type Habitat, type RoamBox,
 } from '@/assets/manifest'
+
 import { buildAnimalTree } from '@/ai/buildTree'
 import type { BtNode } from '@/ai/bt'
 import type { AgentView, AnimalBlackboard, Vec2 } from '@/ai/types'
@@ -153,5 +154,3 @@ export class AnimalAgent implements AgentView {
     }
   }
 }
-
-export const LOGICAL_ASPECT_RATIO = LOGICAL_WIDTH / LOGICAL_HEIGHT
