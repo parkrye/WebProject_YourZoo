@@ -1,6 +1,6 @@
 import { getAssets } from '@/assets/AssetStore'
 import {
-  LOGICAL_HEIGHT, LOGICAL_WIDTH, VISITOR_BASELINE_Y, VISITOR_HEIGHT,
+  LOGICAL_HEIGHT, LOGICAL_WIDTH, VISITOR_HEIGHT,
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
 import { easeInOutCubic } from '@/core/math'
@@ -57,6 +57,7 @@ export class SceneRenderer {
   private selectedId: string | null = null
   private time = 0
   private layer: HTMLCanvasElement | null = null
+  private readonly visitorOrder: VisitorAgent[] = []
 
   draw(ctx: CanvasRenderingContext2D, input: SceneInput): void {
     const view: ViewBox = { width: LOGICAL_WIDTH, height: LOGICAL_HEIGHT }
@@ -291,14 +292,20 @@ export class SceneRenderer {
     const { visitor } = getAssets()
     const drawH = VISITOR_HEIGHT * view.height
 
-    for (const v of visitors) {
+    // 뒤에 선 사람부터 그려야 앞사람이 위로 온다.
+    this.visitorOrder.length = 0
+    for (const v of visitors) this.visitorOrder.push(v)
+    this.visitorOrder.sort(byVisitorDepth)
+
+    for (const v of this.visitorOrder) {
       // 검출된 프레임은 손님마다 크기가 다르다. 그대로 같은 높이로 그리면
       // **작게 그려진 아이가 어른만큼 커진다.** 원본에서의 상대 크기를 그대로 살린다.
       // 실측: 행별 밴드 높이 235 / 224 / 168(아이) / 188.
       const frame = visitor.frame(v.spriteIndex)
       const relative = frame.sh / visitor.maxFrameHeight
-      const own = drawH * relative * v.heightScale
-      const footY = (VISITOR_BASELINE_Y + fenceOffset + v.bobOffset) * view.height
+      // 앞뒤로 흩어 세운 만큼 크기도 달라진다. 그래야 관람로에 깊이가 생긴다.
+      const own = drawH * relative * v.heightScale * v.perspective
+      const footY = (v.baselineY + fenceOffset + v.bobOffset) * view.height
       const sq = v.squash
       const vh = own * sq
       const vw = (own * (frame.sw / frame.sh)) / sq
@@ -308,6 +315,7 @@ export class SceneRenderer {
 }
 
 const byDepth = (a: Drawable, b: Drawable): number => a.y - b.y
+const byVisitorDepth = (a: VisitorAgent, b: VisitorAgent): number => a.depth - b.depth
 
 /** 화면 전체를 한 색으로 덮는다. 조명 층마다 반복되는 코드라 따로 뺐다. */
 function fill(

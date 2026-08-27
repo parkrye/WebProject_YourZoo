@@ -35,7 +35,15 @@ export const OVERCROWD_THRESHOLD = 8
 export const OVERCROWD_PENALTY = 2
 
 export const MAX_ANIMALS_PER_ENCLOSURE = 12
-export const MAX_VISITORS_PER_ENCLOSURE = 12
+export const MAX_VISITORS_PER_ENCLOSURE = 14
+
+/**
+ * 한 손님이 머무는 시간(초).
+ *
+ * 정해진 인원을 붙박이로 세워 두면 같은 사람이 계속 서 있는 게 눈에 띈다.
+ * 저마다 들어왔다 나가게 두면 인원이 목표치 주위에서 오르내려 훨씬 북적인다.
+ */
+export const VISITOR_STAY_SEC = { min: 22, max: 65 } as const
 
 /** 명성 → 동시 관람객 수 환산 계수 */
 export const REPUTATION_PER_VISITOR = 10

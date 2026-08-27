@@ -1,6 +1,8 @@
 import { clamp } from '@/core/math'
 import { randInt, randRange, type Rng } from '@/core/rng'
-import { VISITOR_GRID } from '@/assets/manifest'
+import { VISITOR_GRID, VISITOR_BASELINE, VISITOR_PERSPECTIVE } from '@/assets/manifest'
+import { lerp } from '@/core/math'
+import { VISITOR_STAY_SEC } from '@/domain/balance'
 
 const X_MIN = 0.04
 const X_MAX = 0.96
@@ -29,6 +31,8 @@ export class VisitorAgent {
   readonly spriteIndex: number
   /** 이 손님의 키 배율. 스프라이트마다 원래 비율이 달라 그 위에 곱한다. */
   readonly heightScale: number
+  /** 관람로에서의 앞뒤 위치. 0 = 뒤(위), 1 = 앞(아래). */
+  readonly depth: number
   x: number
   private vx: number
   private idleTimer: number
@@ -39,6 +43,8 @@ export class VisitorAgent {
   constructor(private readonly rng: Rng) {
     this.spriteIndex = randInt(rng, 0, VISITOR_GRID.cols * VISITOR_GRID.rows)
     this.heightScale = randRange(rng, HEIGHT_SCALE.min, HEIGHT_SCALE.max)
+    this.depth = rng()
+    this.stayTimer = randRange(rng, VISITOR_STAY_SEC.min, VISITOR_STAY_SEC.max)
     this.x = randRange(rng, X_MIN, X_MAX)
     this.walkSpeed = randRange(rng, 0.008, 0.022)
     this.vx = rng() < 0.5 ? -this.walkSpeed : this.walkSpeed
@@ -49,6 +55,18 @@ export class VisitorAgent {
 
   /** 퇴장 중이면 화면 밖으로 걸어 나간다. */
   private leaving = false
+  /** 남은 체류 시간. 다 되면 스스로 돌아간다. */
+  private stayTimer = 0
+
+  /** 발이 놓이는 y. 뒤에 선 손님일수록 위쪽이다. */
+  get baselineY(): number {
+    return lerp(VISITOR_BASELINE.far, VISITOR_BASELINE.near, this.depth)
+  }
+
+  /** 앞에 선 손님일수록 크다. */
+  get perspective(): number {
+    return lerp(VISITOR_PERSPECTIVE.far, VISITOR_PERSPECTIVE.near, this.depth)
+  }
 
   /** 관람 중(정지) 여부. 정지 상태에서는 보빙 진폭이 줄어든다. */
   get isWatching(): boolean {
@@ -84,6 +102,12 @@ export class VisitorAgent {
   update(dt: number): void {
     this.bobPhase += dt * this.bobSpeed
 
+    // 볼 만큼 봤으면 스스로 돌아간다.
+    if (!this.leaving) {
+      this.stayTimer -= dt
+      if (this.stayTimer <= 0) this.leave()
+    }
+
     // 나가는 중에는 멈춰 서지 않는다. 방향도 바꾸지 않는다.
     if (this.leaving) {
       this.x += this.vx * dt
@@ -116,22 +140,20 @@ export class VisitorAgent {
   }
 }
 
-/**
- * 목표 인원에 맞춰 손님을 늘리고 줄인다. 기존 손님은 유지해 순간이동을 막는다.
- *
- * **줄일 때는 즉시 지우지 않는다.** 눈앞에서 사람이 사라지면 유령처럼 보인다.
- * 화면 밖으로 걸어 나가게 두고, 다 나간 뒤에 목록에서 뺀다.
- */
-export function reconcileVisitors(list: VisitorAgent[], target: number, rng: Rng): void {
+/** 화면 밖으로 나간 손님을 목록에서 뺀다. */
+export function pruneVisitors(list: VisitorAgent[]): void {
   for (let i = list.length - 1; i >= 0; i--) {
     if (list[i]?.isGone) list.splice(i, 1)
   }
+}
 
+/** 아직 머무는 손님 수. 나가는 중인 사람은 세지 않는다. */
+export function stayingCount(list: readonly VisitorAgent[]): number {
+  return list.reduce((n, v) => (v.isLeaving ? n : n + 1), 0)
+}
+
+/** 목표를 크게 웃돌면 나중에 온 순으로 돌려보낸다. */
+export function trimVisitors(list: readonly VisitorAgent[], target: number): void {
   const staying = list.filter((v) => !v.isLeaving)
-  if (staying.length > target) {
-    // 나중에 온 손님부터 돌려보낸다.
-    for (let i = staying.length - 1; i >= target; i--) staying[i]?.leave()
-  }
-
-  for (let i = staying.length; i < target; i++) list.push(new VisitorAgent(rng))
+  for (let i = staying.length - 1; i >= target; i--) staying[i]?.leave()
 }

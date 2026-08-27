@@ -144,10 +144,15 @@ export const FENCE_OFFSET_DETAIL = 0.2
  * 손님의 발이 놓이는 기준선 (정규화 y).
  *
  * 손님은 펜스보다 **앞에**, 즉 관람로 위에 선다. 그러려면 발이 화면 바닥에
- * 닿거나 조금 더 아래에서 시작해야 크기 비율이 맞는다. 발을 펜스 중턱에 두면
- * 사람이 공중에 뜬 것처럼 작아 보인다.
+ * 닿거나 조금 더 아래에서 시작해야 크기 비율이 맞는다.
+ *
+ * 한 줄로 세우면 종잇장처럼 평평해 보인다. 개체마다 앞뒤로 흩어 놓아
+ * **관람로에 깊이가 있는 것처럼** 만든다 — `far` 가 뒤(위), `near` 가 앞(아래)이다.
  */
-export const VISITOR_BASELINE_Y = 1.03
+export const VISITOR_BASELINE = { far: 0.97, near: 1.1 } as const
+
+/** 앞에 선 손님일수록 크게 보인다. */
+export const VISITOR_PERSPECTIVE = { far: 0.84, near: 1.1 } as const
 
 /**
  * 손님 높이의 기준값 (정규화).

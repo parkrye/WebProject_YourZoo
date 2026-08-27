@@ -1,4 +1,5 @@
-import { ROAM_BOX, VISITOR_BASELINE_Y, type BiomeId, type SkyPhase } from '@/assets/manifest'
+import { ROAM_BOX, type BiomeId, type SkyPhase } from '@/assets/manifest'
+import { MAX_VISITORS_PER_ENCLOSURE, VISITOR_STAY_SEC } from '@/domain/balance'
 import type { AnimalBlackboard } from '@/ai/types'
 import { createRng, type Rng } from '@/core/rng'
 import type { Animal } from '@/domain/animal'
@@ -7,7 +8,7 @@ import { createAnimalRenderer } from '@/render/animal'
 import { AnimalAgent } from './AnimalAgent'
 import { ensureBitmap, getBitmap } from './imageCache'
 import { generateProps, type PlacedProp } from './props'
-import { reconcileVisitors, VisitorAgent } from './VisitorAgent'
+import { pruneVisitors, stayingCount, trimVisitors, VisitorAgent } from './VisitorAgent'
 
 /** 화면에 보이는 우리의 BT 주기. 10Hz. */
 const BT_INTERVAL_ACTIVE = 0.1
@@ -38,6 +39,7 @@ export class EnclosureSim {
   private readonly rng: Rng
   private readonly spawnHints = new Map<string, { x: number; y: number }>()
   private btAccumulator = 0
+  private spawnAccumulator = 0
 
   constructor(readonly biome: BiomeId) {
     this.props = generateProps(biome)
@@ -88,9 +90,33 @@ export class EnclosureSim {
     for (const agent of this.animals) agent.integrate(dt, this.props)
   }
 
+  /**
+   * 손님 드나듦.
+   *
+   * 목표 인원을 붙박이로 세워 두면 같은 사람이 계속 서 있는 게 눈에 띈다.
+   * 대신 **저마다 들어왔다 나가게** 두고, 들어오는 속도만 목표에 맞춘다.
+   * 평형 상태에서 평균 인원 = 스폰 속도 × 평균 체류 시간이므로,
+   * 스폰 간격을 `평균 체류 / 목표` 로 잡으면 인원이 목표 주위에서 오르내린다.
+   */
   private updateVisitors(dt: number, ctx: SimContext): void {
     const target = visitorCount(ctx.reputation, ctx.phase, this.animals.length > 0)
-    reconcileVisitors(this.visitors, target, this.rng)
+
+    pruneVisitors(this.visitors)
+    // 명성이 떨어져 목표가 확 줄었을 때만 강제로 돌려보낸다.
+    if (stayingCount(this.visitors) > target + 2) trimVisitors(this.visitors, target + 1)
+
+    if (target > 0) {
+      const meanStay = (VISITOR_STAY_SEC.min + VISITOR_STAY_SEC.max) / 2
+      const interval = meanStay / target
+      this.spawnAccumulator += dt
+      while (this.spawnAccumulator >= interval) {
+        this.spawnAccumulator -= interval
+        if (this.visitors.length < MAX_VISITORS_PER_ENCLOSURE) {
+          this.visitors.push(new VisitorAgent(this.rng))
+        }
+      }
+    }
+
     for (const visitor of this.visitors) visitor.update(dt)
   }
 
@@ -114,7 +140,7 @@ export class EnclosureSim {
   private nearestVisitorDistance(x: number, y: number): number {
     let best = Number.POSITIVE_INFINITY
     for (const visitor of this.visitors) {
-      const d = Math.hypot(visitor.x - x, VISITOR_BASELINE_Y - y)
+      const d = Math.hypot(visitor.x - x, visitor.baselineY - y)
       if (d < best) best = d
     }
     return best
