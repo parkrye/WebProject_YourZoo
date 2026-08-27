@@ -5,9 +5,15 @@ import bgmNight from '@/assets/audio/bgm-night.mp3'
 import bgmDrawing from '@/assets/audio/bgm-drawing.mp3'
 import stingReport from '@/assets/audio/sting-report.mp3'
 import stingReward from '@/assets/audio/sting-reward.mp3'
+import clickNormal from '@/assets/audio/click-normal.mp3'
+import clickWrong from '@/assets/audio/click-wrong.mp3'
+import ambientBirds from '@/assets/audio/ambient-birds.mp3'
+import ambientRain from '@/assets/audio/ambient-rain.mp3'
+import ambientSteam from '@/assets/audio/ambient-steam.mp3'
 
 export type BgmId = 'TITLE' | 'DAY' | 'AFTERNOON' | 'NIGHT' | 'DRAWING'
-export type StingId = 'REPORT' | 'REWARD'
+export type StingId = 'REPORT' | 'REWARD' | 'CLICK' | 'DENY'
+export type AmbientId = 'BIRDS' | 'RAIN' | 'STEAM'
 
 const BGM_SRC: Record<BgmId, string> = {
   TITLE: bgmTitle,
@@ -20,7 +26,26 @@ const BGM_SRC: Record<BgmId, string> = {
 const STING_SRC: Record<StingId, string> = {
   REPORT: stingReport,
   REWARD: stingReward,
+  CLICK: clickNormal,
+  DENY: clickWrong,
 }
+
+const AMBIENT_SRC: Record<AmbientId, string> = {
+  BIRDS: ambientBirds,
+  RAIN: ambientRain,
+  STEAM: ambientSteam,
+}
+
+/**
+ * 앰비언트는 배경음이 아니라 **가끔 스치는 환경음**이다.
+ * 계속 깔리면 BGM 과 뭉개지고 금세 질린다. 한참 조용하다가 슬며시 들어왔다 빠진다.
+ */
+const AMBIENT_VOLUME = 0.22
+const AMBIENT_FADE_SEC = 3.5
+/** 앰비언트가 끝나고 다음이 시작되기까지의 침묵 (초) */
+const AMBIENT_GAP = { min: 22, max: 55 } as const
+/** 한 번 들어왔을 때 머무는 시간 (초) */
+const AMBIENT_PLAY = { min: 20, max: 45 } as const
 
 /** 곡을 바꿀 때 겹쳐 페이드하는 시간(초). */
 const CROSSFADE_SEC = 0.9
@@ -46,6 +71,13 @@ class AudioManager {
   private sfxVolume = 0.8
   private fadeTimer = 0
 
+  private readonly ambients = new Map<AmbientId, HTMLAudioElement>()
+  private ambientPool: readonly AmbientId[] = ['BIRDS', 'RAIN', 'STEAM']
+  private ambientCurrent: HTMLAudioElement | null = null
+  private ambientTimer = 0
+  private ambientFade = 0
+  private ambientRunning = false
+
   /** 첫 사용자 입력에 붙여 오디오 잠금을 푼다. */
   unlock(): void {
     if (this.unlocked) return
@@ -62,6 +94,99 @@ class AudioManager {
     this.sfxVolume = sfx
     const playing = this.current ? this.bgm.get(this.current) : null
     if (playing) playing.volume = bgm
+  }
+
+  /** 지금 우리에 어울리는 환경음 후보. 완전 무작위보다 장소가 읽힌다. */
+  setAmbientPool(pool: readonly AmbientId[]): void {
+    this.ambientPool = pool.length > 0 ? pool : ['BIRDS']
+  }
+
+  startAmbient(): void {
+    if (this.ambientRunning) return
+    this.ambientRunning = true
+    this.scheduleAmbient(randomBetween(AMBIENT_GAP.min, AMBIENT_GAP.max))
+  }
+
+  stopAmbient(): void {
+    this.ambientRunning = false
+    window.clearTimeout(this.ambientTimer)
+    window.clearInterval(this.ambientFade)
+    const playing = this.ambientCurrent
+    this.ambientCurrent = null
+    if (playing) this.fadeOutAmbient(playing)
+  }
+
+  private scheduleAmbient(delaySec: number): void {
+    window.clearTimeout(this.ambientTimer)
+    this.ambientTimer = window.setTimeout(() => this.playAmbientOnce(), delaySec * 1000)
+  }
+
+  private playAmbientOnce(): void {
+    if (!this.ambientRunning || !this.unlocked) {
+      this.scheduleAmbient(randomBetween(AMBIENT_GAP.min, AMBIENT_GAP.max))
+      return
+    }
+
+    const id = this.ambientPool[Math.floor(Math.random() * this.ambientPool.length)] as AmbientId
+    const clip = this.ambientElement(id)
+    const hold = randomBetween(AMBIENT_PLAY.min, AMBIENT_PLAY.max)
+
+    clip.volume = 0
+    clip.currentTime = 0
+    void clip.play().catch(() => undefined)
+    this.ambientCurrent = clip
+    this.fadeAmbient(clip, this.ambientTarget(), AMBIENT_FADE_SEC)
+
+    // 머무는 시간이 끝나면 서서히 빠지고, 그 뒤 다시 한참 조용해진다.
+    window.setTimeout(() => {
+      if (this.ambientCurrent !== clip) return
+      this.ambientCurrent = null
+      this.fadeOutAmbient(clip)
+      this.scheduleAmbient(randomBetween(AMBIENT_GAP.min, AMBIENT_GAP.max))
+    }, hold * 1000)
+  }
+
+  private ambientTarget(): number {
+    return this.sfxVolume * AMBIENT_VOLUME
+  }
+
+  private ambientElement(id: AmbientId): HTMLAudioElement {
+    const cached = this.ambients.get(id)
+    if (cached) return cached
+
+    const clip = new Audio(AMBIENT_SRC[id])
+    clip.loop = true
+    clip.preload = 'none'
+    this.ambients.set(id, clip)
+    return clip
+  }
+
+  private fadeOutAmbient(clip: HTMLAudioElement): void {
+    this.fadeAmbient(clip, 0, AMBIENT_FADE_SEC, () => {
+      clip.pause()
+      clip.currentTime = 0
+    })
+  }
+
+  private fadeAmbient(
+    clip: HTMLAudioElement,
+    target: number,
+    seconds: number,
+    done?: () => void,
+  ): void {
+    window.clearInterval(this.ambientFade)
+    const from = clip.volume
+    const steps = Math.max(1, Math.round((seconds * 1000) / FADE_STEP_MS))
+    let step = 0
+
+    this.ambientFade = window.setInterval(() => {
+      step++
+      const t = Math.min(1, step / steps)
+      clip.volume = Math.max(0, Math.min(1, from + (target - from) * t))
+      if (t < 1) return
+      window.clearInterval(this.ambientFade)
+      done?.()
+    }, FADE_STEP_MS)
   }
 
   playBgm(id: BgmId): void {
@@ -97,6 +222,7 @@ class AudioManager {
 
   playSting(id: StingId): void {
     if (!this.unlocked) return
+    if (this.sfxVolume <= 0) return
     const source = this.stings.get(id) ?? this.createSting(id)
     // 같은 스팅어가 연달아 울릴 수 있으니 복제해 겹쳐 재생한다.
     const clip = source.cloneNode() as HTMLAudioElement
@@ -146,3 +272,7 @@ class AudioManager {
 }
 
 export const audio = new AudioManager()
+
+function randomBetween(min: number, max: number): number {
+  return min + Math.random() * (max - min)
+}

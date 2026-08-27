@@ -3,6 +3,7 @@ import {
   FENCE_OFFSET_DETAIL, FENCE_OFFSET_ZOO, GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH, ROAM_BOX,
   type BiomeId,
 } from '@/assets/manifest'
+import { audio } from '@/audio/AudioManager'
 import { startTicker } from '@/core/ticker'
 import { UNLOCK_COST } from '@/domain/balance'
 import { clockLabel, phaseOf } from '@/domain/clock'
@@ -244,11 +245,13 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     const inside =
       scene.x >= box.x0 && scene.x <= box.x1 && scene.y >= box.y0 && scene.y <= box.y1
     if (!inside) {
+      audio.playSting('DENY')
       setDropError(`DROP IN ${state.animal.traits.habitat} AREA`)
       return
     }
 
     if (!canPlaceIn(enclosure)) {
+      audio.playSting('DENY')
       setDropError('ENCLOSURE IS FULL')
       return
     }

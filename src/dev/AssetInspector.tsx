@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { getAssets } from '@/assets/AssetStore'
 import { FONT_CHARS, GUI_GRID } from '@/assets/manifest'
-import { drawPopupFrame } from '@/render/NineSlice'
 
 /**
  * 개발용 검증 페이지. `?dev=assets` 로 진입한다.
@@ -13,10 +12,9 @@ import { drawPopupFrame } from '@/render/NineSlice'
  */
 export function AssetInspector() {
   const fontRef = useRef<HTMLCanvasElement>(null)
-  const popupRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
-    const { font, fontSheet, popup } = getAssets()
+    const { font, fontSheet } = getAssets()
 
     const fc = fontRef.current
     if (fc) {
@@ -29,17 +27,6 @@ export function AssetInspector() {
         font.draw(ctx, '0123456789', 20, 180, { size: 56 })
         font.draw(ctx, 'DAY 12 GOLD 1200 FAME 340', 20, 260, { size: 34 })
         font.draw(ctx, 'CENTERED TEXT', fc.width / 2, 320, { size: 40, align: 'center' })
-      }
-    }
-
-    const pc = popupRef.current
-    if (pc) {
-      const ctx = pc.getContext('2d')
-      if (ctx) {
-        drawChecker(ctx, pc.width, pc.height)
-        drawPopupFrame(ctx, popup, 10, 10, 380, 240)
-        drawPopupFrame(ctx, popup, 410, 10, 620, 300)
-        drawPopupFrame(ctx, popup, 10, 270, 380, 320)
       }
     }
 
@@ -63,10 +50,7 @@ export function AssetInspector() {
         ))}
       </div>
 
-      <h2 style={H2}>4. POPUP 9-SLICE — 임의 크기 3종 (R2)</h2>
-      <canvas ref={popupRef} width={1040} height={600} style={CANVAS} />
-
-      <h2 style={H2}>5. VISITORS — 검은 배경 컷아웃 확인 (원본에 알파 없음)</h2>
+      <h2 style={H2}>4. VISITORS — 검은 배경 컷아웃 확인 (원본에 알파 없음)</h2>
       <div style={{ ...GRID, gridTemplateColumns: 'repeat(16, 1fr)' }}>
         {Array.from({ length: visitor.count }, (_, i) => (
           <VisitorCell key={i} index={i} />

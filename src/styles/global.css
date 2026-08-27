@@ -191,37 +191,46 @@ html, body, #root {
   to { opacity: 0; transform: translateY(70px) scale(0.9); }
 }
 
+/*
+  팝업 틀은 이미지가 아니라 CSS 다.
+  9-슬라이스로 늘려 쓰던 시절엔 크기가 바뀔 때마다 종이와 테두리가 어긋나고
+  상단 엠블럼이 복제되거나 타일 이음매가 드러났다.
+
+  구성: 바깥 진갈색 윤곽 -> 나무 테두리 -> 금색 인레이 -> 종이 본문.
+  box-shadow 를 겹쳐 만들면 border 하나로 여러 겹을 표현할 수 있고 크기와 무관하게 정확하다.
+*/
 .popup {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  padding: 0 0 14px;
+  background:
+    repeating-linear-gradient(0deg, rgba(150, 110, 55, 0.045) 0 2px, transparent 2px 6px),
+    linear-gradient(178deg, #f8eed9 0%, #f1e2c0 55%, #e6d3a6 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(200, 168, 106, 0.9),
+    0 0 0 3px #d9a441,
+    0 0 0 13px #8a5a2b,
+    0 0 0 17px #5d3a18,
+    0 16px 42px rgba(0, 0, 0, 0.55);
   animation: popup-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+  overflow: hidden;
 }
 
 .popup.is-closing { animation: popup-out 0.17s ease-in both; }
 
-@keyframes backdrop-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-.popup-frame { position: absolute; inset: 0; display: block; }
-
-.popup-body {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
+/* 나무 헤더 바. 원본 에셋의 상단 나무 바와 같은 자리를 맡는다. */
 .popup-header {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding-bottom: 8px;
-  margin-bottom: 12px;
-  border-bottom: 2px solid rgba(138, 90, 43, 0.3);
+  padding: 8px 16px 8px 22px;
+  background: linear-gradient(180deg, #a06c34 0%, #8a5a2b 55%, #71481f 100%);
+  border-bottom: 3px solid #5d3a18;
+  box-shadow: inset 0 2px 0 rgba(255, 214, 150, 0.3);
 }
 
 .popup-content {
@@ -229,12 +238,13 @@ html, body, #root {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  /* 패딩 안쪽에서 잘라야 내용이 프레임 나무 부분을 침범하지 않는다. */
+  /* 패딩 안쪽에서 잘라야 내용이 테두리를 침범하지 않는다. */
   overflow: hidden;
+  padding: 18px 26px 4px;
 }
 
 /* 종이 배경이 밝아 크림색 글자와 대비가 약하다. 그림자로 윤곽을 세운다. */
-.popup-content canvas:not(.drawing-canvas):not(.popup-frame) {
+.popup-content canvas:not(.drawing-canvas) {
   filter: drop-shadow(0 1px 0 rgba(60, 34, 10, 0.45));
 }
 
@@ -512,12 +522,24 @@ html, body, #root {
 .draw-tools {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   align-items: center;
-  align-self: stretch;
 }
 
-.draw-tools-spacer { flex: 1 1 auto; }
+.draw-actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+}
+
+.labeled-button.is-primary {
+  border-color: #8a5a2b;
+  background: #d9a441;
+  padding: 6px 20px 6px 10px;
+}
+.labeled-button.is-primary:hover { background: #e8b95c; }
+.labeled-button:disabled { filter: grayscale(1) brightness(0.7); cursor: default; }
 
 .palette-anchor { position: relative; }
 
@@ -633,8 +655,9 @@ html, body, #root {
 
 .animal-card {
   position: absolute;
-  top: 96px;
-  right: 28px;
+  top: 92px;
+  right: 38px;
+  animation: card-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
 }
 
 /* 정보 카드는 오른쪽 바깥에서 밀려 들어온다. */
@@ -645,24 +668,16 @@ html, body, #root {
 
 .animal-card { animation: card-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
 
-.animal-card-body {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  overflow: hidden;
-}
+.animal-card-body { gap: 4px; padding: 14px 20px 10px; }
 
-.animal-card-body canvas:not(.popup-frame) {
+.animal-card-body canvas {
   filter: drop-shadow(0 1px 0 rgba(60, 34, 10, 0.45));
 }
 
 .animal-card-portrait {
   display: grid;
   place-items: center;
-  padding: 4px 0 8px;
+  padding: 2px 0 6px;
 }
 
 .animal-card-traits { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
@@ -869,13 +884,13 @@ html, body, #root {
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
-  width: 560px;
+  width: 520px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 16px 26px 12px;
-  background: rgba(20, 14, 8, 0.93);
+  gap: 2px;
+  padding: 10px 22px 8px;
+  background: rgba(20, 14, 8, 0.88);
   border: 3px solid #d9a441;
   border-radius: 16px;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);

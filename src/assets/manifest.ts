@@ -15,7 +15,6 @@ import areaIce from './images/bg/area-ice.png'
 import fence from './images/bg/fence.png'
 import iconFont from './images/sprite/icon-font.png'
 import iconGui from './images/sprite/icon-gui.png'
-import uiPopup from './images/sprite/ui-popup.png'
 import propField from './images/sprite/prop-field.png'
 import propDesert from './images/sprite/prop-desert.png'
 import propIce from './images/sprite/prop-ice.png'
@@ -51,7 +50,6 @@ export const FENCE_SRC = fence
 export const VISITOR_SRC = humanVisitor
 export const GUI_SRC = iconGui
 export const FONT_SRC = iconFont
-export const POPUP_SRC = uiPopup
 
 // ─────────────────────────────────────────────────────────────
 // 그리드 스펙
@@ -143,16 +141,16 @@ export const FENCE_OFFSET_ZOO = 0
 export const FENCE_OFFSET_DETAIL = 0.2
 
 /**
- * 손님의 발이 놓이는 기준선 (정규화 y). 펜스 스톤 베이스 위.
+ * 손님의 발이 놓이는 기준선 (정규화 y).
  *
- * 손님은 펜스보다 **앞에** 그려지므로 난간 이쪽 편에 선 모습이 된다.
- * 이 값과 VISITOR_HEIGHT 의 차이가 머리 높이이고, 펜스 난간 상단(≈0.56)보다
- * 위에 와야 "난간에 기대 들여다보는" 뒷모습으로 읽힌다.
+ * 손님은 펜스보다 **앞에**, 즉 관람로 위에 선다. 그러려면 발이 화면 바닥에
+ * 닿거나 조금 더 아래에서 시작해야 크기 비율이 맞는다. 발을 펜스 중턱에 두면
+ * 사람이 공중에 뜬 것처럼 작아 보인다.
  */
-export const VISITOR_BASELINE_Y = 0.86
+export const VISITOR_BASELINE_Y = 1.03
 
 /** 손님 스프라이트의 화면상 높이 (정규화). 검출된 실제 잉크 높이 기준이다. */
-export const VISITOR_HEIGHT = 0.32
+export const VISITOR_HEIGHT = 0.4
 
 // ─────────────────────────────────────────────────────────────
 // 동물 / 프롭 크기 (정규화 높이)
@@ -179,11 +177,3 @@ export const PROP_HEIGHT = { LAND: 0.1, WATER: 0.14 } as const
 
 /** 우리 하나에 배치되는 프롭 개수. */
 export const PROP_COUNT = { LAND: 4, WATER: 3 } as const
-
-// ─────────────────────────────────────────────────────────────
-// 팝업 9-슬라이스 (frame 0: 표준 팝업)
-// ─────────────────────────────────────────────────────────────
-
-export const POPUP_FRAME_0 = { sx: 45, sy: 18, sw: 570, sh: 362 } as const
-/** 9-슬라이스 인셋 (프레임 0 로컬 px). 코너 금속 장식이 잘리지 않는 최소값. */
-export const POPUP_INSET = { top: 118, right: 92, bottom: 84, left: 92 } as const

@@ -17,7 +17,7 @@ npm run dev
 | [docs/02-architecture.md](docs/02-architecture.md) | 스택 · 디렉터리 · 핵심 인터페이스 · 리스크 |
 | [docs/03-roadmap.md](docs/03-roadmap.md) | 마일스톤 M0 ~ M5 |
 
-## 현재 상태 — M0 ~ M6
+## 현재 상태 — M0 ~ M7
 
 동작하는 것:
 - 타이틀 → 우리 화면 전환
@@ -48,8 +48,10 @@ npm run dev
 
 - NPC 의뢰: 매일 게시되는 조건부 의뢰. 맞는 동물을 넘기면 골드와 명성 보상
 
+- 첫 플레이 튜토리얼 4단계
+- 사운드: BGM 5종 · 스팅어 2종 · 환경음 3종 · 클릭음 2종 ([docs/04-audio.md](docs/04-audio.md))
+
 아직 없는 것:
-- **사운드** — 오디오 에셋이 없다. 필요한 목록과 생성 프롬프트는 [docs/04-audio.md](docs/04-audio.md)
 - **8×3 스프라이트 시트 연동** — 외부 SDK 대기. `SheetRenderer` 와
   `Animal.spriteSheet` 는 준비돼 있어 팩토리 분기만 타면 된다
 

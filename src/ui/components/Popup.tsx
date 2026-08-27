@@ -1,8 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react'
 import { GUI } from '@/assets/manifest'
-import { popupInsetFor } from '@/render/NineSlice'
 import { BitmapLabel } from './BitmapLabel'
-import { FrameCanvas } from './FrameCanvas'
 import { IconButton } from './IconButton'
 
 interface PopupProps {
@@ -17,17 +15,16 @@ interface PopupProps {
 const EXIT_MS = 170
 
 /**
- * 9-슬라이스 팝업 프레임.
+ * 팝업 프레임.
  *
- * 제목과 닫기 버튼은 **종이 영역 안**에 둔다. 프레임 상단 나무 바 중앙에
- * 발바닥 엠블럼이 박혀 있어서, 거기에 제목을 얹으면 글자와 겹친다.
- *
- * 여백은 프레임 배율을 따라간다. 코너가 팝업 크기에 맞춰 줄고 늘기 때문에
- * 고정 여백을 쓰면 작은 팝업에서 내용이 테두리를 침범한다.
+ * 나무 테두리와 종이 본문을 **CSS 로 그린다.** 원래는 시트의 프레임 이미지를
+ * 9-슬라이스로 늘려 썼는데 임의 크기에서 종이와 테두리가 계속 어긋났다.
+ * 코너를 원본 크기로 두면 작은 팝업에서 테두리가 내용을 잡아먹고,
+ * 크기에 맞춰 늘리면 상단 엠블럼이 복제되거나 타일 이음매가 드러났다.
+ * 어떤 크기에도 정확히 맞아야 하는 UI 틀은 이미지보다 CSS 가 맞다.
  */
 export function Popup({ title, width, height, onClose, children }: PopupProps) {
   const [closing, setClosing] = useState(false)
-  const inset = popupInsetFor(width, height)
 
   // 닫기 요청은 곧바로 언마운트하지 않는다. 퇴장 연출이 끝난 뒤에 실제로 닫는다.
   const requestClose = useCallback(() => {
@@ -43,22 +40,11 @@ export function Popup({ title, width, height, onClose, children }: PopupProps) {
         style={{ width, height }}
         onPointerDown={(e) => e.stopPropagation()}
       >
-        <FrameCanvas width={width} height={height} />
-        <div
-          className="popup-body"
-          style={{
-            paddingTop: inset.top,
-            paddingRight: inset.right,
-            paddingBottom: inset.bottom,
-            paddingLeft: inset.left,
-          }}
-        >
-          <header className="popup-header">
-            <BitmapLabel text={title} size={30} />
-            <IconButton icon={GUI.CLOSE} size={50} title="CLOSE" onClick={requestClose} />
-          </header>
-          <div className="popup-content">{children}</div>
-        </div>
+        <header className="popup-header">
+          <BitmapLabel text={title} size={28} />
+          <IconButton icon={GUI.CLOSE} size={46} title="CLOSE" onClick={requestClose} />
+        </header>
+        <div className="popup-content">{children}</div>
       </div>
     </div>
   )

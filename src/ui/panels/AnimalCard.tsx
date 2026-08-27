@@ -3,14 +3,12 @@ import { GUI } from '@/assets/manifest'
 import { ANIMAL_SELL_REFUND } from '@/domain/balance'
 import type { Animal } from '@/domain/animal'
 import { TRAIT_KEYS, TRAIT_LABELS } from '@/domain/traits'
-import { popupInsetFor } from '@/render/NineSlice'
 import { AnimalThumb } from '@/ui/components/AnimalThumb'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
-import { FrameCanvas } from '@/ui/components/FrameCanvas'
 import { IconButton } from '@/ui/components/IconButton'
 
-const CARD_WIDTH = 400
-const CARD_HEIGHT = 660
+const CARD_WIDTH = 340
+const CARD_HEIGHT = 520
 
 interface AnimalCardProps {
   animal: Animal
@@ -27,36 +25,26 @@ interface AnimalCardProps {
  */
 export function AnimalCard({ animal, onClose, onStore, onSell }: AnimalCardProps) {
   const [confirmSell, setConfirmSell] = useState(false)
-  const inset = popupInsetFor(CARD_WIDTH, CARD_HEIGHT)
 
   return (
-    <div className="animal-card" style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
-      <FrameCanvas width={CARD_WIDTH} height={CARD_HEIGHT} />
-      <div
-        className="animal-card-body"
-        style={{
-          paddingTop: inset.top,
-          paddingRight: inset.right,
-          paddingBottom: inset.bottom,
-          paddingLeft: inset.left,
-        }}
-      >
-        <header className="popup-header">
-          <BitmapLabel text={animal.name} size={28} />
-          <IconButton icon={GUI.CLOSE} size={44} title="CLOSE" onClick={onClose} />
-        </header>
+    <div className="popup animal-card" style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
+      <header className="popup-header">
+        <BitmapLabel text={animal.name} size={24} />
+        <IconButton icon={GUI.CLOSE} size={40} title="CLOSE" onClick={onClose} />
+      </header>
 
+      <div className="popup-content animal-card-body">
         <div className="animal-card-portrait">
-          <AnimalThumb imageId={animal.imageId} size={132} />
+          <AnimalThumb imageId={animal.imageId} size={118} />
         </div>
 
-        <BitmapLabel text={`${animal.traits.habitat} ${animal.traits.diet}`} size={22} />
-        <BitmapLabel text={`APPEAL ${animal.appeal}`} size={22} />
+        <BitmapLabel text={`${animal.traits.habitat} ${animal.traits.diet}`} size={20} />
+        <BitmapLabel text={`APPEAL ${animal.appeal}`} size={20} />
 
         <div className="animal-card-traits">
           {TRAIT_KEYS.map((key) => (
             <div key={key} className="trait-row">
-              <BitmapLabel text={TRAIT_LABELS[key]} size={18} />
+              <BitmapLabel text={TRAIT_LABELS[key]} size={16} />
               <div className="trait-bar">
                 <div className="trait-bar-fill" style={{ width: `${Math.round(animal.traits[key] * 100)}%` }} />
               </div>
@@ -66,24 +54,24 @@ export function AnimalCard({ animal, onClose, onStore, onSell }: AnimalCardProps
 
         <footer className="animal-card-actions">
           {onStore && (
-            <>
-              <IconButton icon={GUI.BACK} size={54} title="SEND TO STORAGE" onClick={onStore} />
-              <BitmapLabel text="TO STORAGE" size={18} />
-            </>
+            <button type="button" className="labeled-button" onClick={onStore}>
+              <IconButton icon={GUI.BACK} size={40} />
+              <BitmapLabel text="STORE" size={17} />
+            </button>
           )}
 
           {onSell && !confirmSell && (
-            <>
-              <IconButton icon={GUI.TRASH} size={54} title="SELL" onClick={() => setConfirmSell(true)} />
-              <BitmapLabel text={`SELL ${ANIMAL_SELL_REFUND}`} size={18} />
-            </>
+            <button type="button" className="labeled-button" onClick={() => setConfirmSell(true)}>
+              <IconButton icon={GUI.TRASH} size={40} />
+              <BitmapLabel text={`SELL ${ANIMAL_SELL_REFUND}`} size={17} />
+            </button>
           )}
 
           {onSell && confirmSell && (
             <>
-              <BitmapLabel text="SURE" size={20} />
-              <IconButton icon={GUI.CONFIRM} size={54} title="CONFIRM" onClick={onSell} />
-              <IconButton icon={GUI.CLOSE} size={54} title="CANCEL" onClick={() => setConfirmSell(false)} />
+              <BitmapLabel text="SURE" size={18} />
+              <IconButton icon={GUI.CONFIRM} size={44} title="CONFIRM" onClick={onSell} />
+              <IconButton icon={GUI.CLOSE} size={44} title="CANCEL" onClick={() => setConfirmSell(false)} />
             </>
           )}
         </footer>

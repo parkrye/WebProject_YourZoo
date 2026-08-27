@@ -6,13 +6,14 @@ import type { DrawTool } from '@/draw/history'
 import type { TemplateId } from '@/domain/templates'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
+import { IconGlyph } from '@/ui/components/IconGlyph'
 import { PaletteMenu } from '@/ui/components/PaletteMenu'
 import { Popup } from '@/ui/components/Popup'
 import { useGameStore } from '@/store/gameStore'
 
-const CANVAS_DISPLAY = 420
-const POPUP_WIDTH = 900
-const POPUP_HEIGHT = 800
+const CANVAS_DISPLAY = 400
+const POPUP_WIDTH = 820
+const POPUP_HEIGHT = 640
 
 interface DrawModalProps {
   templateId: TemplateId
@@ -101,15 +102,23 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
             disabled={!history.canRedo}
             onClick={() => boardRef.current?.redo()}
           />
-          <div className="draw-tools-spacer" />
-          <IconButton
-            icon={GUI.CONFIRM}
-            size={64}
-            title="DONE"
+        </div>
+        </div>
+
+        {/*
+          완성은 툴이 아니라 결정이다. 세로 툴바 맨 아래에 두었더니
+          아이콘이 하나 늘 때마다 화면 밖으로 밀려 아예 보이지 않았다.
+        */}
+        <div className="draw-actions">
+          <button
+            type="button"
+            className="labeled-button is-primary"
             disabled={history.isEmpty || busy}
             onClick={() => void finish()}
-          />
-        </div>
+          >
+            <IconGlyph icon={GUI.CONFIRM} size={40} />
+            <BitmapLabel text="DONE" size={22} />
+          </button>
         </div>
       </div>
     </Popup>
