@@ -1,5 +1,4 @@
 import { Atlas } from './atlas'
-import { cutoutBackground, cutoutBlackBackground } from './cutout'
 import { loadImages, type ProgressFn } from './loader'
 import {
   AREA_SRC, FENCE_SRC, FONT_GRID, FONT_SRC, GUI_GRID, GUI_SRC,
@@ -18,8 +17,8 @@ export interface Assets {
   readonly guiSrc: string
   readonly popup: HTMLImageElement
   readonly font: BitmapFont
-  /** 컷아웃된 폰트 시트. 디버그 페이지에서 눈으로 검증할 때 쓴다. */
-  readonly fontSheet: HTMLCanvasElement
+  /** 폰트 시트. 디버그 페이지에서 눈으로 검증할 때 쓴다. */
+  readonly fontSheet: HTMLImageElement
 }
 
 let cached: Assets | null = null
@@ -46,13 +45,10 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
     return img
   }
 
-  // 폰트 시트는 불투명 갈색 배경이 깔려 있어 그대로 못 쓴다. (docs/01-assets.md §2.2)
-  const fontSheet = cutoutBackground(pick(FONT_SRC))
+  // 모든 에셋은 scripts/prepare-assets.py 가 이미 알파를 정리해 두었다.
+  // 런타임에서 배경을 손대지 않는다.
+  const fontSheet = pick(FONT_SRC)
   const fontAtlas = new Atlas(fontSheet, FONT_GRID, { detect: true })
-
-  // 손님 시트와 사막 프롭 시트는 알파 채널이 아예 없다(RGB). 검은 배경을 걷어내야 한다.
-  const visitorSheet = cutoutBlackBackground(pick(VISITOR_SRC))
-  const propDesertSheet = cutoutBlackBackground(pick(PROP_SRC.DESERT))
 
   cached = {
     sky: {
@@ -68,11 +64,11 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
     // 프롭·손님 시트도 그림이 명목 셀 경계를 넘나든다. 검출한 실제 박스를 쓴다.
     prop: {
       FIELD: new Atlas(pick(PROP_SRC.FIELD), PROP_GRID.FIELD, { detect: true }),
-      DESERT: new Atlas(propDesertSheet, PROP_GRID.DESERT, { detect: true }),
+      DESERT: new Atlas(pick(PROP_SRC.DESERT), PROP_GRID.DESERT, { detect: true }),
       ICE: new Atlas(pick(PROP_SRC.ICE), PROP_GRID.ICE, { detect: true }),
     },
     fence: pick(FENCE_SRC),
-    visitor: new Atlas(visitorSheet, VISITOR_GRID, { detect: true }),
+    visitor: new Atlas(pick(VISITOR_SRC), VISITOR_GRID, { detect: true }),
     // GUI 아이콘은 명목 셀 경계를 넘나든다 → 알파 검출로 실제 박스를 쓴다.
     gui: new Atlas(pick(GUI_SRC), GUI_GRID, { detect: true }),
     guiSrc: GUI_SRC,

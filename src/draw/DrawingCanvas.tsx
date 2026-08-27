@@ -2,7 +2,12 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import { DrawHistory, drawStroke, type DrawTool, type StrokeCommand } from './history'
 import { exportDrawing, type ExportedDrawing } from './export'
 
-/** 그림판 논리 해상도. 정사각으로 두면 향후 8×3 시트 변환 시 프레임 규격을 잡기 쉽다. */
+/**
+ * 그림판 논리 해상도. 정사각으로 두면 향후 8×3 시트 변환 시 프레임 규격을 잡기 쉽다.
+ *
+ * 그림은 **오른쪽을 보고 있는 것으로 간주**한다. 렌더러가 왼쪽으로 이동할 때만
+ * 좌우를 뒤집으므로, 플레이어가 왼쪽을 보게 그리면 이동 방향과 어긋난다.
+ */
 export const DRAW_SIZE = 512
 
 const PENCIL_WIDTH = 10
@@ -136,16 +141,23 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
   }
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="drawing-canvas"
-      width={DRAW_SIZE}
-      height={DRAW_SIZE}
-      style={{ width: displaySize, height: displaySize }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
-    />
+    // 가이드는 캔버스 뒤 DOM 레이어다. 캔버스에 직접 그리면 내보낸 PNG 에 섞여 들어간다.
+    <div className="drawing-board" style={{ width: displaySize, height: displaySize }}>
+      <div className="drawing-guide" aria-hidden>
+        <span className="drawing-guide-arrow" />
+        <span className="drawing-guide-text">FACING RIGHT</span>
+      </div>
+      <canvas
+        ref={canvasRef}
+        className="drawing-canvas"
+        width={DRAW_SIZE}
+        height={DRAW_SIZE}
+        style={{ width: displaySize, height: displaySize }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+      />
+    </div>
   )
 })

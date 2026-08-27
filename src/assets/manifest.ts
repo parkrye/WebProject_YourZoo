@@ -1,7 +1,25 @@
 /**
- * 모든 원본 에셋의 경로와 슬라이싱 스펙.
+ * 모든 에셋의 참조와 슬라이싱 스펙.
  * docs/01-assets.md 의 구현체이며, 문서와 항상 동기화되어야 한다.
+ *
+ * 이미지는 `src/assets/images/` 에서 **번들러가 import** 한다.
+ * 알파가 없던 원본은 `scripts/prepare-assets.py` 가 빌드 전에 이미 처리해 두었으므로
+ * 런타임에서 배경을 손대는 코드는 없다.
  */
+import skyDay from './images/bg/sky-day.png'
+import skyAfternoon from './images/bg/sky-afternoon.png'
+import skyNight from './images/bg/sky-night.png'
+import areaField from './images/bg/area-field.png'
+import areaDesert from './images/bg/area-desert.png'
+import areaIce from './images/bg/area-ice.png'
+import fence from './images/bg/fence.png'
+import iconFont from './images/sprite/icon-font.png'
+import iconGui from './images/sprite/icon-gui.png'
+import uiPopup from './images/sprite/ui-popup.png'
+import propField from './images/sprite/prop-field.png'
+import propDesert from './images/sprite/prop-desert.png'
+import propIce from './images/sprite/prop-ice.png'
+import humanVisitor from './images/sprite/human-visitor.png'
 
 /** 논리 해상도. 모든 게임 좌표는 이 공간의 정규화값(0..1)이다. */
 export const LOGICAL_WIDTH = 1672
@@ -12,28 +30,28 @@ export type SkyPhase = 'DAY' | 'AFTERNOON' | 'NIGHT'
 export type BiomeId = 'FIELD' | 'DESERT' | 'ICE'
 
 export const SKY_SRC: Record<SkyPhase, string> = {
-  DAY: '/bg_sky_day.png',
-  AFTERNOON: '/bg_sky_afternoon.png',
-  NIGHT: '/bg_sky_night.png',
+  DAY: skyDay,
+  AFTERNOON: skyAfternoon,
+  NIGHT: skyNight,
 }
 
 export const AREA_SRC: Record<BiomeId, string> = {
-  FIELD: '/bg_area_field.png',
-  DESERT: '/bg_area_desert.png',
-  ICE: '/bg_area_ice.png',
+  FIELD: areaField,
+  DESERT: areaDesert,
+  ICE: areaIce,
 }
 
 export const PROP_SRC: Record<BiomeId, string> = {
-  FIELD: '/sprite_prop_field.png',
-  DESERT: '/sprite_prop_desert.png',
-  ICE: '/sprite_prop_ice.png',
+  FIELD: propField,
+  DESERT: propDesert,
+  ICE: propIce,
 }
 
-export const FENCE_SRC = '/bg_forward_fence.png'
-export const VISITOR_SRC = '/sprite_human_visitor.png'
-export const GUI_SRC = '/sprite_icon_gui.png'
-export const FONT_SRC = '/sprite_icon_font.png'
-export const POPUP_SRC = '/sprite_ui_popup.png'
+export const FENCE_SRC = fence
+export const VISITOR_SRC = humanVisitor
+export const GUI_SRC = iconGui
+export const FONT_SRC = iconFont
+export const POPUP_SRC = uiPopup
 
 // ─────────────────────────────────────────────────────────────
 // 그리드 스펙
@@ -125,11 +143,13 @@ export const FENCE_OFFSET_ZOO = 0
 export const FENCE_OFFSET_DETAIL = 0.2
 
 /**
- * 손님의 발이 놓이는 기준선 (정규화 y). 펜스 스톤 베이스 상단.
+ * 손님의 발이 놓이는 기준선 (정규화 y). 펜스 스톤 베이스 위.
+ *
+ * 손님은 펜스보다 **앞에** 그려지므로 난간 이쪽 편에 선 모습이 된다.
  * 이 값과 VISITOR_HEIGHT 의 차이가 머리 높이이고, 펜스 난간 상단(≈0.56)보다
- * 위에 와야 "난간에 서서 들여다보는" 뒷모습으로 읽힌다.
+ * 위에 와야 "난간에 기대 들여다보는" 뒷모습으로 읽힌다.
  */
-export const VISITOR_BASELINE_Y = 0.82
+export const VISITOR_BASELINE_Y = 0.86
 
 /** 손님 스프라이트의 화면상 높이 (정규화). 검출된 실제 잉크 높이 기준이다. */
 export const VISITOR_HEIGHT = 0.32

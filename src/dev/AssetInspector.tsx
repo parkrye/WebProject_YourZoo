@@ -50,15 +50,11 @@ export function AssetInspector() {
 
   return (
     <div style={PAGE}>
-      <h2 style={H2}>1. FONT CUTOUT — 갈색 배경이 남아 있으면 실패 (R1)</h2>
+      <h2 style={H2}>1. FONT — 글자 외곽선이 온전한지, 배경이 투명한지 (R1)</h2>
       <canvas ref={fontRef} width={1000} height={380} style={CANVAS} />
 
-      <h2 style={H2}>2. FONT SHEET (raw cutout)</h2>
-      <img
-        src={fontSheet.toDataURL()}
-        alt="cutout font sheet"
-        style={{ ...CANVAS, width: 320, imageRendering: 'auto' }}
-      />
+      <h2 style={H2}>2. FONT SHEET (원본)</h2>
+      <img src={fontSheet.src} alt="font sheet" style={{ ...CANVAS, width: 320 }} />
 
       <h2 style={H2}>3. GUI ICONS — 36 cells, 경계 잘림 확인</h2>
       <div style={GRID}>

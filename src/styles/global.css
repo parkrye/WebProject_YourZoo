@@ -171,6 +171,7 @@ html, body, #root {
 .stack { display: flex; flex-direction: column; gap: 20px; justify-content: center; flex: 1 1 auto; }
 
 .stat-row { display: flex; align-items: center; gap: 16px; }
+.report-totals .stat-row { justify-content: flex-start; }
 
 .slider-row {
   display: grid;
@@ -369,11 +370,45 @@ html, body, #root {
   min-height: 0;
 }
 
-.drawing-canvas {
+.drawing-board {
+  position: relative;
   flex: 0 0 auto;
   border: 3px solid #8a5a2b;
   border-radius: 10px;
   background: #fffdf5;
+  overflow: hidden;
+}
+
+/* 그림은 오른쪽을 보고 있다고 가정한다. 렌더러는 왼쪽 이동 시에만 좌우를 뒤집는다. */
+.drawing-guide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+  padding-right: 14px;
+  pointer-events: none;
+  opacity: 0.18;
+}
+
+.drawing-guide-arrow {
+  width: 78px;
+  height: 34px;
+  background: #8a5a2b;
+  clip-path: polygon(0 38%, 62% 38%, 62% 0, 100% 50%, 62% 100%, 62% 62%, 0 62%);
+}
+
+.drawing-guide-text {
+  font: 700 15px/1 ui-monospace, monospace;
+  letter-spacing: 0.22em;
+  color: #8a5a2b;
+}
+
+.drawing-canvas {
+  position: absolute;
+  inset: 0;
   touch-action: none;
   cursor: crosshair;
   display: block;
@@ -411,4 +446,76 @@ html, body, #root {
 .palette-slot { border-radius: 8px; padding: 2px; }
 .palette-slot.is-selected { background: rgba(217, 164, 65, 0.55); outline: 2px solid #8a5a2b; }
 
-.draw-hint { position: absolute; left: 0; bottom: 2px; opacity: 0.55; }
+.draw-hint { position: absolute; left: 0; bottom: 2px; opacity: 0.55; display: flex; gap: 22px; align-items: center; }
+
+/* ── 잠긴 우리 ───────────────────────────────────────────── */
+
+.locked-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: rgba(10, 8, 5, 0.62);
+}
+
+/* ── 상세보기 팬 ─────────────────────────────────────────── */
+
+.screen-canvas.is-pannable { cursor: grab; touch-action: none; }
+.screen-canvas.is-pannable:active { cursor: grabbing; }
+
+/* ── 정산 리포트 ─────────────────────────────────────────── */
+
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.report-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 20px;
+  padding: 2px 4px;
+}
+
+/* 폰트에 +/− 기호가 없다. 부호는 색으로만 구분한다. */
+.report-row.is-plus canvas { filter: drop-shadow(0 1px 0 rgba(30, 90, 30, 0.55)); }
+.report-row.is-minus canvas { filter: drop-shadow(0 1px 0 rgba(150, 40, 30, 0.6)); }
+
+.report-divider {
+  height: 2px;
+  margin: 6px 0;
+  background: rgba(138, 90, 43, 0.35);
+}
+
+.report-totals { display: flex; gap: 40px; align-items: center; }
+
+.report-actions { display: flex; justify-content: flex-end; margin-top: auto; }
+
+/* ── 운영 현황 ───────────────────────────────────────────── */
+
+.status-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 32px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.status-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.status-col .stat-row { justify-content: space-between; }

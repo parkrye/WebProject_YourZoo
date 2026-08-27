@@ -1,14 +1,19 @@
+import { useEffect, useMemo, useRef } from 'react'
 import { getAssets } from '@/assets/AssetStore'
 import { GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH } from '@/assets/manifest'
+import { hasSave } from '@/store/save'
+import { useGameStore } from '@/store/gameStore'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
-import { useGameStore } from '@/store/gameStore'
-import { useEffect, useRef } from 'react'
 
 export function TitleScreen() {
-  const setScreen = useGameStore((s) => s.setScreen)
+  const startNewGame = useGameStore((s) => s.startNewGame)
+  const continueGame = useGameStore((s) => s.continueGame)
   const openModal = useGameStore((s) => s.openModal)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  // 세이브 유무는 타이틀 진입 시점에 한 번만 본다. 렌더마다 localStorage 를 읽을 이유가 없다.
+  const savedGame = useMemo(() => hasSave(), [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -27,8 +32,13 @@ export function TitleScreen() {
       <div className="title-overlay">
         <BitmapLabel text="YOUR ZOO" size={110} align="center" />
         <div className="title-menu">
-          <button type="button" className="text-button" onClick={() => setScreen('ZOO')}>
-            <BitmapLabel text="START GAME" size={44} align="center" />
+          {savedGame && (
+            <button type="button" className="text-button" onClick={() => continueGame()}>
+              <BitmapLabel text="CONTINUE" size={44} align="center" />
+            </button>
+          )}
+          <button type="button" className="text-button" onClick={startNewGame}>
+            <BitmapLabel text="NEW GAME" size={44} align="center" />
           </button>
           <IconButton icon={GUI.SETTINGS} size={84} title="OPTIONS" onClick={() => openModal('OPTIONS')} />
         </div>

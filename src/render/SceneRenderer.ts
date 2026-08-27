@@ -9,6 +9,7 @@ import type { EnclosureSim } from '@/sim/EnclosureSim'
 import type { PlacedProp } from '@/sim/props'
 import type { VisitorAgent } from '@/sim/VisitorAgent'
 import type { ViewBox } from './animal'
+import { applyCamera, type Camera } from './camera'
 
 export interface SceneInput {
   sim: EnclosureSim
@@ -16,6 +17,8 @@ export interface SceneInput {
   elapsed: number
   /** 펜스 Y 오프셋 (화면 높이 비율). 상세보기에서 펜스를 내린다. */
   fenceOffset: number
+  /** 상세보기 확대·팬. 우리 화면에서는 zoom 1, 중심 0.5. */
+  camera: Camera
 }
 
 /** y 정렬 대상. 프롭과 동물이 같은 목록에서 섞인다. */
@@ -27,7 +30,10 @@ type Drawable =
  * 우리 화면의 레이어 합성.
  *
  * z0 하늘 → z1 바이옴 → z2 하늘동물 → z3 땅프롭+땅동물 → z4 물프롭+물동물
- * → z5 손님 → z6 펜스   (docs/01-assets.md §3)
+ * → z5 펜스 → z6 손님   (docs/01-assets.md §3)
+ *
+ * **손님은 펜스보다 앞이다.** 뒤에 그리면 펜스 안쪽에 서 있는 꼴이 되어
+ * 관람객이 우리에 갇힌 것처럼 보인다. 관람객은 난간 이쪽 편에 서 있어야 한다.
  *
  * z3·z4 는 프롭과 동물을 **하나의 목록으로 합쳐 y 오름차순 정렬**해 그린다.
  * 그래야 동물이 프롭 뒤로 지나갈 때 프롭에 가려진다.
@@ -39,15 +45,20 @@ export class SceneRenderer {
     const view: ViewBox = { width: LOGICAL_WIDTH, height: LOGICAL_HEIGHT }
     const { sim } = input
 
+    // 카메라 변환 밖에서 지워야 확대 상태에서도 화면 전체가 깨끗해진다.
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
     ctx.clearRect(0, 0, view.width, view.height)
+    applyCamera(ctx, input.camera, view.width, view.height)
+
     this.drawSky(ctx, input.elapsed, view)
     ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
 
     this.drawSkyAnimals(ctx, sim, view)
     this.drawSortedLayer(ctx, sim, 'LAND', view)
     this.drawSortedLayer(ctx, sim, 'WATER', view)
-    this.drawVisitors(ctx, sim.visitors, input.fenceOffset, view)
     ctx.drawImage(getAssets().fence, 0, input.fenceOffset * view.height, view.width, view.height)
+    this.drawVisitors(ctx, sim.visitors, input.fenceOffset, view)
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
   }
 
   private drawSky(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {

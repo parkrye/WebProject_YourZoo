@@ -98,6 +98,7 @@ export function DrawModal({ onDone, onClose }: DrawModalProps) {
 
       <div className="draw-hint">
         <BitmapLabel text={tool === 'ERASER' ? 'ERASER' : 'PENCIL'} size={22} />
+        <BitmapLabel text="DRAW YOUR ANIMAL FACING RIGHT" size={20} />
       </div>
     </Popup>
   )

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { loadAssets } from '@/assets/AssetStore'
 import { BootScreen } from '@/app/BootScreen'
 import { GameRoot } from '@/app/GameRoot'
+import { startAutosave } from '@/store/gameStore'
 import { AssetInspector } from '@/dev/AssetInspector'
 
 export function App() {
@@ -24,6 +25,11 @@ export function App() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!ready) return
+    return startAutosave()
+  }, [ready])
 
   if (!ready) return <BootScreen progress={progress} {...(error !== undefined && { error })} />
   if (new URLSearchParams(location.search).get('dev') === 'assets') return <AssetInspector />
