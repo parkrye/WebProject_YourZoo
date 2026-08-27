@@ -169,7 +169,8 @@ export const VISITOR_HEIGHT = 0.46
 export const ANIMAL_HEIGHT: Record<Habitat, number> = {
   SKY: 0.075,
   LAND: 0.11,
-  WATER: 0.15,
+  // 물은 화면 맨 아래라 원근 배율(최대 1.18)까지 곱해진다. 기준값을 땅보다 조금만 크게 둔다.
+  WATER: 0.12,
 }
 
 /** y 가 클수록(카메라에 가까울수록) 크게 보이는 원근 배율 범위. */

@@ -21,6 +21,8 @@ export interface DragState {
 interface StorageTrayProps {
   stored: readonly Animal[]
   shippingCount: number
+  /** 손이 우리 위로 넘어갔을 때. 트레이를 내려 놓을 자리를 보여 준다. */
+  lowered: boolean
   /** 트레이 항목을 짧게 눌렀을 때 — 정보 카드를 연다. */
   onSelect: (animal: Animal) => void
   onDragStart: (state: DragState) => void
@@ -38,7 +40,7 @@ interface StorageTrayProps {
  * "여기 놓는다"는 조작이 성립하기 때문에 팝업이 아니라 트레이다.
  */
 export function StorageTray({
-  stored, shippingCount, onSelect, onDragStart, onDragMove, onDragEnd, onClose,
+  stored, shippingCount, lowered, onSelect, onDragStart, onDragMove, onDragEnd, onClose,
 }: StorageTrayProps) {
   const originRef = useRef<{ x: number; y: number } | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
@@ -94,7 +96,7 @@ export function StorageTray({
   return (
     // 드래그 중에는 트레이를 비쳐 보이게 한다. 물 영역이 트레이에 가려
     // "어디에 놓는지" 가 보이지 않으면 물 동물을 배치할 수 없다.
-    <div className={trayClass(draggingId !== null, closing)}>
+    <div className={trayClass(draggingId !== null, closing, lowered)}>
       <div className="storage-tray-head">
         <BitmapLabel text={`STORAGE ${stored.length}`} size={24} />
         {shippingCount > 0 && <BitmapLabel text={`SHIPPING ${shippingCount}`} size={20} />}
@@ -129,8 +131,13 @@ export function StorageTray({
   )
 }
 
-function trayClass(dragging: boolean, closing: boolean): string {
-  return ['storage-tray', dragging ? 'is-dragging' : '', closing ? 'is-closing' : '']
+function trayClass(dragging: boolean, closing: boolean, lowered: boolean): string {
+  return [
+    'storage-tray',
+    dragging ? 'is-dragging' : '',
+    closing ? 'is-closing' : '',
+    lowered ? 'is-lowered' : '',
+  ]
     .filter(Boolean)
     .join(' ')
 }

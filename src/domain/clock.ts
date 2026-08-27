@@ -66,62 +66,63 @@ export function clockLabel(elapsed: number): { hh: string; mm: string } {
 }
 
 /**
- * 시간대 조명. 세 층으로 나눈다.
+ * 시간대 조명. 층마다 **다른 정도로** 반응한다.
  *
- * 한 겹으로 화면 전체를 덮으면 하늘까지 같은 색이 겹쳐 탁해지고,
- * 우리 안쪽은 "빛이 어디서 오는지" 없이 그냥 어두워지기만 한다.
+ *   `sky`   하늘은 늘 좀 밝다. 색만 살짝 얹고 밝기는 오히려 되살린다
+ *   `area`  바닥·프롭·동물은 색 약간 + 밝기 약간 + 그늘 약간. 관찰 대상이라 너무 어두워지면 안 된다
+ *   `fence` 울타리와 손님은 시간을 그대로 따른다. 밤엔 확실히 어둡고 저녁엔 확실히 붉다
  *
- *   1. `sky`       — 하늘. 이미 시간대별 이미지가 있으니 보정만 얹는다
- *   2. `enclosure` — 우리 안쪽(바닥·프롭·동물). 위에서 빛이 내려오는 그라디언트
- *   3. `global`    — 마지막에 화면 전체를 묶는 색조
+ * 한 겹으로 화면 전체를 덮으면 이 차이가 사라져 전부 같이 어두워지기만 한다.
  */
 export interface SkyLight {
-  readonly multiply: string
-  readonly alpha: number
+  readonly tint: string
+  readonly tintAlpha: number
+  /** 되살릴 밝기. 하늘이 가라앉지 않게 한다. */
+  readonly lift: number
 }
 
-export interface EnclosureLight {
-  /** 그늘 색. 곱연산으로 깔린다. */
-  readonly shade: string
-  readonly shadeAlpha: number
-  /** 위에서 내려오는 빛의 색 */
+export interface AreaLight {
+  readonly tint: string
+  readonly tintAlpha: number
+  /** 그늘 세기 */
+  readonly shade: number
+  /** 위에서 내려오는 빛 */
   readonly light: string
-  /** 빛이 가장 센 지점의 세기 */
   readonly lightAlpha: number
-  /** 빛이 닿는 깊이 (0..1). 낮으면 위쪽만 밝다. */
+  /** 빛이 닿는 깊이 (0..1) */
   readonly reach: number
 }
 
-export interface GlobalLight {
-  readonly multiply: string
-  readonly glow: string
-  readonly glowAlpha: number
+export interface FenceLight {
+  readonly tint: string
+  readonly tintAlpha: number
+  /** 어둡게 하는 정도. 밤엔 크게, 낮엔 0. */
+  readonly shade: number
 }
 
 export interface TimeLighting {
   readonly sky: SkyLight
-  readonly enclosure: EnclosureLight
-  readonly global: GlobalLight
+  readonly area: AreaLight
+  readonly fence: FenceLight
 }
 
 const LIGHTING: Record<SkyPhase, TimeLighting> = {
   DAY: {
-    sky: { multiply: '#ffffff', alpha: 0 },
-    // 한낮은 해가 높다. 빛이 깊이 들어오고 바닥에만 옅은 그늘이 남는다.
-    enclosure: { shade: '#d8c9a8', shadeAlpha: 0.12, light: '#fff4c8', lightAlpha: 0.2, reach: 0.9 },
-    global: { multiply: '#ffffff', glow: '#fff6d8', glowAlpha: 0.04 },
+    sky: { tint: '#ffffff', tintAlpha: 0, lift: 0 },
+    area: { tint: '#fff4d0', tintAlpha: 0.08, shade: 0.06, light: '#fff4c8', lightAlpha: 0.16, reach: 0.9 },
+    fence: { tint: '#fff2cc', tintAlpha: 0.1, shade: 0 },
   },
   AFTERNOON: {
-    sky: { multiply: '#ffc27a', alpha: 0.4 },
-    // 해가 낮아 빛이 얕게 들고, 아래쪽부터 그늘이 깊게 깔린다.
-    enclosure: { shade: '#a8603a', shadeAlpha: 0.55, light: '#ff8a28', lightAlpha: 0.45, reach: 0.4 },
-    global: { multiply: '#ffb47e', glow: '#ff7a2e', glowAlpha: 0.16 },
+    // 노을은 하늘 이미지가 이미 붉다. 색만 조금 더 얹고 밝기는 지킨다.
+    sky: { tint: '#ffb877', tintAlpha: 0.2, lift: 0.06 },
+    area: { tint: '#e8a165', tintAlpha: 0.3, shade: 0.2, light: '#ff9840', lightAlpha: 0.26, reach: 0.5 },
+    // 울타리는 관람로 쪽이라 석양을 정면으로 받는다.
+    fence: { tint: '#ff8a3c', tintAlpha: 0.5, shade: 0.22 },
   },
   NIGHT: {
-    sky: { multiply: '#7d90d0', alpha: 0.3 },
-    // 달빛은 약하고 차다. 바닥까지 닿지 않는다.
-    enclosure: { shade: '#1e2a55', shadeAlpha: 0.74, light: '#a8bcff', lightAlpha: 0.24, reach: 0.32 },
-    global: { multiply: '#5d70ab', glow: '#22346b', glowAlpha: 0.2 },
+    sky: { tint: '#8fa4e0', tintAlpha: 0.12, lift: 0.1 },
+    area: { tint: '#6d80c0', tintAlpha: 0.34, shade: 0.3, light: '#a8bcff', lightAlpha: 0.2, reach: 0.4 },
+    fence: { tint: '#4a5c9e', tintAlpha: 0.55, shade: 0.5 },
   },
 }
 
@@ -135,20 +136,22 @@ export function timeLighting(elapsed: number): TimeLighting {
   const t = blend.t
   return {
     sky: {
-      multiply: mixHex(from.sky.multiply, to.sky.multiply, t),
-      alpha: lerpNum(from.sky.alpha, to.sky.alpha, t),
+      tint: mixHex(from.sky.tint, to.sky.tint, t),
+      tintAlpha: lerpNum(from.sky.tintAlpha, to.sky.tintAlpha, t),
+      lift: lerpNum(from.sky.lift, to.sky.lift, t),
     },
-    enclosure: {
-      shade: mixHex(from.enclosure.shade, to.enclosure.shade, t),
-      shadeAlpha: lerpNum(from.enclosure.shadeAlpha, to.enclosure.shadeAlpha, t),
-      light: mixHex(from.enclosure.light, to.enclosure.light, t),
-      lightAlpha: lerpNum(from.enclosure.lightAlpha, to.enclosure.lightAlpha, t),
-      reach: lerpNum(from.enclosure.reach, to.enclosure.reach, t),
+    area: {
+      tint: mixHex(from.area.tint, to.area.tint, t),
+      tintAlpha: lerpNum(from.area.tintAlpha, to.area.tintAlpha, t),
+      shade: lerpNum(from.area.shade, to.area.shade, t),
+      light: mixHex(from.area.light, to.area.light, t),
+      lightAlpha: lerpNum(from.area.lightAlpha, to.area.lightAlpha, t),
+      reach: lerpNum(from.area.reach, to.area.reach, t),
     },
-    global: {
-      multiply: mixHex(from.global.multiply, to.global.multiply, t),
-      glow: mixHex(from.global.glow, to.global.glow, t),
-      glowAlpha: lerpNum(from.global.glowAlpha, to.global.glowAlpha, t),
+    fence: {
+      tint: mixHex(from.fence.tint, to.fence.tint, t),
+      tintAlpha: lerpNum(from.fence.tintAlpha, to.fence.tintAlpha, t),
+      shade: lerpNum(from.fence.shade, to.fence.shade, t),
     },
   }
 }

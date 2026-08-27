@@ -4,6 +4,7 @@ import { BootScreen } from '@/app/BootScreen'
 import { GameRoot } from '@/app/GameRoot'
 import { startAutosave } from '@/store/gameStore'
 import { useGameAudio } from '@/audio/useGameAudio'
+import { useBackgroundClock } from '@/core/useBackgroundClock'
 import { AssetInspector } from '@/dev/AssetInspector'
 
 export function App() {
@@ -28,6 +29,7 @@ export function App() {
   }, [])
 
   useGameAudio()
+  useBackgroundClock()
 
   useEffect(() => {
     if (!ready) return

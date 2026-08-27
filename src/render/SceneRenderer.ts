@@ -4,7 +4,7 @@ import {
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
 import { easeInOutCubic } from '@/core/math'
-import { phaseBlend, timeLighting, type EnclosureLight } from '@/domain/clock'
+import { phaseBlend, timeLighting, type AreaLight, type FenceLight } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
 import { PROP_BOB, type PlacedProp } from '@/sim/props'
@@ -56,6 +56,7 @@ export class SceneRenderer {
   private readonly buffer: Drawable[] = []
   private selectedId: string | null = null
   private time = 0
+  private layer: HTMLCanvasElement | null = null
 
   draw(ctx: CanvasRenderingContext2D, input: SceneInput): void {
     const view: ViewBox = { width: LOGICAL_WIDTH, height: LOGICAL_HEIGHT }
@@ -93,64 +94,91 @@ export class SceneRenderer {
     const light = timeLighting(input.elapsed)
 
     this.drawSky(ctx, input.elapsed, view)
-    // 하늘은 시간대별 이미지가 이미 다르다. 색을 얹기만 하고 어둡게 하지 않는다.
-    if (light.sky.alpha > 0) {
-      fillWith(ctx, view, 'multiply', light.sky.multiply, light.sky.alpha)
-    }
+    // 하늘은 색만 얹고 밝기를 되살린다. 늘 좀 밝아야 한다.
+    if (light.sky.tintAlpha > 0) fill(ctx, view, 'multiply', light.sky.tint, light.sky.tintAlpha)
+    if (light.sky.lift > 0) fill(ctx, view, 'lighter', '#ffffff', light.sky.lift)
 
     ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
     this.drawSkyAnimals(ctx, sim, view)
     this.drawSortedLayer(ctx, sim, 'LAND', view)
     this.drawSortedLayer(ctx, sim, 'WATER', view)
+    this.drawAreaLight(ctx, light.area, view)
 
-    // 우리 안쪽 조명은 펜스보다 먼저다. 펜스는 관람로 쪽이라 우리 안 그늘을 받지 않는다.
-    this.drawEnclosureLight(ctx, light.enclosure, view)
-
-    ctx.drawImage(getAssets().fence, 0, input.fenceOffset * view.height, view.width, view.height)
-    this.drawVisitors(ctx, sim.visitors, input.fenceOffset, view)
-
-    // 마지막으로 화면 전체를 한 색조로 묶는다.
-    if (light.global.glowAlpha > 0 || light.global.multiply !== '#ffffff') {
-      fillWith(ctx, view, 'multiply', light.global.multiply, 1)
-      if (light.global.glowAlpha > 0) {
-        fillWith(ctx, view, 'lighter', light.global.glow, light.global.glowAlpha)
-      }
-    }
+    // 울타리와 손님은 따로 그려 조명을 세게 먹인다.
+    // 화면 전체에 걸면 관찰 대상인 우리 안까지 같이 어두워진다.
+    this.drawFenceLayer(ctx, sim, light.fence, input.fenceOffset, view)
   }
 
   /**
    * 우리 안쪽 조명.
    *
-   * 그늘을 깔고 그 위에 **위에서 내려오는 빛**을 세로 그라디언트로 얹는다.
-   * 한낮엔 빛이 바닥까지 닿고, 해가 낮아질수록 얕게 들다가, 밤엔 달빛만 위쪽에 남는다.
-   * 평평하게 어둡게만 하면 시간이 아니라 밝기만 바뀐 것처럼 보인다.
+   * 색과 그늘을 **약하게** 얹고 위에서 내려오는 빛을 세로 그라디언트로 더한다.
+   * 여기는 플레이어가 들여다보는 곳이라 시간에 맞춰 어두워지되 형체는 남아야 한다.
    */
-  private drawEnclosureLight(
-    ctx: CanvasRenderingContext2D,
-    light: EnclosureLight,
-    view: ViewBox,
-  ): void {
-    if (light.shadeAlpha <= 0 && light.lightAlpha <= 0) return
+  private drawAreaLight(ctx: CanvasRenderingContext2D, light: AreaLight, view: ViewBox): void {
+    if (light.tintAlpha > 0) fill(ctx, view, 'multiply', light.tint, light.tintAlpha)
+    if (light.shade > 0) fill(ctx, view, 'multiply', '#5b5f78', light.shade)
+
+    if (light.lightAlpha <= 0) return
+    const gradient = ctx.createLinearGradient(0, 0, 0, view.height * light.reach)
+    gradient.addColorStop(0, light.light)
+    gradient.addColorStop(1, 'rgba(0,0,0,0)')
 
     ctx.save()
-    if (light.shadeAlpha > 0) {
-      ctx.globalCompositeOperation = 'multiply'
-      ctx.globalAlpha = light.shadeAlpha
-      ctx.fillStyle = light.shade
-      ctx.fillRect(0, 0, view.width, view.height)
-    }
-
-    if (light.lightAlpha > 0) {
-      const gradient = ctx.createLinearGradient(0, 0, 0, view.height * light.reach)
-      gradient.addColorStop(0, light.light)
-      gradient.addColorStop(1, 'rgba(0,0,0,0)')
-
-      ctx.globalCompositeOperation = 'lighter'
-      ctx.globalAlpha = light.lightAlpha
-      ctx.fillStyle = gradient
-      ctx.fillRect(0, 0, view.width, view.height)
-    }
+    ctx.globalCompositeOperation = 'lighter'
+    ctx.globalAlpha = light.lightAlpha
+    ctx.fillStyle = gradient
+    ctx.fillRect(0, 0, view.width, view.height)
     ctx.restore()
+  }
+
+  /**
+   * 울타리와 손님을 별도 레이어에 그린 뒤 조명을 입혀 합성한다.
+   *
+   * `multiply` 는 알파를 함께 곱하므로 투명한 곳은 투명하게 남는다 —
+   * 덕분에 울타리 모양대로만 색이 먹고 뒤의 우리는 건드리지 않는다.
+   */
+  private drawFenceLayer(
+    ctx: CanvasRenderingContext2D,
+    sim: EnclosureSim,
+    light: FenceLight,
+    fenceOffset: number,
+    view: ViewBox,
+  ): void {
+    const layer = this.fenceLayer(view)
+    const lctx = layer.getContext('2d')
+    if (!lctx) return
+
+    lctx.setTransform(1, 0, 0, 1, 0, 0)
+    lctx.clearRect(0, 0, view.width, view.height)
+    lctx.drawImage(getAssets().fence, 0, fenceOffset * view.height, view.width, view.height)
+    this.drawVisitors(lctx, sim.visitors, fenceOffset, view)
+
+    if (light.tintAlpha > 0) {
+      lctx.globalCompositeOperation = 'multiply'
+      lctx.globalAlpha = light.tintAlpha
+      lctx.fillStyle = light.tint
+      lctx.fillRect(0, 0, view.width, view.height)
+    }
+    if (light.shade > 0) {
+      lctx.globalAlpha = light.shade
+      lctx.fillStyle = '#1c2340'
+      lctx.fillRect(0, 0, view.width, view.height)
+    }
+    lctx.globalCompositeOperation = 'source-over'
+    lctx.globalAlpha = 1
+
+    ctx.drawImage(layer, 0, 0)
+  }
+
+  /** 울타리 레이어는 한 번만 만들어 재사용한다. 프레임마다 캔버스를 새로 만들 이유가 없다. */
+  private fenceLayer(view: ViewBox): HTMLCanvasElement {
+    if (!this.layer) {
+      this.layer = document.createElement('canvas')
+      this.layer.width = view.width
+      this.layer.height = view.height
+    }
+    return this.layer
   }
 
   private drawSky(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {
@@ -282,7 +310,7 @@ export class SceneRenderer {
 const byDepth = (a: Drawable, b: Drawable): number => a.y - b.y
 
 /** 화면 전체를 한 색으로 덮는다. 조명 층마다 반복되는 코드라 따로 뺐다. */
-function fillWith(
+function fill(
   ctx: CanvasRenderingContext2D,
   view: ViewBox,
   mode: GlobalCompositeOperation,

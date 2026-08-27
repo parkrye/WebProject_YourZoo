@@ -35,6 +35,12 @@ const FENCE_TWEEN_RESPONSE = 6
 const DRAG_GHOST_SIZE = 96
 /** 우리를 넘길 때 옆으로 미는 시간(초). */
 const SLIDE_DURATION = 0.42
+/**
+ * 창고에서 끌어낸 손이 트레이 밖으로 나가면 울타리를 이만큼 더 내린다.
+ * 물 영역은 평소 울타리와 트레이에 가려 어디에 놓는지 보이지 않는다.
+ * 다만 완전히 치우지는 않는다 — 울타리가 사라지면 우리 경계도 함께 사라진다.
+ */
+const FENCE_OFFSET_DRAGGING = 0.32
 
 export function ZooScreen({ detail }: ZooScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -44,6 +50,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   // 카메라는 드래그 중 매 프레임 읽히므로 ref 가 진짜 소유자다.
   // state 는 버튼 활성화 표시를 위한 사본일 뿐이다.
   const cameraRef = useRef<Camera>(createCamera())
+  /** 렌더 루프가 매 프레임 읽는다. state 로 두면 트윈이 한 박자 늦는다. */
+  const loweringRef = useRef(false)
   const [camera, setCamera] = useState<Camera>(cameraRef.current)
   const [tool, setTool] = useState<DetailTool>('CURSOR')
   const panRef = useRef<{ x: number; y: number } | null>(null)
@@ -56,6 +64,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null)
   const [dropError, setDropError] = useState<string | null>(null)
+  /** 드래그 중인 손이 트레이 밖(= 우리 위)에 있는가. 그때만 시야를 비워 준다. */
+  const [dragOverScene, setDragOverScene] = useState(false)
   const transitionRef = useRef<EnclosureTransition | null>(null)
 
   // 우리 3개를 모두 유지하며 계속 시뮬레이션한다. 넘겼다 돌아왔을 때 얼어 있으면 어색하다.
@@ -120,6 +130,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   }, [animals, sims])
 
   useEffect(() => {
+    loweringRef.current = dragOverScene
+  }, [dragOverScene])
+
+  useEffect(() => {
     if (!dropError) return
     const timer = window.setTimeout(() => setDropError(null), 1800)
     return () => window.clearTimeout(timer)
@@ -130,8 +144,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
-
-    const targetFence = detail ? FENCE_OFFSET_DETAIL : FENCE_OFFSET_ZOO
 
     return startTicker({
       fixedUpdate: (step) => {
@@ -149,6 +161,12 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           })
         }
 
+        // 드래그 중 시야를 비우는 것도 같은 트윈을 탄다. 뚝 끊기면 놓을 자리를 놓친다.
+        const targetFence = loweringRef.current
+          ? FENCE_OFFSET_DRAGGING
+          : detail
+            ? FENCE_OFFSET_DETAIL
+            : FENCE_OFFSET_ZOO
         fenceRef.current += (targetFence - fenceRef.current) * Math.min(1, step * FENCE_TWEEN_RESPONSE)
 
         const transition = transitionRef.current
@@ -191,6 +209,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const trackGhost = useCallback((state: DragState) => {
     setDrag(state)
     setGhost(toStage(state.clientX, state.clientY))
+
+    // 트레이 위에 손이 있으면 아직 고르는 중이다. 벗어나야 놓을 자리를 보여 준다.
+    const tray = document.querySelector('.storage-tray')?.getBoundingClientRect()
+    setDragOverScene(!tray || state.clientY < tray.top)
   }, [toStage])
 
   /** 뷰포트 좌표를 씬의 정규화 좌표로 바꾼다. Stage 의 CSS 축소를 되돌려야 한다. */
@@ -270,6 +292,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const handleDrop = (state: DragState): void => {
     setDrag(null)
     setGhost(null)
+    setDragOverScene(false)
 
     const scene = toScene(state.clientX, state.clientY)
     if (!scene) return
@@ -496,6 +519,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           <StorageTray
             stored={stored}
             shippingCount={shippingCount}
+            lowered={dragOverScene}
             onSelect={(animal) => select(animal.id)}
             onDragStart={trackGhost}
             onDragMove={trackGhost}

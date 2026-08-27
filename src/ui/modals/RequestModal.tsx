@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { GUI, type Habitat } from '@/assets/manifest'
+import { GUI } from '@/assets/manifest'
 import { createRng } from '@/core/rng'
 import { computeAppeal, countHabitat, createAnimalId, type Animal } from '@/domain/animal'
 import { ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
@@ -10,6 +10,7 @@ import {
   type AnimalTraits, type AnimalTypeId,
 } from '@/domain/traits'
 import type { ExportedDrawing } from '@/draw/export'
+import type { TraitMode } from '@/domain/requestDraft'
 import { registerFromBlob } from '@/sim/imageCache'
 import { putImage } from '@/store/imageDb'
 import { useGameStore } from '@/store/gameStore'
@@ -24,7 +25,6 @@ import { OrdersTab } from '@/ui/panels/OrdersTab'
 import { DrawModal } from './DrawModal'
 
 type RequestTab = 'NEW' | 'ORDERS'
-type TraitMode = 'TYPE' | 'CUSTOM' | 'RANDOM'
 
 const TABS: readonly TabItem<RequestTab>[] = [
   { id: 'NEW', label: 'NEW ANIMAL' },
@@ -59,17 +59,19 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const orderAnimal = useGameStore((s) => s.orderAnimal)
   const canOrder = useGameStore((s) => s.canOrderAnimal)
 
-  const [name, setName] = useState('')
-  const [drawing, setDrawing] = useState<ExportedDrawing | null>(null)
+  // 작성 중인 내용은 스토어에 둔다. 창을 닫았다 열어도 그림과 설정이 그대로다.
+  const draft = useGameStore((s) => s.draft)
+  const patchDraft = useGameStore((s) => s.patchDraft)
+  const { name, templateId, habitat, mode, typeId, custom, rolled, rollSeed, drawing } = draft
+
   const [drawOpen, setDrawOpen] = useState(false)
-  const [templateId, setTemplateId] = useState<TemplateId>('FREE')
-  const [habitat, setHabitat] = useState<Habitat | null>(null)
-  const [mode, setMode] = useState<TraitMode>('TYPE')
-  const [typeId, setTypeId] = useState<AnimalTypeId>('BEAST')
-  const [custom, setCustom] = useState<AnimalTraits>(() => traitsFromType('BEAST'))
-  const [rollSeed, setRollSeed] = useState(1)
-  const [rolled, setRolled] = useState<AnimalTraits>(() => randomTraits(createRng(1)))
   const [busy, setBusy] = useState(false)
+
+  const setName = (value: string): void => patchDraft({ name: value })
+  const setMode = (value: TraitMode): void => patchDraft({ mode: value })
+  const setTypeId = (value: AnimalTypeId): void => patchDraft({ typeId: value })
+  const setCustom = (value: AnimalTraits): void => patchDraft({ custom: value })
+  const setDrawing = (value: ExportedDrawing): void => patchDraft({ drawing: value })
 
   const base: AnimalTraits =
     mode === 'TYPE' ? traitsFromType(typeId) : mode === 'CUSTOM' ? custom : rolled
@@ -132,18 +134,17 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
    * 새 템플릿으로 그려 놓고 서식지를 물로 두면 날갯짓 프로파일과 어긋난다.
    */
   const selectTemplate = (id: TemplateId): void => {
-    setTemplateId(id)
     const template = TEMPLATES[id]
-    setHabitat(template.habitat)
-    if (!template.suggestedType) return
-    setMode('TYPE')
-    setTypeId(template.suggestedType)
+    patchDraft({
+      templateId: id,
+      habitat: template.habitat,
+      ...(template.suggestedType && { mode: 'TYPE' as const, typeId: template.suggestedType }),
+    })
   }
 
   const reroll = (): void => {
     const seed = rollSeed + 1
-    setRollSeed(seed)
-    setRolled(randomTraits(createRng(Math.imul(seed, 2654435761))))
+    patchDraft({ rollSeed: seed, rolled: randomTraits(createRng(Math.imul(seed, 2654435761))) })
   }
 
   return (
@@ -196,7 +197,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
               key={h}
               label={h}
               active={traits.habitat === h}
-              onClick={() => setHabitat(h)}
+              onClick={() => patchDraft({ habitat: h })}
             />
           ))}
         </div>

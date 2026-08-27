@@ -9,6 +9,8 @@ import { advanceClock, type ClockState } from '@/domain/clock'
 import { settleDay, type DailyReport } from '@/domain/economy'
 import { neighborEnclosure } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
+import { emptyDraft, type RequestDraft } from '@/domain/requestDraft'
+import { randomTraits } from '@/domain/traits'
 import { skipsShipping, type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
@@ -41,6 +43,8 @@ interface GameState {
   unlocked: BiomeId[]
   animals: Animal[]
   orders: Order[]
+  /** 작성 중인 요청서. 세션 동안만 유지되고 세이브에는 넣지 않는다. */
+  draft: RequestDraft
   lastReport: DailyReport | null
   /** 최근 정산 기록. 운영 현황에서 되짚어 볼 수 있다. */
   reports: DailyReport[]
@@ -58,6 +62,8 @@ interface GameState {
   /** 요청서 제출. 비용을 차감하고 배송 대기 상태로 넣는다. */
   orderAnimal(animal: Animal): boolean
   canOrderAnimal(): boolean
+  patchDraft(patch: Partial<RequestDraft>): void
+  clearDraft(): void
   /** 창고에서 우리로. 서식지·정원이 맞지 않으면 false. */
   placeAnimal(id: string, enclosureId: BiomeId): boolean
   /** 우리에서 창고로. */
@@ -92,6 +98,7 @@ const initial = {
   unlocked: ['FIELD'] as BiomeId[],
   animals: [] as Animal[],
   orders: [] as Order[],
+  draft: emptyDraft(randomTraits(createRng(1))),
   lastReport: null as DailyReport | null,
   reports: [] as DailyReport[],
   options: { bgm: 0.7, sfx: 0.8 },
@@ -194,6 +201,9 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   canOrderAnimal: () => get().gold >= ANIMAL_CREATE_COST,
 
+  patchDraft: (patch) => set((s) => ({ draft: { ...s.draft, ...patch } })),
+  clearDraft: () => set({ draft: emptyDraft(randomTraits(createRng(Date.now() & 0xffff))) }),
+
   canPlaceIn: (enclosureId) => {
     const { animals, unlocked } = get()
     if (!unlocked.includes(enclosureId)) return false
@@ -213,6 +223,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       gold: s.gold - ANIMAL_CREATE_COST,
       animals: [...s.animals, placed],
       tutorial: s.tutorial === 'DRAW' ? 'INSPECT' : s.tutorial,
+      draft: emptyDraft(randomTraits(createRng(Date.now() & 0xffff))),
     }))
     return true
   },
@@ -295,7 +306,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startNewGame: () => {
     clearSave()
-    set({ ...initial, screen: 'NAMING' })
+    set({ ...initial, draft: emptyDraft(randomTraits(createRng(7))), screen: 'NAMING' })
   },
 
   confirmZooName: (name) => {

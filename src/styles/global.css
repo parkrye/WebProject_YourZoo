@@ -829,8 +829,15 @@ html, body, #root {
   transition: opacity 0.12s ease;
 }
 
-/* 드롭 지점이 보여야 하므로 드래그 중에는 거의 투명해진다. */
-.storage-tray.is-dragging { opacity: 0.18; }
+/* 트레이 위에서 고르는 동안은 비쳐만 보이고 */
+.storage-tray.is-dragging { opacity: 0.35; }
+
+/* 우리 위로 넘어가면 아예 내려가 물 영역까지 훤히 보이게 한다. */
+.storage-tray.is-lowered {
+  opacity: 0.12;
+  transform: translateY(78%);
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
 .storage-tray.is-closing { animation: tray-out 0.18s ease-in both; }
 
 .storage-tray-head { display: flex; align-items: center; gap: 24px; }
