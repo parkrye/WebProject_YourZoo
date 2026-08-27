@@ -52,6 +52,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedIdRef = useRef<string | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
+  const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null)
   const [dropError, setDropError] = useState<string | null>(null)
   const transitionRef = useRef<EnclosureTransition | null>(null)
 
@@ -106,6 +107,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     if (detail) return
     applyCameraState(createCamera())
     setTool('CURSOR')
+    setTrayOpen(false)
     select(null)
   }, [detail, applyCameraState, select])
 
@@ -166,6 +168,26 @@ export function ZooScreen({ detail }: ZooScreenProps) {
       },
     })
   }, [detail, renderer, sims])
+
+  /**
+   * 뷰포트 좌표를 Stage 안쪽의 논리 좌표로 바꾼다.
+   *
+   * 드래그 고스트가 커서에서 어긋났던 이유가 이것이다 — 고스트는 `.screen` 안에 있고
+   * 그 조상인 `.stage-view` 에 `transform: scale()` 이 걸려 있다. transform 이 걸린 조상은
+   * `position: fixed` 의 기준이 되므로, 뷰포트 좌표를 그대로 넣으면 스케일만큼 밀린다.
+   */
+  const toStage = useCallback((clientX: number, clientY: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    const scale = LOGICAL_WIDTH / rect.width
+    return { x: (clientX - rect.left) * scale, y: (clientY - rect.top) * scale }
+  }, [])
+
+  const trackGhost = useCallback((state: DragState) => {
+    setDrag(state)
+    setGhost(toStage(state.clientX, state.clientY))
+  }, [toStage])
 
   /** 뷰포트 좌표를 씬의 정규화 좌표로 바꾼다. Stage 의 CSS 축소를 되돌려야 한다. */
   const toScene = useCallback((clientX: number, clientY: number) => {
@@ -228,7 +250,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     }
   }
 
-  /** 창고에서 끌어온 동물을 우리에 내려놓는다. 서식지와 정원을 함께 본다. */
+  /**
+   * 창고에서 끌어온 동물을 우리에 내려놓는다. 서식지와 정원을 함께 본다.
+   * 배치는 **상세보기에서만** 한다. 펜스 너머 멀리서 던져 넣는 그림이 어색하다.
+   */
   /** 좌우 전환. 스토어를 바꾸기 전에 나가는 우리를 붙잡아 슬라이드를 시작한다. */
   const slideTo = (direction: 1 | -1): void => {
     if (transitionRef.current) return
@@ -240,6 +265,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
 
   const handleDrop = (state: DragState): void => {
     setDrag(null)
+    setGhost(null)
 
     const scene = toScene(state.clientX, state.clientY)
     if (!scene) return
@@ -285,36 +311,48 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         <TutorialOverlay hint={TUTORIAL_HINTS[tutorial]} onSkip={skipTutorial} />
       )}
 
-      {!isOpen && !modal && (
+      {!isOpen && !modal && !trayOpen && (
         <LockedOverlay id={enclosure} gold={gold} onUnlock={() => unlockEnclosure(enclosure)} />
       )}
 
       {/*
-        팝업이 떠 있는 동안에는 HUD 를 통째로 감춘다.
-        아래에서 버튼과 바가 비쳐 보이면 무엇을 눌러야 할지 헷갈리고,
-        실제로 우리 이동 화살표가 팝업 옆에서 활성인 채로 남아 있었다.
+        팝업이나 창고가 열려 있으면 HUD 를 통째로 감춘다.
+        아래에서 버튼과 바가 비쳐 보이면 무엇을 눌러야 할지 헷갈린다.
+        열린 UI 는 자기 닫기 버튼으로만 빠져나간다.
       */}
-      {!modal && (
+      {!modal && !trayOpen && (
         <>
-          <div className="hud-top-left">
-            <BitmapLabel text={`DAY ${day}`} size={34} />
-            <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
-          </div>
-
-          <div className="hud-top-right">
-            <BitmapLabel text={zooName || 'MY ZOO'} size={26} align="right" />
-            <div className="hud-purse">
-              <IconGlyph icon={GUI.COIN} size={30} />
-              <BitmapLabel text={`${gold}`} size={24} />
-              <IconGlyph icon={GUI.MEDAL} size={30} />
-              <BitmapLabel text={`${reputation}`} size={24} />
+          {/*
+            상세보기는 우리 안을 들여다보는 화면이다. 날짜·시각·재화는 바깥 살림이라
+            여기서는 걷어내고, 지금 이 우리에 몇 마리가 있는지만 남긴다.
+          */}
+          {detail ? (
+            <div className="hud-enclosure-name">
+              <BitmapLabel text={`ANIMALS ${here}`} size={30} align="center" />
             </div>
-          </div>
+          ) : (
+            <>
+              <div className="hud-top-left">
+                <BitmapLabel text={`DAY ${day}`} size={34} />
+                <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
+              </div>
 
-          <div className="hud-enclosure-name">
-            <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
-            <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
-          </div>
+              <div className="hud-top-right">
+                <BitmapLabel text={zooName || 'MY ZOO'} size={26} align="right" />
+                <div className="hud-purse">
+                  <IconGlyph icon={GUI.COIN} size={30} />
+                  <BitmapLabel text={`${gold}`} size={24} />
+                  <IconGlyph icon={GUI.MEDAL} size={30} />
+                  <BitmapLabel text={`${reputation}`} size={24} />
+                </div>
+              </div>
+
+              <div className="hud-enclosure-name">
+                <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
+                <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
+              </div>
+            </>
+          )}
 
           <div className="hud-arrow hud-arrow-left">
             <IconButton icon={GUI.BACK} size={72} title="PREV" onClick={() => slideTo(-1)} />
@@ -322,12 +360,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           <div className="hud-arrow hud-arrow-right">
             <IconButton icon={GUI.BACK} size={72} title="NEXT" onClick={() => slideTo(1)} />
           </div>
-
-          {dropError && (
-            <div className="drop-error">
-              <BitmapLabel text={dropError} size={28} align="center" />
-            </div>
-          )}
 
           {selected && (
             <AnimalCard
@@ -346,27 +378,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                 },
               })}
             />
-          )}
-
-          {trayOpen && (
-            <StorageTray
-              stored={stored}
-              shippingCount={shippingCount}
-              onSelect={(animal) => select(animal.id)}
-              onDragStart={setDrag}
-              onDragMove={setDrag}
-              onDragEnd={handleDrop}
-              onClose={() => setTrayOpen(false)}
-            />
-          )}
-
-          {drag && (
-            <div
-              className="drag-ghost"
-              style={{ left: drag.clientX - DRAG_GHOST_SIZE / 2, top: drag.clientY - DRAG_GHOST_SIZE / 2 }}
-            >
-              <AnimalThumb imageId={drag.animal.imageId} size={DRAG_GHOST_SIZE} />
-            </div>
           )}
 
           <div className="hud-bottom-bar">
@@ -408,6 +419,17 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                     disabled={camera.zoom <= MIN_ZOOM}
                     onClick={() => applyCameraState(clampCamera(zoomStep(cameraRef.current, -1)))}
                   />
+                  {/* 배치는 상세보기에서만. 펜스 너머 멀리서 던져 넣는 그림은 어색하다. */}
+                  <BarButton
+                    icon={GUI.BOOK}
+                    label="STORAGE"
+                    data-tutorial="storage"
+                    onClick={() => {
+                      advanceTutorial('STORAGE', 'PLACE')
+                      select(null)
+                      setTrayOpen(true)
+                    }}
+                  />
                 </>
               ) : (
                 <BarButton
@@ -420,20 +442,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                   }}
                 />
               )}
-
-              <BarButton
-                icon={GUI.BOOK}
-                label="STORAGE"
-                data-tutorial="storage"
-                active={trayOpen}
-                onClick={() => {
-                  advanceTutorial('STORAGE', 'PLACE')
-                  setTrayOpen((open) => !open)
-                }}
-              />
             </div>
 
-            {/* 상세보기는 관찰에 집중하는 화면이다. 시스템 버튼까지 늘어놓을 이유가 없다. */}
             <div className="bar-group bar-right">
               {!detail && (
                 <>
@@ -443,6 +453,36 @@ export function ZooScreen({ detail }: ZooScreenProps) {
               )}
             </div>
           </div>
+        </>
+      )}
+
+      {/* 창고가 열려 있는 동안에는 창고와 드롭 안내만 남는다. */}
+      {trayOpen && (
+        <>
+          {dropError && (
+            <div className="drop-error">
+              <BitmapLabel text={dropError} size={28} align="center" />
+            </div>
+          )}
+
+          <StorageTray
+            stored={stored}
+            shippingCount={shippingCount}
+            onSelect={(animal) => select(animal.id)}
+            onDragStart={trackGhost}
+            onDragMove={trackGhost}
+            onDragEnd={handleDrop}
+            onClose={() => setTrayOpen(false)}
+          />
+
+          {drag && ghost && (
+            <div
+              className="drag-ghost"
+              style={{ left: ghost.x - DRAG_GHOST_SIZE / 2, top: ghost.y - DRAG_GHOST_SIZE / 2 }}
+            >
+              <AnimalThumb imageId={drag.animal.imageId} size={DRAG_GHOST_SIZE} />
+            </div>
+          )}
         </>
       )}
     </div>

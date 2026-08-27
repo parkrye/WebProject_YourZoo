@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { GUI } from '@/assets/manifest'
+import { GUI, type Habitat } from '@/assets/manifest'
 import { createRng } from '@/core/rng'
 import { computeAppeal, countHabitat, createAnimalId, type Animal } from '@/domain/animal'
 import { ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
@@ -63,6 +63,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const [drawing, setDrawing] = useState<ExportedDrawing | null>(null)
   const [drawOpen, setDrawOpen] = useState(false)
   const [templateId, setTemplateId] = useState<TemplateId>('FREE')
+  const [habitat, setHabitat] = useState<Habitat | null>(null)
   const [mode, setMode] = useState<TraitMode>('TYPE')
   const [typeId, setTypeId] = useState<AnimalTypeId>('BEAST')
   const [custom, setCustom] = useState<AnimalTraits>(() => traitsFromType('BEAST'))
@@ -70,8 +71,16 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const [rolled, setRolled] = useState<AnimalTraits>(() => randomTraits(createRng(1)))
   const [busy, setBusy] = useState(false)
 
-  const traits: AnimalTraits =
+  const base: AnimalTraits =
     mode === 'TYPE' ? traitsFromType(typeId) : mode === 'CUSTOM' ? custom : rolled
+
+  /**
+   * 서식지는 **따로 고른다.**
+   * 예전엔 습성 프리셋이 서식지까지 결정했는데, FREE 템플릿으로 만들면 기본값인
+   * 땅 동물만 나왔고 왜 하늘·물에 못 놓는지 화면 어디에도 드러나지 않았다.
+   * 배치 구역을 정하는 값이니 눈에 보이는 자리에 둔다. (식성 HERB/CARN/OMNI 는 무관하다)
+   */
+  const traits: AnimalTraits = habitat ? { ...base, habitat } : base
 
   const previewUrl = useMemo(() => (drawing ? URL.createObjectURL(drawing.blob) : null), [drawing])
 
@@ -124,10 +133,11 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
    */
   const selectTemplate = (id: TemplateId): void => {
     setTemplateId(id)
-    const suggested = TEMPLATES[id].suggestedType
-    if (!suggested) return
+    const template = TEMPLATES[id]
+    setHabitat(template.habitat)
+    if (!template.suggestedType) return
     setMode('TYPE')
-    setTypeId(suggested)
+    setTypeId(template.suggestedType)
   }
 
   const reroll = (): void => {
@@ -179,6 +189,18 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
           ))}
         </div>
 
+        <FieldLabel text="HABITAT" />
+        <div className="row">
+          {HABITATS.map((h) => (
+            <ChipButton
+              key={h}
+              label={h}
+              active={traits.habitat === h}
+              onClick={() => setHabitat(h)}
+            />
+          ))}
+        </div>
+
         <FieldLabel text="TRAITS" />
         <div className="row">
           {TRAIT_MODES.map((m) => (
@@ -196,16 +218,6 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
 
         {mode === 'CUSTOM' && (
           <div className="stack-tight">
-            <div className="row">
-              {HABITATS.map((h) => (
-                <ChipButton
-                  key={h}
-                  label={h}
-                  active={custom.habitat === h}
-                  onClick={() => setCustom({ ...custom, habitat: h })}
-                />
-              ))}
-            </div>
             {TRAIT_KEYS.map((key) => (
               <Slider
                 key={key}

@@ -807,12 +807,15 @@ html, body, #root {
   padding-bottom: 4px;
 }
 
-.storage-item {
+/* 비어 있어도 자리를 남겨 둔다. 창고가 얼마나 찼는지 한눈에 읽힌다. */
+.storage-slot {
   flex: 0 0 auto;
   width: 94px;
+  height: 116px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
   padding: 6px 4px;
   border: 2px solid #b79a6b;
@@ -822,8 +825,15 @@ html, body, #root {
   touch-action: none;
   transition: transform 0.08s ease, background 0.1s ease;
 }
-.storage-item:hover { background: rgba(243, 228, 194, 0.3); transform: translateY(-3px); }
-.storage-item.is-dragging { opacity: 0.35; cursor: grabbing; }
+.storage-slot:not(.is-empty):hover { background: rgba(243, 228, 194, 0.3); transform: translateY(-3px); }
+.storage-slot.is-dragging { opacity: 0.35; cursor: grabbing; }
+
+.storage-slot.is-empty {
+  border-style: dashed;
+  border-color: rgba(183, 154, 107, 0.45);
+  background: rgba(243, 228, 194, 0.05);
+  cursor: default;
+}
 
 /* 드래그 중 커서를 따라다니는 고스트. 포인터 이벤트를 가로채면 안 된다. */
 .drag-ghost {

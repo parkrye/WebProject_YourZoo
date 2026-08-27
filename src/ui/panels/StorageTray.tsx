@@ -8,6 +8,8 @@ const THUMB_SIZE = 72
 const DRAG_THRESHOLD = 6
 /** 퇴장 애니메이션 길이. CSS 의 tray-out 과 맞춰야 한다. */
 const EXIT_MS = 180
+/** 항상 보여 주는 슬롯 수. 비어 있어도 자리를 남겨 두면 창고 크기가 한눈에 읽힌다. */
+const SLOT_COUNT = 8
 
 export interface DragState {
   animal: Animal
@@ -103,21 +105,25 @@ export function StorageTray({
       </div>
 
       <div className="storage-tray-items">
-        {stored.length === 0 && <BitmapLabel text="STORAGE IS EMPTY" size={20} />}
-        {stored.map((animal) => (
-          <div
-            key={animal.id}
-            className={draggingId === animal.id ? 'storage-item is-dragging' : 'storage-item'}
-            onPointerDown={handlePointerDown}
-            onPointerMove={(e) => handlePointerMove(e, animal)}
-            onPointerUp={(e) => handlePointerUp(e, animal)}
-            onPointerCancel={(e) => handlePointerUp(e, animal)}
-          >
-            <AnimalThumb imageId={animal.imageId} size={THUMB_SIZE} />
-            <BitmapLabel text={animal.name} size={16} align="center" />
-            <BitmapLabel text={animal.traits.habitat} size={14} align="center" />
-          </div>
-        ))}
+        {Array.from({ length: Math.max(SLOT_COUNT, stored.length) }, (_, i) => {
+          const animal = stored[i]
+          if (!animal) return <div key={`slot-${i}`} className="storage-slot is-empty" />
+
+          return (
+            <div
+              key={animal.id}
+              className={draggingId === animal.id ? 'storage-slot is-dragging' : 'storage-slot'}
+              onPointerDown={handlePointerDown}
+              onPointerMove={(e) => handlePointerMove(e, animal)}
+              onPointerUp={(e) => handlePointerUp(e, animal)}
+              onPointerCancel={(e) => handlePointerUp(e, animal)}
+            >
+              <AnimalThumb imageId={animal.imageId} size={THUMB_SIZE} />
+              <BitmapLabel text={animal.name} size={15} align="center" />
+              <BitmapLabel text={animal.traits.habitat} size={13} align="center" />
+            </div>
+          )
+        })}
       </div>
     </div>
   )
