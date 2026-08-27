@@ -20,6 +20,15 @@ export interface SheetMeta {
   fps: number
   /** 행 순서에 대응하는 모션. 예: ['IDLE', 'MOVE', 'SIGNATURE'] */
   motions: readonly AnimalMotion[]
+  /**
+   * 프레임 높이 대비 동물의 기준 높이. 기본 1(프레임을 꽉 채움).
+   *
+   * 직접 구운 시트는 보빙과 점프가 잘리지 않게 여백을 두므로 1 보다 작다.
+   * 이 값이 없으면 프레임이 곧 동물의 바운딩 박스라고 본다 — 외부 SDK 시트의 관례다.
+   */
+  fit?: number
+  /** 프레임 안에서 발이 놓이는 y (0..1). 기본 1(프레임 아래변). */
+  baseline?: number
 }
 
 /**

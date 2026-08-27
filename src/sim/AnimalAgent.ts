@@ -37,7 +37,7 @@ export class AnimalAgent implements AgentView {
   private readonly maxSpeed: number
 
   constructor(
-    readonly animal: Animal,
+    public animal: Animal,
     rng: Rng,
   ) {
     const box = this.roam

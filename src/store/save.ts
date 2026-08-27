@@ -15,10 +15,13 @@ const STORAGE_KEY = 'yourzoo.save.v2'
 export interface SaveV2 {
   version: 2
   savedAt: number
+  /** 이 동물원의 주인 식별자. 다른 유저가 검색해 찾아온다. */
+  userId: string
   zooName: string
   tutorial: TutorialStep
   gold: number
-  gems: number
+  /** 캐시(유료 재화). 구버전 세이브에는 없다 — 그때는 0 으로 읽는다. */
+  cash: number
   reputation: number
   clock: ClockState
   currentEnclosure: BiomeId
@@ -93,4 +96,6 @@ function isSaveV2(value: unknown): value is SaveV2 {
     typeof s.clock.day === 'number' &&
     typeof s.clock.elapsed === 'number'
   )
+  // userId 와 cash 는 확인하지 않는다. 나중에 붙은 필드라 구버전 세이브에는 없고,
+  // 없으면 로드 시점에 각각 발급 / 0 으로 채운다. 여기서 막으면 멀쩡한 동물원이 날아간다.
 }

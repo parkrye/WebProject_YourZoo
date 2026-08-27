@@ -805,6 +805,7 @@ html, body, #root {
 .animal-card-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   margin-top: auto;
   padding-top: 8px;
@@ -1069,3 +1070,81 @@ html, body, #root {
   z-index: 20;
 }
 .hud-restore:hover { opacity: 1; transform: scale(1.06); }
+
+/* ── 확인 팝업 ───────────────────────────────────────────── */
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  height: 100%;
+}
+
+.confirm-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 28px;
+}
+
+/* ── 캐시 상점 ───────────────────────────────────────────── */
+
+.shop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  height: 100%;
+}
+
+.shop-purse {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 18px;
+  border-radius: 12px;
+  background: rgba(120, 78, 34, 0.14);
+}
+
+.shop-list {
+  display: flex;
+  gap: 22px;
+}
+
+/* 상품 카드. 값이 클수록 덤이 붙으니 크기는 같게 두고 내용으로만 구분한다. */
+.shop-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 214px;
+  padding: 24px 12px;
+  border: 0;
+  border-radius: 16px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #fbf3e0 0%, #efdfba 100%);
+  box-shadow:
+    inset 0 0 0 2px rgba(200, 168, 106, 0.9),
+    0 0 0 3px #d9a441,
+    0 3px 0 4px #8a5a2b;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+.shop-item:hover { transform: translateY(-3px); filter: brightness(1.05); }
+.shop-item:active { transform: translateY(0); }
+
+.shop-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: auto;
+  opacity: 0.75;
+}

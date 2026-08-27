@@ -63,9 +63,18 @@ export class EnclosureSim {
       if (!wantedIds.has(this.animals[i]?.id ?? '')) this.animals.splice(i, 1)
     }
 
-    const existing = new Set(this.animals.map((a) => a.id))
+    const existing = new Map(this.animals.map((a) => [a.id, a]))
     for (const animal of wanted) {
-      if (existing.has(animal.id)) continue
+      const already = existing.get(animal.id)
+      if (already) {
+        // 스프라이트 시트를 새로 구웠다면 렌더러를 갈아 끼운다.
+        // 여기서 걸러내지 않으면 캐시를 쓰고도 화면이 그대로다.
+        if (already.animal.spriteSheet?.imageId !== animal.spriteSheet?.imageId) {
+          already.animal = animal
+          void this.attachRenderer(already)
+        }
+        continue
+      }
       const agent = new AnimalAgent(animal, this.rng)
       const hint = this.spawnHints.get(animal.id)
       if (hint) {
@@ -169,12 +178,32 @@ export class EnclosureSim {
     return this.animals.find((a) => a.id === id) ?? null
   }
 
+  /**
+   * 그림(과 있다면 시트)을 읽어 렌더러를 붙인다.
+   *
+   * 시트가 있어도 **원본 그림을 먼저 읽는다.** 히트박스에 쓰는 가로세로 비율은
+   * 동물 자체의 비율이어야 하는데, 시트 프레임은 여백까지 포함한 정사각이라
+   * 거기서 뽑으면 판정 상자가 실제보다 넓어진다.
+   */
   private async attachRenderer(agent: AnimalAgent): Promise<void> {
-    const cached = getBitmap(agent.animal.imageId)
-    const bitmap = cached ?? (await ensureBitmap(agent.animal.imageId))
-    if (!bitmap) return
-    agent.aspect = bitmap.width / bitmap.height
-    agent.renderer = createAnimalRenderer(agent.animal, bitmap)
+    const { animal } = agent
+    const source = getBitmap(animal.imageId) ?? (await ensureBitmap(animal.imageId))
+    if (!source) return
+    agent.aspect = source.width / source.height
+
+    const sheetId = animal.spriteSheet?.imageId
+    if (!sheetId) {
+      agent.renderer = createAnimalRenderer(animal, source)
+      return
+    }
+
+    const sheet = getBitmap(sheetId) ?? (await ensureBitmap(sheetId))
+    // 시트를 못 읽었으면 절차적으로 남긴다. 그림을 시트로 착각해 그리면 첫 칸만 확대된다.
+    if (!sheet) {
+      agent.renderer = createAnimalRenderer({ ...animal, spriteSheet: null }, source)
+      return
+    }
+    agent.renderer = createAnimalRenderer(animal, sheet)
   }
 }
 

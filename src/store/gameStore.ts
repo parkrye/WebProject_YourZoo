@@ -3,9 +3,14 @@ import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
   ANIMAL_CREATE_COST, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
-  START_GEMS, START_GOLD, START_REPUTATION, UNLOCK_COST,
+  SHEET_COST, START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST,
+  type CashProduct,
 } from '@/domain/balance'
+import { MOTION_PROFILES } from '@/domain/motion'
+import { templateOf } from '@/domain/templates'
+import { bakeSheet } from '@/render/animal/bakeSheet'
 import { advanceClock, type ClockAdvanceResult, type ClockState } from '@/domain/clock'
+import { createUserId, isUserId } from '@/domain/userId'
 import { settleDay, type DailyReport } from '@/domain/economy'
 import { neighborEnclosure } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
@@ -14,12 +19,12 @@ import { randomTraits } from '@/domain/traits'
 import { skipsShipping, type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
-import { forgetBitmap } from '@/sim/imageCache'
-import { deleteImage } from './imageDb'
+import { ensureBitmap, forgetBitmap, getBitmap, registerFromBlob } from '@/sim/imageCache'
+import { deleteImage, putImage } from './imageDb'
 import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
 
 export type ScreenId = 'TITLE' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
-export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | null
+export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | null
 
 /**
  * 하루가 넘어갈 때의 암전 단계.
@@ -39,13 +44,16 @@ interface GameState {
   screen: ScreenId
   modal: ModalId
   /** 플레이어가 지은 동물원 이름. A-Z / 0-9 / 공백만 가능. */
+  /** 이 동물원 주인의 식별자. 새 게임에서 발급하고 바뀌지 않는다. */
+  userId: string
   zooName: string
   /** 그림판이 열려 있는가. 시계를 멈출지 판단하는 데 쓴다. */
   isDrawing: boolean
   tutorial: TutorialStep
   gold: number
   /** 유료 재화. 충전·소모는 아직 없고 보유량만 들고 있는다. */
-  gems: number
+  /** 캐시(유료 재화). 상점에서 사고, 스프라이트 시트를 만들 때 쓴다. */
+  cash: number
   reputation: number
   clock: ClockState
   currentEnclosure: BiomeId
@@ -87,6 +95,10 @@ interface GameState {
   storeAnimal(id: string): boolean
   /** 창고에서 판매. 제작비의 절반을 돌려받는다. */
   sellAnimal(id: string): boolean
+  /** 캐시 상품 구매. 실제 결제는 없고 그냥 지급한다. */
+  buyCash(product: CashProduct): void
+  /** 캐시를 써서 8x3 스프라이트 시트를 만든다. 성공하면 true. */
+  animateAnimal(id: string): Promise<boolean>
   /** 의뢰를 이행한다. 동물을 넘기고 보상을 받는다. */
   fulfillOrder(orderId: string, animalId: string): boolean
   canPlaceIn(enclosureId: BiomeId): boolean
@@ -104,11 +116,12 @@ interface GameState {
 const initial = {
   screen: 'TITLE' as ScreenId,
   modal: null as ModalId,
+  userId: '',
   zooName: '',
   isDrawing: false,
   tutorial: 'DONE' as TutorialStep,
   gold: START_GOLD,
-  gems: START_GEMS,
+  cash: START_CASH,
   reputation: START_REPUTATION,
   clock: { day: 1, elapsed: 0 } as ClockState,
   currentEnclosure: 'FIELD' as BiomeId,
@@ -337,6 +350,42 @@ export const useGameStore = create<GameState>((set, get) => ({
     return true
   },
 
+  buyCash: (product) => set((s) => ({ cash: s.cash + product.cash })),
+
+  /**
+   * 캐시를 써서 그림을 스프라이트 시트로 굽는다.
+   *
+   * 캐시는 **굽기가 끝난 뒤에** 차감한다. 먼저 빼면 중간에 실패했을 때
+   * 아무것도 못 얻고 캐시만 사라진다.
+   */
+  animateAnimal: async (id) => {
+    const { animals, cash } = get()
+    const target = animals.find((a) => a.id === id)
+    if (!target || target.spriteSheet || cash < SHEET_COST) return false
+
+    const source = getBitmap(target.imageId) ?? (await ensureBitmap(target.imageId))
+    if (!source) return false
+
+    try {
+      const profile = MOTION_PROFILES[templateOf(target.templateId).archetype]
+      const { blob, meta } = await bakeSheet(source, profile)
+      const imageId = `${target.imageId}-sheet`
+      await putImage(imageId, blob)
+      await registerFromBlob(imageId, blob)
+
+      set((s) => ({
+        cash: s.cash - SHEET_COST,
+        animals: s.animals.map((a) =>
+          a.id === id ? { ...a, spriteSheet: { imageId, ...meta } } : a,
+        ),
+      }))
+      return true
+    } catch {
+      // 캔버스나 저장소가 막힌 경우. 캐시는 아직 그대로다.
+      return false
+    }
+  },
+
   unlockEnclosure: (id) => {
     const { gold, unlocked } = get()
     if (unlocked.includes(id)) return false
@@ -350,7 +399,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startNewGame: () => {
     clearSave()
-    set({ ...initial, draft: emptyDraft(randomTraits(createRng(7))), screen: 'NAMING' })
+    set({
+      ...initial,
+      userId: createUserId(),
+      draft: emptyDraft(randomTraits(createRng(7))),
+      screen: 'NAMING',
+    })
   },
 
   confirmZooName: (name) => {
@@ -368,10 +422,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       modal: null,
       dayFade: 'NONE',
       pendingDay: null,
+      // 구버전 세이브에는 아이디가 없다. 이어할 때 조용히 하나 발급한다.
+      userId: isUserId(save.userId) ? save.userId : createUserId(),
       zooName: save.zooName ?? '',
       tutorial: save.tutorial ?? 'DONE',
       gold: save.gold,
-      gems: save.gems ?? START_GEMS,
+      cash: save.cash ?? START_CASH,
       reputation: save.reputation,
       clock: save.clock,
       currentEnclosure: save.currentEnclosure,
@@ -390,10 +446,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     return {
       version: 2,
       savedAt: Date.now(),
+      userId: s.userId,
       zooName: s.zooName,
       tutorial: s.tutorial,
       gold: s.gold,
-      gems: s.gems,
+      cash: s.cash,
       reputation: s.reputation,
       clock: s.clock,
       currentEnclosure: s.currentEnclosure,
@@ -422,11 +479,15 @@ function saveKey(state: GameState): string {
     // 타이틀 -> 우리 전환도 저장 시점이다. 새 게임을 시작하자마자 새로고침해도 이어지도록.
     state.screen,
     state.gold,
+    // 캐시는 돈 주고 산 것이다. 사자마자 탭을 닫아도 남아 있어야 한다.
+    state.cash,
     state.reputation,
     state.clock.day,
     state.animals.length,
     // 배치/창고 이동도 즉시 저장 대상이다.
     state.animals.filter((a) => a.status === 'PLACED').length,
+    // 시트를 구웠다는 사실도. 캐시가 나간 결과라 다음 주기까지 미룰 수 없다.
+    state.animals.filter((a) => a.spriteSheet !== null).length,
     state.orders.length,
     state.tutorial,
     state.unlocked.length,

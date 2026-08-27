@@ -9,9 +9,29 @@ export const PHASE_END = {
 } as const
 
 export const START_GOLD = 200
-/** 유료 재화 시작 보유량. 충전·소모 경로는 아직 없다. */
-export const START_GEMS = 5
+/** 캐시(유료 재화) 시작 보유량. 상점에서 사야만 생긴다. */
+export const START_CASH = 0
 export const START_REPUTATION = 0
+
+/**
+ * 캐시 상품.
+ *
+ * 실제 결제는 하지 않는다 — 확인 팝업을 거치면 그냥 지급한다.
+ * 큰 상품은 11개로 **1개를 덤으로** 준다. 묶음이 이득이라는 인상은 이 1개가 만든다.
+ */
+export interface CashProduct {
+  readonly id: string
+  readonly krw: number
+  readonly cash: number
+}
+
+export const CASH_PRODUCTS: readonly CashProduct[] = [
+  { id: 'SINGLE', krw: 500, cash: 1 },
+  { id: 'BUNDLE', krw: 5000, cash: 11 },
+]
+
+/** 동물 한 마리의 8x3 스프라이트 시트를 만드는 데 드는 캐시. */
+export const SHEET_COST = 1
 
 export const ANIMAL_CREATE_COST = 50
 /** 동물을 판매할 때 제작비의 절반을 돌려준다. 잘못 만든 동물을 되돌릴 수 있어야 한다. */

@@ -91,7 +91,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const unlocked = useGameStore((s) => s.unlocked)
   const gold = useGameStore((s) => s.gold)
   const reputation = useGameStore((s) => s.reputation)
-  const gems = useGameStore((s) => s.gems)
+  const cash = useGameStore((s) => s.cash)
   const zooName = useGameStore((s) => s.zooName)
   const animals = useGameStore((s) => s.animals)
   const day = useGameStore((s) => s.clock.day)
@@ -384,9 +384,9 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                   <BitmapLabel text={`${gold}`} size={24} />
                   <IconGlyph icon={GUI.MEDAL} size={30} />
                   <BitmapLabel text={`${reputation}`} size={24} />
-                  {/* GUI 시트에 보석 아이콘이 없다. 무지개 팔레트가 가장 '특별한' 인상을 준다. */}
+                  {/* GUI 시트에 캐시다운 아이콘이 없다. 무지개 팔레트가 가장 '특별한' 인상을 준다. */}
                   <IconGlyph icon={GUI.PALETTE} size={30} />
-                  <BitmapLabel text={`${gems}`} size={24} />
+                  <BitmapLabel text={`${cash}`} size={24} />
                 </div>
               </div>
 
@@ -490,6 +490,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             <div className="bar-group bar-right">
               {!detail && (
                 <>
+                  <BarButton icon={GUI.PALETTE} label="SHOP" onClick={() => openModal('SHOP')} />
                   <BarButton icon={GUI.INFO} label="STATUS" onClick={() => openModal('STATUS')} />
                   <BarButton icon={GUI.SETTINGS} label="OPTIONS" onClick={() => openModal('OPTIONS')} />
                 </>

@@ -26,16 +26,21 @@ export class SheetRenderer implements AnimalRenderer {
     const row = Math.max(0, this.meta.motions.indexOf(state.motion))
     const frame = Math.floor(state.motionTime * this.meta.fps) % this.meta.cols
 
-    const height = state.scale * view.height
-    const width = height * (this.frameW / this.frameH)
+    // `scale` 은 **동물의 높이**지 프레임의 높이가 아니다.
+    // 여백이 있는 시트는 프레임을 그만큼 크게 그려야 동물이 제 크기로 나온다.
+    const fit = this.meta.fit ?? 1
+    const baseline = this.meta.baseline ?? 1
+    const cellH = (state.scale * view.height) / fit
+    const cellW = cellH * (this.frameW / this.frameH)
 
     ctx.save()
-    ctx.translate(state.x * view.width, state.y * view.height)
+    // 발끝을 state.y 에 맞춘다. 프레임 아래변이 아니라 프레임 안의 기준선이 발이다.
+    ctx.translate(state.x * view.width, state.y * view.height - baseline * cellH)
     ctx.scale(state.facing, 1)
     ctx.drawImage(
       this.sheet,
       frame * this.frameW, row * this.frameH, this.frameW, this.frameH,
-      -width / 2, -height, width, height,
+      -cellW / 2, 0, cellW, cellH,
     )
     ctx.restore()
   }
