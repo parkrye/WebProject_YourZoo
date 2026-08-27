@@ -51,3 +51,4 @@ export const UNLOCK_COST = {
 } as const
 
 export const ANIMAL_NAME_MAX_LENGTH = 10
+export const ZOO_NAME_MAX_LENGTH = 14

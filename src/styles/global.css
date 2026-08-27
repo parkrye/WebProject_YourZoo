@@ -142,9 +142,31 @@ html, body, #root {
   display: grid;
   place-items: center;
   background: rgba(0, 0, 0, 0.5);
+  animation: backdrop-in 0.16s ease-out both;
 }
 
-.popup { position: relative; }
+/* 팝업은 하단 도구 바 쪽에서 솟아오른다. 대부분 거기 버튼으로 열리기 때문이다. */
+@keyframes popup-in {
+  from { opacity: 0; transform: translateY(90px) scale(0.88); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes popup-out {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(70px) scale(0.9); }
+}
+
+.popup {
+  position: relative;
+  animation: popup-in 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.25) both;
+}
+
+.popup.is-closing { animation: popup-out 0.17s ease-in both; }
+
+@keyframes backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 .popup-frame { position: absolute; inset: 0; display: block; }
 
 .popup-body {
@@ -258,7 +280,7 @@ html, body, #root {
 .row { display: flex; align-items: center; gap: 12px; }
 .stack-tight { display: flex; flex-direction: column; gap: 10px; }
 
-.field-label { opacity: 0.75; margin-top: 4px; }
+.field-label { opacity: 0.85; margin-top: 2px; }
 
 /* ── 요청서 ─────────────────────────────────────────────── */
 
@@ -288,7 +310,7 @@ html, body, #root {
 
 .drawing-slot {
   width: 320px;
-  height: 168px;
+  height: 138px;
   flex: 0 0 auto;
   border: 2px dashed #b79a6b;
   border-radius: 10px;
@@ -522,7 +544,7 @@ html, body, #root {
 
 .status-layout {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1.25fr 1fr;
   gap: 32px;
   flex: 1 1 auto;
   min-height: 0;
@@ -548,6 +570,14 @@ html, body, #root {
   right: 28px;
 }
 
+/* 정보 카드는 오른쪽 바깥에서 밀려 들어온다. */
+@keyframes card-in {
+  from { opacity: 0; transform: translateX(70px) scale(0.94); }
+  to { opacity: 1; transform: translateX(0) scale(1); }
+}
+
+.animal-card { animation: card-in 0.2s cubic-bezier(0.2, 0.9, 0.3, 1.2) both; }
+
 .animal-card-body {
   position: relative;
   width: 100%;
@@ -556,7 +586,6 @@ html, body, #root {
   flex-direction: column;
   gap: 6px;
   overflow: hidden;
-  padding: 106px 76px 84px;
 }
 
 .animal-card-body canvas:not(.popup-frame) {
@@ -582,7 +611,14 @@ html, body, #root {
 
 /* ── 창고 트레이 ─────────────────────────────────────────── */
 
+/* 창고 트레이는 아래에서 올라온다. */
+@keyframes tray-in {
+  from { opacity: 0; transform: translateY(100%); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .storage-tray {
+  animation: tray-in 0.2s ease-out both;
   position: absolute;
   left: 0;
   right: 0;
@@ -700,3 +736,32 @@ html, body, #root {
   transition: background 0.1s ease, transform 0.08s ease;
 }
 .order-candidate:hover { background: #d9a441; transform: translateY(-2px); }
+
+/* ── 동물원 이름 짓기 ────────────────────────────────────── */
+
+.naming-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 34px;
+}
+
+.naming-field {
+  padding: 10px 30px;
+  background: rgba(24, 17, 10, 0.55);
+  border: 3px solid #8a5a2b;
+  border-radius: 14px;
+}
+
+.naming-actions { display: flex; align-items: center; gap: 22px; }
+
+/* ── 그림 템플릿 가이드 ──────────────────────────────────── */
+
+.drawing-guide-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}

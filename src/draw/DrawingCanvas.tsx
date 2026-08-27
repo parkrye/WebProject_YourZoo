@@ -1,4 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import type { TemplateId } from '@/domain/templates'
+import { TemplateGuide } from './TemplateGuide'
 import { DrawHistory, drawStroke, type DrawTool, type StrokeCommand } from './history'
 import { exportDrawing, type ExportedDrawing } from './export'
 
@@ -25,6 +27,8 @@ export interface DrawingCanvasHandle {
 interface DrawingCanvasProps {
   tool: DrawTool
   color: string
+  /** 바탕에 깔릴 가이드. 그림 데이터에는 섞이지 않는다. */
+  templateId: TemplateId
   /** 화면 표시 크기(px). 논리 해상도와 무관하게 자유롭게 잡는다. */
   displaySize: number
   /** undo/redo 버튼 활성화 상태를 부모에 알린다. */
@@ -32,7 +36,7 @@ interface DrawingCanvasProps {
 }
 
 export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(function DrawingCanvas(
-  { tool, color, displaySize, onHistoryChange },
+  { tool, color, templateId, displaySize, onHistoryChange },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -143,10 +147,14 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
   return (
     // 가이드는 캔버스 뒤 DOM 레이어다. 캔버스에 직접 그리면 내보낸 PNG 에 섞여 들어간다.
     <div className="drawing-board" style={{ width: displaySize, height: displaySize }}>
-      <div className="drawing-guide" aria-hidden>
-        <span className="drawing-guide-arrow" />
-        <span className="drawing-guide-text">FACING RIGHT</span>
-      </div>
+      {/* 템플릿 가이드가 이미 방향을 알려 주므로 화살표는 FREE 일 때만 띄운다. */}
+      {templateId === 'FREE' && (
+        <div className="drawing-guide" aria-hidden>
+          <span className="drawing-guide-arrow" />
+          <span className="drawing-guide-text">FACING RIGHT</span>
+        </div>
+      )}
+      <TemplateGuide templateId={templateId} size={displaySize} />
       <canvas
         ref={canvasRef}
         className="drawing-canvas"

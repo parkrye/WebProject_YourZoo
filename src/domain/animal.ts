@@ -1,6 +1,7 @@
 import type { BiomeId, Habitat } from '@/assets/manifest'
 import { clamp } from '@/core/math'
 import { MAX_ANIMALS_PER_ENCLOSURE } from './balance'
+import type { TemplateId } from './templates'
 import type { AnimalTraits } from './traits'
 
 /** 동물의 행동 상태. BT 가 정하고 렌더러가 소비한다. */
@@ -40,6 +41,8 @@ export interface Animal {
   /** 플레이어가 그린 그림의 IndexedDB 키 */
   readonly imageId: string
   readonly traits: AnimalTraits
+  /** 그림을 그릴 때 고른 템플릿. 움직임 프로파일과 파츠 힌트를 정한다. */
+  readonly templateId: TemplateId
   /** SDK 연동 전까지 항상 null */
   readonly spriteSheet: SheetMeta | null
   /** 요청서를 제출한 날 */

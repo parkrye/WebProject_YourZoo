@@ -14,6 +14,7 @@ const STORAGE_KEY = 'yourzoo.save.v2'
 export interface SaveV2 {
   version: 2
   savedAt: number
+  zooName: string
   gold: number
   reputation: number
   clock: ClockState

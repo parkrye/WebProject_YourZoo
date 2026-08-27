@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { getAssets } from '@/assets/AssetStore'
 import { LOGICAL_HEIGHT, LOGICAL_WIDTH } from '@/assets/manifest'
-import { hasSave } from '@/store/save'
+import { loadSave } from '@/store/save'
 import { useGameStore } from '@/store/gameStore'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 
@@ -11,8 +11,8 @@ export function TitleScreen() {
   const openModal = useGameStore((s) => s.openModal)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
-  // 세이브 유무는 타이틀 진입 시점에 한 번만 본다. 렌더마다 localStorage 를 읽을 이유가 없다.
-  const savedGame = useMemo(() => hasSave(), [])
+  // 세이브는 타이틀 진입 시점에 한 번만 읽는다. 렌더마다 localStorage 를 뒤질 이유가 없다.
+  const savedGame = useMemo(() => loadSave(), [])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -34,6 +34,11 @@ export function TitleScreen() {
           {savedGame && (
             <button type="button" className="text-button" onClick={() => continueGame()}>
               <BitmapLabel text="CONTINUE" size={44} align="center" />
+              <BitmapLabel
+                text={`${savedGame.zooName || 'MY ZOO'}  DAY ${savedGame.clock.day}`}
+                size={18}
+                align="center"
+              />
             </button>
           )}
           <button type="button" className="text-button" onClick={startNewGame}>

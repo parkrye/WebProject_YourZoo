@@ -3,6 +3,7 @@ import { GUI } from '@/assets/manifest'
 import { createRng } from '@/core/rng'
 import { computeAppeal, countHabitat, createAnimalId, type Animal } from '@/domain/animal'
 import { ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
+import { TEMPLATE_ORDER, TEMPLATES, type TemplateId } from '@/domain/templates'
 import {
   ANIMAL_TYPE_ORDER, DIETS, HABITATS, TRAIT_KEYS, TRAIT_LABELS,
   randomTraits, traitsFromType, withTrait,
@@ -32,7 +33,7 @@ const TABS: readonly TabItem<RequestTab>[] = [
 const TRAIT_MODES: readonly TraitMode[] = ['TYPE', 'CUSTOM', 'RANDOM']
 
 const POPUP_WIDTH = 1180
-const POPUP_HEIGHT = 800
+const POPUP_HEIGHT = 900
 
 export function RequestModal() {
   const closeModal = useGameStore((s) => s.closeModal)
@@ -60,6 +61,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const [name, setName] = useState('')
   const [drawing, setDrawing] = useState<ExportedDrawing | null>(null)
   const [drawOpen, setDrawOpen] = useState(false)
+  const [templateId, setTemplateId] = useState<TemplateId>('FREE')
   const [mode, setMode] = useState<TraitMode>('TYPE')
   const [typeId, setTypeId] = useState<AnimalTypeId>('BEAST')
   const [custom, setCustom] = useState<AnimalTraits>(() => traitsFromType('BEAST'))
@@ -104,6 +106,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
       enclosureId: null,
       imageId,
       traits,
+      templateId,
       spriteSheet: null,
       orderedDay: day,
       arrivalDay: day + SHIPPING_DAYS,
@@ -112,6 +115,18 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
 
     setBusy(false)
     if (orderAnimal(animal)) onDone()
+  }
+
+  /**
+   * 템플릿을 고르면 습성도 그에 맞게 미리 채운다.
+   * 새 템플릿으로 그려 놓고 서식지를 물로 두면 날갯짓 프로파일과 어긋난다.
+   */
+  const selectTemplate = (id: TemplateId): void => {
+    setTemplateId(id)
+    const suggested = TEMPLATES[id].suggestedType
+    if (!suggested) return
+    setMode('TYPE')
+    setTypeId(suggested)
   }
 
   const reroll = (): void => {
@@ -151,6 +166,18 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
       </section>
 
       <section className="request-col request-col-wide">
+        <FieldLabel text="TEMPLATE" />
+        <div className="chip-grid">
+          {TEMPLATE_ORDER.map((id) => (
+            <ChipButton
+              key={id}
+              label={TEMPLATES[id].label}
+              active={templateId === id}
+              onClick={() => selectTemplate(id)}
+            />
+          ))}
+        </div>
+
         <FieldLabel text="TRAITS" />
         <div className="row">
           {TRAIT_MODES.map((m) => (
@@ -229,6 +256,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
 
       {drawOpen && (
         <DrawModal
+          templateId={templateId}
           onClose={() => setDrawOpen(false)}
           onDone={(result) => {
             setDrawing(result)

@@ -3,6 +3,7 @@ import { GUI, PALETTE_COLORS } from '@/assets/manifest'
 import { DrawingCanvas, type DrawingCanvasHandle } from '@/draw/DrawingCanvas'
 import type { ExportedDrawing } from '@/draw/export'
 import type { DrawTool } from '@/draw/history'
+import type { TemplateId } from '@/domain/templates'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
 import { PaletteMenu } from '@/ui/components/PaletteMenu'
@@ -13,13 +14,14 @@ const POPUP_WIDTH = 900
 const POPUP_HEIGHT = 720
 
 interface DrawModalProps {
+  templateId: TemplateId
   onDone: (drawing: ExportedDrawing) => void
   onClose: () => void
 }
 
 const FIRST_COLOR = PALETTE_COLORS[0].hex
 
-export function DrawModal({ onDone, onClose }: DrawModalProps) {
+export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
   const boardRef = useRef<DrawingCanvasHandle>(null)
   const [tool, setTool] = useState<DrawTool>('PENCIL')
   const [color, setColor] = useState<string>(FIRST_COLOR)
@@ -46,6 +48,7 @@ export function DrawModal({ onDone, onClose }: DrawModalProps) {
           ref={boardRef}
           tool={tool}
           color={color}
+          templateId={templateId}
           displaySize={CANVAS_DISPLAY}
           onHistoryChange={setHistory}
         />

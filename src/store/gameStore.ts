@@ -14,7 +14,7 @@ import { forgetBitmap } from '@/sim/imageCache'
 import { deleteImage } from './imageDb'
 import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
 
-export type ScreenId = 'TITLE' | 'ZOO' | 'ZOO_DETAIL'
+export type ScreenId = 'TITLE' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
 export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | null
 
 export interface OptionsState {
@@ -25,6 +25,8 @@ export interface OptionsState {
 interface GameState {
   screen: ScreenId
   modal: ModalId
+  /** 플레이어가 지은 동물원 이름. A-Z / 0-9 / 공백만 가능. */
+  zooName: string
   gold: number
   reputation: number
   clock: ClockState
@@ -56,7 +58,10 @@ interface GameState {
   unlockEnclosure(id: BiomeId): boolean
   isUnlocked(id: BiomeId): boolean
 
+  /** 타이틀에서 새 게임을 고르면 이름 짓기 화면으로 간다. */
   startNewGame(): void
+  /** 이름을 확정하고 게임에 진입한다. */
+  confirmZooName(name: string): void
   continueGame(): boolean
   snapshot(): SaveV2
 }
@@ -64,6 +69,7 @@ interface GameState {
 const initial = {
   screen: 'TITLE' as ScreenId,
   modal: null as ModalId,
+  zooName: '',
   gold: START_GOLD,
   reputation: START_REPUTATION,
   clock: { day: 1, elapsed: 0 } as ClockState,
@@ -236,9 +242,13 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startNewGame: () => {
     clearSave()
+    set({ ...initial, screen: 'NAMING' })
+  },
+
+  confirmZooName: (name) => {
     // 첫날부터 게시판이 비어 있으면 탭이 왜 있는지 알 수 없다. 하나는 깔고 시작한다.
     const firstOrder = createOrder(createAnimalId(), 1, START_REPUTATION, createRng(0xa11ce))
-    set({ ...initial, orders: [firstOrder], screen: 'ZOO' })
+    set({ zooName: name, orders: [firstOrder], screen: 'ZOO' })
   },
 
   continueGame: () => {
@@ -248,6 +258,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       screen: 'ZOO',
       modal: null,
+      zooName: save.zooName ?? '',
       gold: save.gold,
       reputation: save.reputation,
       clock: save.clock,
@@ -266,6 +277,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     return {
       version: 2,
       savedAt: Date.now(),
+      zooName: s.zooName,
       gold: s.gold,
       reputation: s.reputation,
       clock: s.clock,
@@ -319,7 +331,8 @@ function saveKey(state: GameState): string {
 export function startAutosave(): () => void {
   const flush = (): void => {
     const state = useGameStore.getState()
-    if (state.screen === 'TITLE') return
+    // 타이틀과 이름 짓기 중에는 저장하지 않는다. 기존 세이브를 덮으면 안 된다.
+    if (state.screen === 'TITLE' || state.screen === 'NAMING') return
     writeSave(state.snapshot())
   }
 

@@ -3,6 +3,7 @@ import { GUI } from '@/assets/manifest'
 import { ANIMAL_SELL_REFUND } from '@/domain/balance'
 import type { Animal } from '@/domain/animal'
 import { TRAIT_KEYS, TRAIT_LABELS } from '@/domain/traits'
+import { popupInsetFor } from '@/render/NineSlice'
 import { AnimalThumb } from '@/ui/components/AnimalThumb'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { FrameCanvas } from '@/ui/components/FrameCanvas'
@@ -26,11 +27,20 @@ interface AnimalCardProps {
  */
 export function AnimalCard({ animal, onClose, onStore, onSell }: AnimalCardProps) {
   const [confirmSell, setConfirmSell] = useState(false)
+  const inset = popupInsetFor(CARD_WIDTH, CARD_HEIGHT)
 
   return (
     <div className="animal-card" style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
       <FrameCanvas width={CARD_WIDTH} height={CARD_HEIGHT} />
-      <div className="animal-card-body">
+      <div
+        className="animal-card-body"
+        style={{
+          paddingTop: inset.top,
+          paddingRight: inset.right,
+          paddingBottom: inset.bottom,
+          paddingLeft: inset.left,
+        }}
+      >
         <header className="popup-header">
           <BitmapLabel text={animal.name} size={28} />
           <IconButton icon={GUI.CLOSE} size={44} title="CLOSE" onClick={onClose} />

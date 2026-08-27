@@ -10,7 +10,13 @@ interface BitmapLabelProps {
   className?: string
 }
 
-const PADDING = 6
+/**
+ * 캔버스 여백. 글자 자체는 y..y+size 안에 들어가므로 이 정도면 넉넉하다.
+ * 예전엔 높이를 size 의 1.35배로 잡았는데, 이 폰트는 디센더가 없어 그만큼이 전부 빈 공간이었고
+ * 라벨이 많은 화면(요청서 등)에서 세로가 그만큼 모자랐다.
+ */
+const PADDING = 4
+const HEIGHT_RATIO = 1.14
 
 /**
  * 스프라이트 폰트 텍스트를 DOM 안에 배치한다.
@@ -27,7 +33,7 @@ export function BitmapLabel({ text, size = 32, align = 'left', letterSpacing, cl
 
     const dpr = window.devicePixelRatio || 1
     const w = Math.ceil(font.measureWidth(text, style)) + PADDING * 2
-    const h = Math.ceil(size * 1.35) + PADDING * 2
+    const h = Math.ceil(size * HEIGHT_RATIO) + PADDING * 2
 
     canvas.width = Math.max(1, w * dpr)
     canvas.height = Math.max(1, h * dpr)

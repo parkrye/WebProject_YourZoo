@@ -14,6 +14,7 @@ export function StatusModal() {
   const animals = useGameStore((s) => s.animals)
   const unlocked = useGameStore((s) => s.unlocked)
   const day = useGameStore((s) => s.clock.day)
+  const zooName = useGameStore((s) => s.zooName)
 
   const placed = animals.filter((a) => a.status === 'PLACED').length
   const storedCount = animals.filter((a) => a.status === 'STORED').length
@@ -23,7 +24,7 @@ export function StatusModal() {
   const forecast = settleDay({ day, animals, unlocked, reputation })
 
   return (
-    <Popup title="ZOO STATUS" width={1000} height={730} onClose={closeModal}>
+    <Popup title={zooName || 'ZOO STATUS'} width={1000} height={800} onClose={closeModal}>
       <div className="status-layout">
         <section className="status-col">
           <div className="stat-row">
