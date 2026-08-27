@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
-import { START_GOLD, START_REPUTATION } from '@/domain/balance'
+import type { Animal } from '@/domain/animal'
+import { ANIMAL_CREATE_COST, MAX_ANIMALS_PER_ENCLOSURE, START_GOLD, START_REPUTATION } from '@/domain/balance'
 import { advanceClock, type ClockState } from '@/domain/clock'
 import { neighborEnclosure } from '@/domain/enclosure'
 
@@ -20,6 +21,7 @@ interface GameState {
   clock: ClockState
   currentEnclosure: BiomeId
   unlocked: BiomeId[]
+  animals: Animal[]
   options: OptionsState
 
   setScreen(screen: ScreenId): void
@@ -28,6 +30,9 @@ interface GameState {
   tickClock(dt: number): void
   moveEnclosure(direction: -1 | 1): void
   setOption<K extends keyof OptionsState>(key: K, value: OptionsState[K]): void
+  /** 제작 비용을 차감하고 동물을 배치한다. 비용 부족이나 정원 초과면 false. */
+  addAnimal(animal: Animal): boolean
+  canAddAnimal(enclosureId: BiomeId): boolean
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -38,6 +43,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   clock: { day: 1, elapsed: 0 },
   currentEnclosure: 'FIELD',
   unlocked: ['FIELD'],
+  animals: [],
   options: { bgm: 0.7, sfx: 0.8 },
 
   setScreen: (screen) => set({ screen, modal: null }),
@@ -59,4 +65,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setOption: (key, value) => set((s) => ({ options: { ...s.options, [key]: value } })),
+
+  canAddAnimal: (enclosureId) => {
+    const { gold, animals } = get()
+    if (gold < ANIMAL_CREATE_COST) return false
+    return animals.filter((a) => a.enclosureId === enclosureId).length < MAX_ANIMALS_PER_ENCLOSURE
+  },
+
+  addAnimal: (animal) => {
+    if (!get().canAddAnimal(animal.enclosureId)) return false
+    set((s) => ({ gold: s.gold - ANIMAL_CREATE_COST, animals: [...s.animals, animal] }))
+    return true
+  },
 }))

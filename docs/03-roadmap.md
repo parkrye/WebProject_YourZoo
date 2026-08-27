@@ -44,15 +44,29 @@
 
 ---
 
-## M2 — 그림판 + 동물 생성
+## M2 — 그림판 + 동물 생성  ← *완료*
 
-- [ ] `draw/DrawingCanvas` — 연필(6색) / 지우개 / 모두 지우기 / undo·redo / 완성 / 닫기
-- [ ] `draw/history.ts` — ImageData 스냅샷 스택 (상한 30)
-- [ ] `PaletteMenu` — 연필 아이콘 6색 팝오버
-- [ ] `draw/export.ts` — 알파 트림 → 정규화 리사이즈 → PNG Blob
-- [ ] `store/imageDb.ts` — IndexedDB 저장/로드
-- [ ] `RequestModal` **TAB: NEW** — 이름 입력(A-Z/0-9, ≤10자) · 그림 · 유형/직접/랜덤 습성 설정 · 제출
-- [ ] `domain/traits.ts` · `domain/animal.ts` · appeal 계산
+- [x] `draw/DrawingCanvas` — 연필(6색) / 지우개 / 모두 지우기 / undo·redo / 완성 / 닫기
+- [x] `draw/history.ts` — **스트로크 커맨드 리스트 + 재생** (초안의 ImageData 스냅샷에서 변경, docs/02 §3.4)
+- [x] `ui/components/PaletteMenu` — 연필 아이콘 6색 팝오버
+- [x] `draw/export.ts` — 알파 트림 → 긴 변 256 정규화 → PNG Blob
+- [x] `store/imageDb.ts` — IndexedDB(idb-keyval) 저장/로드
+- [x] `ui/components/BitmapInput` — 스프라이트 폰트 입력 필드 (A-Z/0-9 자동 정규화)
+- [x] `ui/components/Tabs` — 요청서 탭
+- [x] `RequestModal` **TAB: NEW** — 이름 · 그림 · TYPE/CUSTOM/RANDOM 습성 설정 · 제출
+- [x] `domain/traits.ts` · `domain/animal.ts` · appeal 계산
+- [x] `gameStore` 확장 — `animals`, `addAnimal`(비용 차감 + 정원 검사)
+
+> **완료 판정**: 요청서에서 이름을 쓰고 그림을 그려 제출하면 소지금이 50 줄고
+> 운영 현황의 `ANIMALS` 가 늘어난다. 그림은 IndexedDB 에 PNG 로 남는다.
+> 헤드리스 브라우저로 전 과정(그리기 → 팔레트 → undo/redo → 완성 → 제출) 확인 완료.
+
+### 이 과정에서 고친 UI 문제
+1. 팝업 제목이 프레임 상단 발바닥 엠블럼과 겹쳤다 → 제목·닫기를 **종이 영역 안**으로 이동
+2. 내용이 프레임 나무 부분을 침범했다 → `.popup-content` 에 `overflow: hidden`, 컬럼에 스크롤
+3. CUSTOM 모드에서 제출 버튼이 스크롤 밖으로 밀렸다 → footer 를 그리드 밖 고정 영역으로
+4. 팔레트 팝오버가 팝업 오른쪽 경계에서 잘렸다 → 왼쪽으로 열도록 변경
+5. `key.slice(0, 6)` 라벨이 `ACTIVI` `SOCIAB` 로 잘렸다 → `TRAIT_LABELS` 명시 축약어
 
 ---
 

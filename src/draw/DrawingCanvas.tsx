@@ -1,0 +1,151 @@
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+import { DrawHistory, drawStroke, type DrawTool, type StrokeCommand } from './history'
+import { exportDrawing, type ExportedDrawing } from './export'
+
+/** 그림판 논리 해상도. 정사각으로 두면 향후 8×3 시트 변환 시 프레임 규격을 잡기 쉽다. */
+export const DRAW_SIZE = 512
+
+const PENCIL_WIDTH = 10
+const ERASER_WIDTH = 34
+/** 이 거리보다 가까운 포인터 이동은 버린다. 점이 과하게 촘촘해지는 걸 막는다. */
+const MIN_POINT_DISTANCE = 2
+
+export interface DrawingCanvasHandle {
+  undo(): void
+  redo(): void
+  clearAll(): void
+  export(): Promise<ExportedDrawing | null>
+}
+
+interface DrawingCanvasProps {
+  tool: DrawTool
+  color: string
+  /** 화면 표시 크기(px). 논리 해상도와 무관하게 자유롭게 잡는다. */
+  displaySize: number
+  /** undo/redo 버튼 활성화 상태를 부모에 알린다. */
+  onHistoryChange?: (state: { canUndo: boolean; canRedo: boolean; isEmpty: boolean }) => void
+}
+
+export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(function DrawingCanvas(
+  { tool, color, displaySize, onHistoryChange },
+  ref,
+) {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const historyRef = useRef(new DrawHistory(DRAW_SIZE, DRAW_SIZE))
+  const strokeRef = useRef<StrokeCommand | null>(null)
+  const [, bump] = useState(0)
+
+  const context = (): CanvasRenderingContext2D | null =>
+    canvasRef.current?.getContext('2d', { willReadFrequently: true }) ?? null
+
+  const notify = (): void => {
+    const h = historyRef.current
+    onHistoryChange?.({ canUndo: h.canUndo, canRedo: h.canRedo, isEmpty: h.isEmpty })
+    bump((n) => n + 1)
+  }
+
+  useEffect(notify, [])
+
+  useImperativeHandle(ref, () => ({
+    undo: () => {
+      if (!historyRef.current.undo()) return
+      replay()
+      notify()
+    },
+    redo: () => {
+      if (!historyRef.current.redo()) return
+      replay()
+      notify()
+    },
+    clearAll: () => {
+      historyRef.current.push({ kind: 'CLEAR' })
+      replay()
+      notify()
+    },
+    export: async () => {
+      const canvas = canvasRef.current
+      if (!canvas) return null
+      return exportDrawing(canvas)
+    },
+  }))
+
+  const replay = (): void => {
+    const ctx = context()
+    if (!ctx) return
+    historyRef.current.replay(ctx)
+  }
+
+  const toLocal = (event: React.PointerEvent<HTMLCanvasElement>): [number, number] => {
+    const rect = event.currentTarget.getBoundingClientRect()
+    // Stage 가 CSS transform 으로 축소되어 있어도 getBoundingClientRect 가 반영해 준다.
+    return [
+      ((event.clientX - rect.left) / rect.width) * DRAW_SIZE,
+      ((event.clientY - rect.top) / rect.height) * DRAW_SIZE,
+    ]
+  }
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLCanvasElement>): void => {
+    if (event.button !== 0) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    const [x, y] = toLocal(event)
+    strokeRef.current = {
+      kind: 'STROKE',
+      tool,
+      color,
+      width: tool === 'ERASER' ? ERASER_WIDTH : PENCIL_WIDTH,
+      points: [x, y],
+    }
+    redrawLiveStroke()
+  }
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>): void => {
+    const stroke = strokeRef.current
+    if (!stroke) return
+
+    const [x, y] = toLocal(event)
+    const lastX = stroke.points[stroke.points.length - 2] as number
+    const lastY = stroke.points[stroke.points.length - 1] as number
+    if (Math.hypot(x - lastX, y - lastY) < MIN_POINT_DISTANCE) return
+
+    stroke.points.push(x, y)
+    redrawLiveStroke()
+  }
+
+  const handlePointerUp = (event: React.PointerEvent<HTMLCanvasElement>): void => {
+    const stroke = strokeRef.current
+    if (!stroke) return
+    strokeRef.current = null
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    historyRef.current.push(stroke)
+    replay()
+    notify()
+  }
+
+  /**
+   * 그리는 중에는 확정된 히스토리를 다시 깔고 진행 중인 스트로크만 덧그린다.
+   * 이렇게 해야 이차 베지어 스무딩이 매 프레임 일관되게 적용된다.
+   */
+  const redrawLiveStroke = (): void => {
+    const ctx = context()
+    const stroke = strokeRef.current
+    if (!ctx || !stroke) return
+    historyRef.current.replay(ctx)
+    drawStroke(ctx, stroke)
+  }
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="drawing-canvas"
+      width={DRAW_SIZE}
+      height={DRAW_SIZE}
+      style={{ width: displaySize, height: displaySize }}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+    />
+  )
+})

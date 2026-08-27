@@ -80,7 +80,7 @@ src/
 │
 ├─ draw/
 │  ├─ DrawingCanvas.tsx        그림판 본체
-│  ├─ history.ts               undo/redo 스택 (ImageData 스냅샷 + 상한 30)
+│  ├─ history.ts               undo/redo (스트로크 커맨드 리스트 + 재생)
 │  └─ export.ts                트림 → PNG Blob → IndexedDB
 │
 └─ store/
@@ -157,7 +157,26 @@ ticker (rAF)
 - `EnclosureSim` 은 **비활성 우리도 계속 돌린다** (좌우로 넘겼다 돌아왔을 때 정지해 있으면 어색).
   단, 비활성 우리는 BT를 2Hz 로 낮추고 렌더는 생략.
 
-### 3.4 상태 저장
+### 3.4 그림판 undo/redo — 스냅샷이 아니라 커맨드
+
+초안에서는 `ImageData` 스냅샷 스택을 계획했으나 **커맨드 리스트 + 재생**으로 바꿨다.
+
+| | ImageData 스냅샷 | 스트로크 커맨드 |
+|---|---|---|
+| 메모리 | 512×512 = 장당 1MB → 30단계에 30MB | 스트로크당 수백 바이트 |
+| undo 비용 | O(1) 복사 | 전체 재생 (수백 스트로크라도 수 ms) |
+| 부가 가치 | 없음 | **향후 SDK 에 벡터 데이터를 그대로 넘길 수 있다** |
+
+```ts
+type DrawCommand =
+  | { kind: 'STROKE'; tool: 'PENCIL' | 'ERASER'; color: string; width: number; points: number[] }
+  | { kind: 'CLEAR' }
+```
+
+커맨드가 400개를 넘으면 앞쪽 200개를 비트맵으로 구워 `baseline` 에 합친다(메모리 폭주 방지).
+실사용에서 도달할 일은 거의 없는 안전장치다.
+
+### 3.5 상태 저장
 
 ```ts
 interface SaveV1 {

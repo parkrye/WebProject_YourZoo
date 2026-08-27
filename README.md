@@ -17,7 +17,7 @@ npm run dev
 | [docs/02-architecture.md](docs/02-architecture.md) | 스택 · 디렉터리 · 핵심 인터페이스 · 리스크 |
 | [docs/03-roadmap.md](docs/03-roadmap.md) | 마일스톤 M0 ~ M5 |
 
-## 현재 상태 — M0/M1 (수직 슬라이스)
+## 현재 상태 — M0 / M1 / M2
 
 동작하는 것:
 - 타이틀 → 우리 화면 전환
@@ -28,7 +28,12 @@ npm run dev
 - 스프라이트 비트맵 폰트 (글리프 메트릭 자동 측정)
 - 옵션 / 운영 현황 팝업 (9-슬라이스 프레임)
 
-아직 없는 것: 그림판, 동물 생성, BT, 프롭, 경제 정산, 세이브 → `docs/03-roadmap.md` M2~ 참조.
+- 그림판: 연필 6색 / 지우개 / 모두 지우기 / undo·redo / 완성
+- 요청서: 이름 입력, 그림, TYPE·CUSTOM·RANDOM 습성 설정, 제출 시 비용 차감 후 우리에 배치
+- 그림은 알파 트림 후 PNG 로 IndexedDB 에 저장
+
+아직 없는 것: 동물 AI(BT)와 우리 안 렌더, 프롭, 경제 정산, 세이브/로드, NPC 의뢰
+→ `docs/03-roadmap.md` M3~ 참조.
 
 ## 개발용 검증 페이지
 

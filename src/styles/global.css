@@ -134,31 +134,47 @@ html, body, #root {
 .popup { position: relative; }
 .popup-frame { position: absolute; inset: 0; display: block; }
 
-.popup-title {
-  position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.popup-close { position: absolute; }
-
 .popup-body {
   position: relative;
   width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  overflow: hidden;
 }
 
-.stack { display: flex; flex-direction: column; gap: 20px; }
+.popup-header {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 2px solid rgba(138, 90, 43, 0.3);
+}
+
+.popup-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* 패딩 안쪽에서 잘라야 내용이 프레임 나무 부분을 침범하지 않는다. */
+  overflow: hidden;
+}
+
+/* 종이 배경이 밝아 크림색 글자와 대비가 약하다. 그림자로 윤곽을 세운다. */
+.popup-content canvas:not(.drawing-canvas):not(.popup-frame) {
+  filter: drop-shadow(0 1px 0 rgba(60, 34, 10, 0.45));
+}
+
+.stack { display: flex; flex-direction: column; gap: 20px; justify-content: center; flex: 1 1 auto; }
 
 .stat-row { display: flex; align-items: center; gap: 16px; }
 
 .slider-row {
   display: grid;
-  grid-template-columns: 90px 1fr 70px;
+  grid-template-columns: 108px 1fr 70px;
   align-items: center;
   gap: 16px;
 }
@@ -187,3 +203,212 @@ html, body, #root {
 }
 
 .boot-bar-fill { height: 100%; background: #d9a441; transition: width 0.15s linear; }
+
+/* ── 탭 ─────────────────────────────────────────────────── */
+
+.tabs {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 14px;
+  flex: 0 0 auto;
+}
+
+.tab {
+  border: 0;
+  border-bottom: 3px solid transparent;
+  padding: 2px 14px 4px;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.1s ease;
+}
+.tab:hover { opacity: 0.8; }
+.tab.is-active { opacity: 1; border-bottom-color: #8a5a2b; }
+
+/* ── 칩 버튼 ─────────────────────────────────────────────── */
+
+.chip {
+  border: 2px solid #b79a6b;
+  border-radius: 8px;
+  padding: 2px 12px 4px;
+  background: rgba(120, 92, 52, 0.14);
+  cursor: pointer;
+  transition: background 0.1s ease, border-color 0.1s ease, transform 0.08s ease;
+}
+.chip:hover { background: rgba(120, 92, 52, 0.28); }
+.chip:active { transform: scale(0.96); }
+.chip.is-active { background: #d9a441; border-color: #7a5320; }
+
+.chip-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.row { display: flex; align-items: center; gap: 12px; }
+.stack-tight { display: flex; flex-direction: column; gap: 10px; }
+
+.field-label { opacity: 0.75; margin-top: 4px; }
+
+/* ── 요청서 ─────────────────────────────────────────────── */
+
+.request-layout {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 28px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.request-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.request-col::-webkit-scrollbar { width: 8px; }
+.request-col::-webkit-scrollbar-thumb { background: #b79a6b; border-radius: 4px; }
+
+.request-col-wide { padding-right: 8px; }
+
+.drawing-slot {
+  width: 320px;
+  height: 168px;
+  flex: 0 0 auto;
+  border: 2px dashed #b79a6b;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.16);
+  overflow: hidden;
+}
+
+.drawing-preview { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+.request-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* 제출·취소는 스크롤과 무관하게 항상 보여야 한다. 레이아웃 그리드 밖에 고정한다. */
+.request-footer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 2px solid rgba(138, 90, 43, 0.3);
+}
+
+.request-actions { display: flex; gap: 14px; margin-left: auto; }
+
+/* ── 습성 요약 ───────────────────────────────────────────── */
+
+.trait-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 2px solid rgba(138, 90, 43, 0.35);
+}
+
+.trait-row { display: grid; grid-template-columns: 108px 1fr; align-items: center; gap: 12px; }
+
+.trait-bar {
+  height: 12px;
+  border: 2px solid #8a5a2b;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.35);
+  overflow: hidden;
+}
+
+.trait-bar-fill { height: 100%; background: #d9a441; transition: width 0.12s ease; }
+
+/* ── 비트맵 입력 필드 ────────────────────────────────────── */
+
+.bitmap-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 10px;
+  border-bottom: 3px solid #8a5a2b;
+  cursor: text;
+}
+
+.bitmap-input-field {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  outline: none;
+  font-size: 24px;
+}
+
+.bitmap-caret {
+  width: 3px;
+  background: #8a5a2b;
+  margin-left: 2px;
+}
+
+/* ── 그림판 ─────────────────────────────────────────────── */
+
+.draw-layout {
+  display: flex;
+  gap: 26px;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.drawing-canvas {
+  flex: 0 0 auto;
+  border: 3px solid #8a5a2b;
+  border-radius: 10px;
+  background: #fffdf5;
+  touch-action: none;
+  cursor: crosshair;
+  display: block;
+}
+
+.draw-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  align-self: stretch;
+}
+
+.draw-tools-spacer { flex: 1 1 auto; }
+
+.palette-anchor { position: relative; }
+
+/* 툴바가 팝업 오른쪽 끝에 붙어 있어서 오른쪽으로 열면 프레임 밖으로 잘린다. */
+.palette-menu {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 12px);
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 3px solid #8a5a2b;
+  border-radius: 12px;
+  background: #f3e4c2;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  z-index: 5;
+}
+
+.palette-slot { border-radius: 8px; padding: 2px; }
+.palette-slot.is-selected { background: rgba(217, 164, 65, 0.55); outline: 2px solid #8a5a2b; }
+
+.draw-hint { position: absolute; left: 0; bottom: 2px; opacity: 0.55; }

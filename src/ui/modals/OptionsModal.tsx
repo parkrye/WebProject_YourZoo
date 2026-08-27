@@ -8,7 +8,7 @@ export function OptionsModal() {
   const setOption = useGameStore((s) => s.setOption)
 
   return (
-    <Popup title="OPTIONS" width={720} height={430} onClose={closeModal}>
+    <Popup title="OPTIONS" width={720} height={480} onClose={closeModal}>
       <div className="stack">
         <Slider label="BGM" value={options.bgm} onChange={(v) => setOption('bgm', v)} />
         <Slider label="SFX" value={options.sfx} onChange={(v) => setOption('sfx', v)} />
