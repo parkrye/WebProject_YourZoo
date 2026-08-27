@@ -158,17 +158,24 @@ export const VISITOR_HEIGHT = 0.32
 // 동물 / 프롭 크기 (정규화 높이)
 // ─────────────────────────────────────────────────────────────
 
-/** 서식지별 동물 기본 높이. 하늘은 원경이라 작게, 땅은 가장 크게. */
+/**
+ * 서식지별 동물 기본 높이.
+ *
+ * 화면은 위가 멀고 아래가 가깝다 — 하늘(y 0.10~0.26)이 가장 멀고,
+ * 땅(0.52~0.66)이 중간, 물(0.75~0.96)이 카메라에 가장 가깝다.
+ * 따라서 크기는 **물 > 땅 > 하늘** 순이어야 원근이 맞는다.
+ */
 export const ANIMAL_HEIGHT: Record<Habitat, number> = {
-  SKY: 0.09,
-  LAND: 0.15,
-  WATER: 0.11,
+  SKY: 0.075,
+  LAND: 0.11,
+  WATER: 0.15,
 }
 
 /** y 가 클수록(카메라에 가까울수록) 크게 보이는 원근 배율 범위. */
 export const PERSPECTIVE_SCALE = { near: 1.18, far: 0.82 } as const
 
-export const PROP_HEIGHT = { LAND: 0.115, WATER: 0.07 } as const
+/** 프롭도 같은 원근을 따른다. 땅이 물보다 멀다. */
+export const PROP_HEIGHT = { LAND: 0.1, WATER: 0.14 } as const
 
 /** 우리 하나에 배치되는 프롭 개수. */
 export const PROP_COUNT = { LAND: 4, WATER: 3 } as const

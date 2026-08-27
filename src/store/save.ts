@@ -1,6 +1,7 @@
 import type { BiomeId } from '@/assets/manifest'
 import type { Animal } from '@/domain/animal'
 import type { DailyReport } from '@/domain/economy'
+import type { Order } from '@/domain/orders'
 import type { ClockState } from '@/domain/clock'
 
 /**
@@ -20,6 +21,7 @@ export interface SaveV2 {
   unlocked: BiomeId[]
   /** 그림 픽셀은 IndexedDB 에 있고 여기에는 imageId 만 남는다. */
   animals: Animal[]
+  orders: Order[]
   lastReport: DailyReport | null
   options: { bgm: number; sfx: number }
 }

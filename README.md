@@ -17,7 +17,7 @@ npm run dev
 | [docs/02-architecture.md](docs/02-architecture.md) | 스택 · 디렉터리 · 핵심 인터페이스 · 리스크 |
 | [docs/03-roadmap.md](docs/03-roadmap.md) | 마일스톤 M0 ~ M5 |
 
-## 현재 상태 — M0 ~ M4.5
+## 현재 상태 — M0 ~ M5
 
 동작하는 것:
 - 타이틀 → 우리 화면 전환
@@ -45,8 +45,12 @@ npm run dev
 - localStorage 세이브 + 타이틀 CONTINUE
 - 모달이 열려 있으면 시계 정지 (그림 그리는 동안 하루가 지나가지 않는다)
 
-아직 없는 것: NPC 의뢰, 사운드, 스프라이트 시트 연동
-→ `docs/03-roadmap.md` M5 참조.
+- NPC 의뢰: 매일 게시되는 조건부 의뢰. 맞는 동물을 넘기면 골드와 명성 보상
+
+아직 없는 것:
+- **사운드** — 오디오 에셋이 없다. 볼륨 슬라이더는 값만 저장한다
+- **8×3 스프라이트 시트 연동** — 외부 SDK 대기. `SheetRenderer` 와
+  `Animal.spriteSheet` 는 준비돼 있어 팩토리 분기만 타면 된다
 
 ## 개발용 검증 페이지
 

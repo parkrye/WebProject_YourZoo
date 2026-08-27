@@ -41,7 +41,7 @@ export interface PhaseBlend {
  * 시간대 크로스페이드 길이.
  * 하루가 180초뿐이라 길게 잡으면 늘 어중간한 색으로 보인다. 짧게 끊어야 전환이 읽힌다.
  */
-const CROSSFADE_SEC = 4
+const CROSSFADE_SEC = 1
 
 export function phaseBlend(elapsed: number): PhaseBlend {
   const from = phaseOf(elapsed)

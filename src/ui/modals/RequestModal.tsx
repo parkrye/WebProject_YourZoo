@@ -18,6 +18,7 @@ import { IconButton } from '@/ui/components/IconButton'
 import { Popup } from '@/ui/components/Popup'
 import { Slider } from '@/ui/components/Slider'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
+import { OrdersTab } from '@/ui/panels/OrdersTab'
 import { DrawModal } from './DrawModal'
 
 type RequestTab = 'NEW' | 'ORDERS'
@@ -274,15 +275,5 @@ function ChipButton({ label, active, onClick }: ChipButtonProps) {
     <button type="button" className={active ? 'chip is-active' : 'chip'} onClick={onClick}>
       <BitmapLabel text={label} size={20} />
     </button>
-  )
-}
-
-/** M5 에서 구현. 탭 자리만 잡아 둔다. */
-function OrdersTab() {
-  return (
-    <div className="stack">
-      <BitmapLabel text="NO ORDERS YET" size={30} />
-      <BitmapLabel text="COMING IN M5" size={22} />
-    </div>
   )
 }
