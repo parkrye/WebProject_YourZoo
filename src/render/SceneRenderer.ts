@@ -4,7 +4,7 @@ import {
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
 import { easeInOutCubic } from '@/core/math'
-import { lightTint, phaseBlend } from '@/domain/clock'
+import { phaseBlend, timeLighting, type EnclosureLight } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
 import { PROP_BOB, type PlacedProp } from '@/sim/props'
@@ -90,36 +90,64 @@ export class SceneRenderer {
   ): void {
     applyCamera(ctx, input.camera, view.width, view.height, offsetX)
 
-    this.drawSky(ctx, input.elapsed, view)
-    ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
+    const light = timeLighting(input.elapsed)
 
+    this.drawSky(ctx, input.elapsed, view)
+    // 하늘은 시간대별 이미지가 이미 다르다. 색을 얹기만 하고 어둡게 하지 않는다.
+    if (light.sky.alpha > 0) {
+      fillWith(ctx, view, 'multiply', light.sky.multiply, light.sky.alpha)
+    }
+
+    ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
     this.drawSkyAnimals(ctx, sim, view)
     this.drawSortedLayer(ctx, sim, 'LAND', view)
     this.drawSortedLayer(ctx, sim, 'WATER', view)
+
+    // 우리 안쪽 조명은 펜스보다 먼저다. 펜스는 관람로 쪽이라 우리 안 그늘을 받지 않는다.
+    this.drawEnclosureLight(ctx, light.enclosure, view)
+
     ctx.drawImage(getAssets().fence, 0, input.fenceOffset * view.height, view.width, view.height)
     this.drawVisitors(ctx, sim.visitors, input.fenceOffset, view)
-    this.drawLighting(ctx, input.elapsed, view)
+
+    // 마지막으로 화면 전체를 한 색조로 묶는다.
+    if (light.global.glowAlpha > 0 || light.global.multiply !== '#ffffff') {
+      fillWith(ctx, view, 'multiply', light.global.multiply, 1)
+      if (light.global.glowAlpha > 0) {
+        fillWith(ctx, view, 'lighter', light.global.glow, light.global.glowAlpha)
+      }
+    }
   }
 
   /**
-   * 시간대 조명.
+   * 우리 안쪽 조명.
    *
-   * 하늘만 갈아 끼우면 땅과 물은 한낮 그대로라 시간이 흐르는 느낌이 약하다.
-   * 씬 전체에 곱연산으로 색을 입혀 저녁엔 노랗게, 밤엔 푸르게 가라앉힌다.
-   * 그 위에 옅은 빛을 더해 노을과 달빛의 번짐을 낸다.
+   * 그늘을 깔고 그 위에 **위에서 내려오는 빛**을 세로 그라디언트로 얹는다.
+   * 한낮엔 빛이 바닥까지 닿고, 해가 낮아질수록 얕게 들다가, 밤엔 달빛만 위쪽에 남는다.
+   * 평평하게 어둡게만 하면 시간이 아니라 밝기만 바뀐 것처럼 보인다.
    */
-  private drawLighting(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {
-    const tint = lightTint(elapsed)
+  private drawEnclosureLight(
+    ctx: CanvasRenderingContext2D,
+    light: EnclosureLight,
+    view: ViewBox,
+  ): void {
+    if (light.shadeAlpha <= 0 && light.lightAlpha <= 0) return
 
     ctx.save()
-    ctx.globalCompositeOperation = 'multiply'
-    ctx.fillStyle = tint.multiply
-    ctx.fillRect(0, 0, view.width, view.height)
+    if (light.shadeAlpha > 0) {
+      ctx.globalCompositeOperation = 'multiply'
+      ctx.globalAlpha = light.shadeAlpha
+      ctx.fillStyle = light.shade
+      ctx.fillRect(0, 0, view.width, view.height)
+    }
 
-    if (tint.glowAlpha > 0) {
+    if (light.lightAlpha > 0) {
+      const gradient = ctx.createLinearGradient(0, 0, 0, view.height * light.reach)
+      gradient.addColorStop(0, light.light)
+      gradient.addColorStop(1, 'rgba(0,0,0,0)')
+
       ctx.globalCompositeOperation = 'lighter'
-      ctx.globalAlpha = tint.glowAlpha
-      ctx.fillStyle = tint.glow
+      ctx.globalAlpha = light.lightAlpha
+      ctx.fillStyle = gradient
       ctx.fillRect(0, 0, view.width, view.height)
     }
     ctx.restore()
@@ -250,3 +278,19 @@ export class SceneRenderer {
 }
 
 const byDepth = (a: Drawable, b: Drawable): number => a.y - b.y
+
+/** 화면 전체를 한 색으로 덮는다. 조명 층마다 반복되는 코드라 따로 뺐다. */
+function fillWith(
+  ctx: CanvasRenderingContext2D,
+  view: ViewBox,
+  mode: GlobalCompositeOperation,
+  color: string,
+  alpha: number,
+): void {
+  ctx.save()
+  ctx.globalCompositeOperation = mode
+  ctx.globalAlpha = alpha
+  ctx.fillStyle = color
+  ctx.fillRect(0, 0, view.width, view.height)
+  ctx.restore()
+}

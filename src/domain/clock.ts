@@ -65,49 +65,103 @@ export function clockLabel(elapsed: number): { hh: string; mm: string } {
   return { hh: String(hour).padStart(2, '0'), mm: '00' }
 }
 
-/** 시간대별 화면 색조. 하늘만 바꾸면 땅과 물은 한낮 그대로라 시간이 흐르는 느낌이 약하다. */
-export interface LightTint {
-  /** 곱연산으로 깔리는 색. 전체를 물들인다. */
+/**
+ * 시간대 조명. 세 층으로 나눈다.
+ *
+ * 한 겹으로 화면 전체를 덮으면 하늘까지 같은 색이 겹쳐 탁해지고,
+ * 우리 안쪽은 "빛이 어디서 오는지" 없이 그냥 어두워지기만 한다.
+ *
+ *   1. `sky`       — 하늘. 이미 시간대별 이미지가 있으니 보정만 얹는다
+ *   2. `enclosure` — 우리 안쪽(바닥·프롭·동물). 위에서 빛이 내려오는 그라디언트
+ *   3. `global`    — 마지막에 화면 전체를 묶는 색조
+ */
+export interface SkyLight {
   readonly multiply: string
-  /** 더해지는 빛. 노을이나 달빛의 번짐. */
+  readonly alpha: number
+}
+
+export interface EnclosureLight {
+  /** 그늘 색. 곱연산으로 깔린다. */
+  readonly shade: string
+  readonly shadeAlpha: number
+  /** 위에서 내려오는 빛의 색 */
+  readonly light: string
+  /** 빛이 가장 센 지점의 세기 */
+  readonly lightAlpha: number
+  /** 빛이 닿는 깊이 (0..1). 낮으면 위쪽만 밝다. */
+  readonly reach: number
+}
+
+export interface GlobalLight {
+  readonly multiply: string
   readonly glow: string
   readonly glowAlpha: number
 }
 
-const TINTS: Record<SkyPhase, LightTint> = {
-  DAY: { multiply: '#ffffff', glow: '#fff3d0', glowAlpha: 0 },
-  AFTERNOON: { multiply: '#ffb877', glow: '#ff9a4d', glowAlpha: 0.16 },
-  NIGHT: { multiply: '#5a6fae', glow: '#2c3f7a', glowAlpha: 0.22 },
+export interface TimeLighting {
+  readonly sky: SkyLight
+  readonly enclosure: EnclosureLight
+  readonly global: GlobalLight
 }
 
-/** 크로스페이드 중에는 두 시간대 색을 섞는다. 조명이 하늘보다 늦게 따라오면 어색하다. */
-export function lightTint(elapsed: number): LightTint {
+const LIGHTING: Record<SkyPhase, TimeLighting> = {
+  DAY: {
+    sky: { multiply: '#ffffff', alpha: 0 },
+    // 한낮은 해가 높다. 빛이 깊이 들어오고 그늘이 거의 없다.
+    enclosure: { shade: '#ffffff', shadeAlpha: 0, light: '#fff6d8', lightAlpha: 0.1, reach: 0.85 },
+    global: { multiply: '#ffffff', glow: '#ffffff', glowAlpha: 0 },
+  },
+  AFTERNOON: {
+    sky: { multiply: '#ffd8a8', alpha: 0.25 },
+    // 해가 낮아 빛이 얕게 들고, 아래쪽부터 그늘이 깔린다.
+    enclosure: { shade: '#c98a52', shadeAlpha: 0.42, light: '#ff9a3c', lightAlpha: 0.3, reach: 0.45 },
+    global: { multiply: '#ffc79a', glow: '#ff8c42', glowAlpha: 0.1 },
+  },
+  NIGHT: {
+    sky: { multiply: '#8fa0d8', alpha: 0.18 },
+    // 달빛은 약하고 차다. 바닥까지 닿지 않는다.
+    enclosure: { shade: '#2f3d6b', shadeAlpha: 0.62, light: '#9fb4ff', lightAlpha: 0.16, reach: 0.35 },
+    global: { multiply: '#7285bd', glow: '#2c3f7a', glowAlpha: 0.14 },
+  },
+}
+
+/** 크로스페이드 중에는 두 시간대를 섞는다. 조명이 하늘보다 늦게 따라오면 어색하다. */
+export function timeLighting(elapsed: number): TimeLighting {
   const blend = phaseBlend(elapsed)
-  const from = TINTS[blend.from]
-  const to = TINTS[blend.to]
+  const from = LIGHTING[blend.from]
+  const to = LIGHTING[blend.to]
   if (blend.t <= 0) return from
 
+  const t = blend.t
   return {
-    multiply: mixHex(from.multiply, to.multiply, blend.t),
-    glow: mixHex(from.glow, to.glow, blend.t),
-    glowAlpha: from.glowAlpha + (to.glowAlpha - from.glowAlpha) * blend.t,
+    sky: {
+      multiply: mixHex(from.sky.multiply, to.sky.multiply, t),
+      alpha: lerpNum(from.sky.alpha, to.sky.alpha, t),
+    },
+    enclosure: {
+      shade: mixHex(from.enclosure.shade, to.enclosure.shade, t),
+      shadeAlpha: lerpNum(from.enclosure.shadeAlpha, to.enclosure.shadeAlpha, t),
+      light: mixHex(from.enclosure.light, to.enclosure.light, t),
+      lightAlpha: lerpNum(from.enclosure.lightAlpha, to.enclosure.lightAlpha, t),
+      reach: lerpNum(from.enclosure.reach, to.enclosure.reach, t),
+    },
+    global: {
+      multiply: mixHex(from.global.multiply, to.global.multiply, t),
+      glow: mixHex(from.global.glow, to.global.glow, t),
+      glowAlpha: lerpNum(from.global.glowAlpha, to.global.glowAlpha, t),
+    },
   }
 }
+
+const lerpNum = (a: number, b: number, t: number): number => a + (b - a) * t
 
 function mixHex(a: string, b: string, t: number): string {
   const pa = hexToRgb(a)
   const pb = hexToRgb(b)
-  const r = Math.round(pa[0] + (pb[0] - pa[0]) * t)
-  const g = Math.round(pa[1] + (pb[1] - pa[1]) * t)
-  const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t)
-  return `rgb(${r},${g},${bl})`
+  return `rgb(${Math.round(pa[0] + (pb[0] - pa[0]) * t)},${Math.round(pa[1] + (pb[1] - pa[1]) * t)},${Math.round(pa[2] + (pb[2] - pa[2]) * t)})`
 }
 
 function hexToRgb(hex: string): [number, number, number] {
   const v = hex.replace('#', '')
-  return [
-    parseInt(v.slice(0, 2), 16),
-    parseInt(v.slice(2, 4), 16),
-    parseInt(v.slice(4, 6), 16),
-  ]
+  return [parseInt(v.slice(0, 2), 16), parseInt(v.slice(2, 4), 16), parseInt(v.slice(4, 6), 16)]
 }
