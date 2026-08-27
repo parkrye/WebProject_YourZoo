@@ -1,6 +1,6 @@
 import { clamp } from '@/core/math'
 import { randInt, randRange, type Rng } from '@/core/rng'
-import { VISITOR_GRID, VISITOR_BASELINE, VISITOR_PERSPECTIVE } from '@/assets/manifest'
+import { VISITOR_GRID, VISITOR_HEIGHT, VISITOR_SUBMERGE, VISITOR_PERSPECTIVE } from '@/assets/manifest'
 import { lerp } from '@/core/math'
 import { VISITOR_STAY_SEC } from '@/domain/balance'
 
@@ -58,9 +58,17 @@ export class VisitorAgent {
   /** 남은 체류 시간. 다 되면 스스로 돌아간다. */
   private stayTimer = 0
 
-  /** 발이 놓이는 y. 뒤에 선 손님일수록 위쪽이다. */
-  get baselineY(): number {
-    return lerp(VISITOR_BASELINE.far, VISITOR_BASELINE.near, this.depth)
+  /**
+   * 자기 키의 몇 배만큼 화면 아래로 잠기는가.
+   * 뒤에 선 손님은 조금만 잠겨 허리까지 보이고, 앞에 선 손님은 어깨만 걸린다.
+   */
+  get submerge(): number {
+    return lerp(VISITOR_SUBMERGE.far, VISITOR_SUBMERGE.near, this.depth)
+  }
+
+  /** 머리 꼭대기의 대략적인 y. 동물이 손님과의 거리를 잴 때만 쓰므로 평균 체격으로 잡는다. */
+  get headY(): number {
+    return 1 + VISITOR_HEIGHT * this.perspective * (this.submerge - 1)
   }
 
   /** 앞에 선 손님일수록 크다. */

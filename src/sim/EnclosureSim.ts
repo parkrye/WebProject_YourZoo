@@ -140,7 +140,7 @@ export class EnclosureSim {
   private nearestVisitorDistance(x: number, y: number): number {
     let best = Number.POSITIVE_INFINITY
     for (const visitor of this.visitors) {
-      const d = Math.hypot(visitor.x - x, visitor.baselineY - y)
+      const d = Math.hypot(visitor.x - x, visitor.headY - y)
       if (d < best) best = d
     }
     return best

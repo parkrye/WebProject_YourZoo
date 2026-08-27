@@ -57,6 +57,7 @@ export class SceneRenderer {
   private selectedId: string | null = null
   private time = 0
   private layer: HTMLCanvasElement | null = null
+  private mask: HTMLCanvasElement | null = null
   private readonly visitorOrder: VisitorAgent[] = []
 
   draw(ctx: CanvasRenderingContext2D, input: SceneInput): void {
@@ -124,29 +125,40 @@ export class SceneRenderer {
     ctx.save()
     ctx.globalCompositeOperation = 'lighter'
     for (const spot of AREA_SPOTS) {
-      const cx = spot.x * view.width
-      const cy = spot.y * view.height
       const r = spot.radius * view.width
 
-      const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, r)
+      // 바닥에 깔리는 빛은 원이 아니라 납작한 타원이다. 원으로 두면 안개처럼 뜬다.
+      ctx.save()
+      ctx.translate(spot.x * view.width, spot.y * view.height)
+      ctx.scale(1, SPOT_FLATTEN)
+
+      const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, r)
       gradient.addColorStop(0, light.spotColor)
-      gradient.addColorStop(0.55, light.spotColor)
+      gradient.addColorStop(0.3, light.spotColor)
       gradient.addColorStop(1, 'rgba(0,0,0,0)')
 
       ctx.globalAlpha = light.spotAlpha * spot.strength
       ctx.fillStyle = gradient
       ctx.beginPath()
-      ctx.arc(cx, cy, r, 0, Math.PI * 2)
+      ctx.arc(0, 0, r, 0, Math.PI * 2)
       ctx.fill()
+      ctx.restore()
     }
     ctx.restore()
   }
 
   /**
    * 울타리와 손님을 별도 레이어에 그린 뒤 조명을 입혀 합성한다.
-   *
-   * `multiply` 는 알파를 함께 곱하므로 투명한 곳은 투명하게 남는다 —
    * 덕분에 울타리 모양대로만 색이 먹고 뒤의 우리는 건드리지 않는다.
+   *
+   * 조명은 `multiply` 로 얹는다. 빛의 색은 어둡게만 만들어야 하고,
+   * `source-atop` 은 밝게도 만들어 울타리가 우리 안보다 환해진다.
+   *
+   * 다만 `multiply` 는 이름과 달리 **투명한 픽셀을 불투명하게 만든다** —
+   * 블렌드 모드의 합성 연산자는 여전히 `source-over` 라, 빈 곳은 곱해질 대상이 없어
+   * 칠한 색이 그대로 남는다. 실제로 밝기를 alpha 1 로 곱했다가 레이어 전체가
+   * 불투명해져 화면을 통째로 덮은 적이 있다.
+   * 그래서 칠하기 전에 알파 마스크를 떠 두었다가 `destination-in` 으로 되돌린다.
    */
   private drawFenceLayer(
     ctx: CanvasRenderingContext2D,
@@ -164,17 +176,33 @@ export class SceneRenderer {
     lctx.drawImage(getAssets().fence, 0, fenceOffset * view.height, view.width, view.height)
     this.drawVisitors(lctx, sim.visitors, fenceOffset, view)
 
-    lctx.globalCompositeOperation = 'multiply'
-    if (light.tintAlpha > 0) {
-      lctx.globalAlpha = light.tintAlpha
-      lctx.fillStyle = light.tint
-      lctx.fillRect(0, 0, view.width, view.height)
-    }
-    if (light.brightness < 1) {
-      const v = Math.round(light.brightness * 255)
+    const lit = light.tintAlpha > 0 || light.brightness < 1
+    if (lit) {
+      const mask = this.fenceMask(view)
+      const mctx = mask.getContext('2d')
+      if (mctx) {
+        mctx.setTransform(1, 0, 0, 1, 0, 0)
+        mctx.globalCompositeOperation = 'copy'
+        mctx.drawImage(layer, 0, 0)
+      }
+
+      lctx.globalCompositeOperation = 'multiply'
+      if (light.tintAlpha > 0) {
+        lctx.globalAlpha = light.tintAlpha
+        lctx.fillStyle = light.tint
+        lctx.fillRect(0, 0, view.width, view.height)
+      }
+      if (light.brightness < 1) {
+        const v = Math.round(light.brightness * 255)
+        lctx.globalAlpha = 1
+        lctx.fillStyle = `rgb(${v},${v},${v})`
+        lctx.fillRect(0, 0, view.width, view.height)
+      }
+
+      // 곱연산이 불투명하게 만들어 버린 빈 곳을 원래 알파로 되돌린다.
+      lctx.globalCompositeOperation = 'destination-in'
       lctx.globalAlpha = 1
-      lctx.fillStyle = `rgb(${v},${v},${v})`
-      lctx.fillRect(0, 0, view.width, view.height)
+      lctx.drawImage(mask, 0, 0)
     }
     lctx.globalCompositeOperation = 'source-over'
     lctx.globalAlpha = 1
@@ -184,12 +212,14 @@ export class SceneRenderer {
 
   /** 울타리 레이어는 한 번만 만들어 재사용한다. 프레임마다 캔버스를 새로 만들 이유가 없다. */
   private fenceLayer(view: ViewBox): HTMLCanvasElement {
-    if (!this.layer) {
-      this.layer = document.createElement('canvas')
-      this.layer.width = view.width
-      this.layer.height = view.height
-    }
+    if (!this.layer) this.layer = blankCanvas(view)
     return this.layer
+  }
+
+  /** 조명을 먹이기 전 알파를 떠 두는 곳. 역시 한 번만 만든다. */
+  private fenceMask(view: ViewBox): HTMLCanvasElement {
+    if (!this.mask) this.mask = blankCanvas(view)
+    return this.mask
   }
 
   private drawSky(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {
@@ -315,7 +345,9 @@ export class SceneRenderer {
       const relative = frame.sh / visitor.maxFrameHeight
       // 앞뒤로 흩어 세운 만큼 크기도 달라진다. 그래야 관람로에 깊이가 생긴다.
       const own = drawH * relative * v.heightScale * v.perspective
-      const footY = (v.baselineY + fenceOffset + v.bobOffset) * view.height
+      // 발 위치는 절대 기준선이 아니라 **자기 키에서 잠기는 만큼**으로 정한다.
+      // 그래야 어른이든 아이든 같은 신체 부위에서 잘리고, 잘린 높이로 앞뒤가 읽힌다.
+      const footY = view.height + own * v.submerge + (fenceOffset + v.bobOffset) * view.height
       const sq = v.squash
       const vh = own * sq
       const vw = (own * (frame.sw / frame.sh)) / sq
@@ -350,14 +382,28 @@ function fill(
  * 가운데는 우리 한복판 — 실제로 조명을 세울 법한 자리다.
  */
 const AREA_SPOTS = [
-  { x: 0.2, y: 0.6, radius: 0.16, strength: 1 },
-  { x: 0.52, y: 0.56, radius: 0.2, strength: 0.85 },
-  { x: 0.82, y: 0.6, radius: 0.16, strength: 1 },
+  { x: 0.17, y: 0.63, radius: 0.115, strength: 1 },
+  { x: 0.5, y: 0.6, radius: 0.135, strength: 0.8 },
+  { x: 0.83, y: 0.63, radius: 0.115, strength: 1 },
 ] as const
 
-/** 밝기를 곱연산으로 떨어뜨린다. 1 이면 아무것도 하지 않는다. */
+/** 빛 웅덩이의 세로 납작 비율. 바닥면에 누운 것처럼 보이게 한다. */
+const SPOT_FLATTEN = 0.42
+
+/**
+ * 밝기를 떨어뜨린다. 1 이면 아무것도 하지 않는다.
+ *
+ * 배경 위라 검정 베일로 충분하다 — 결과는 원본 x 밝기 로 곱연산과 같다.
+ * 곱연산을 쓰면 투명한 곳까지 칠해져 오히려 위험하다.
+ */
 function dim(ctx: CanvasRenderingContext2D, view: ViewBox, brightness: number): void {
   if (brightness >= 1) return
-  const v = Math.round(brightness * 255)
-  fill(ctx, view, 'multiply', `rgb(${v},${v},${v})`, 1)
+  fill(ctx, view, 'source-over', '#000000', 1 - brightness)
+}
+
+function blankCanvas(view: ViewBox): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = view.width
+  canvas.height = view.height
+  return canvas
 }
