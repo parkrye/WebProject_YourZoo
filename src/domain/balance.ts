@@ -9,6 +9,8 @@ export const PHASE_END = {
 } as const
 
 export const START_GOLD = 200
+/** 유료 재화 시작 보유량. 충전·소모 경로는 아직 없다. */
+export const START_GEMS = 5
 export const START_REPUTATION = 0
 
 export const ANIMAL_CREATE_COST = 50

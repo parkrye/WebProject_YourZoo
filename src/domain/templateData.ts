@@ -1,17 +1,18 @@
 import type { AnimalTemplate, TemplateId } from './templates'
 
-const NO_WAVE = { waveAmplitude: 0, waveCycles: 0, waveSpeed: 0 }
-
 export const TEMPLATE_ORDER: readonly TemplateId[] = [
   'FREE', 'DEER', 'RABBIT', 'CROC', 'PARROT', 'OWL', 'FISH', 'TURTLE',
 ]
 
 /**
- * 그리기 가이드와 움직임 프로파일.
+ * 그리기 가이드와 실루엣 유형.
  *
- * 추상적인 분류(BIRD / BEAST)가 아니라 **구체적인 동물**로 둔다.
- * "새를 그리세요"보다 "앵무새를 그리세요"가 손이 훨씬 잘 움직이고,
- * 볏·부리·꼬리깃이 어디쯤인지 가이드가 알려 주니 움직임 프로파일과도 어긋나지 않는다.
+ * 라벨은 대표 동물이지만 실제 기준은 **실루엣의 생김새**다 —
+ * 긴 다리 네발, 작고 둥근 몸, 낮고 긴 몸통, 큰 날개, 둥근 새, 유선형, 등껍질.
+ * 그래서 사슴 템플릿으로 말이나 기린을 그려도 움직임이 어긋나지 않는다.
+ *
+ * 유형을 고르면 어느 위치에 어느 부위가 오는지가 약속되고,
+ * `domain/motion.ts` 가 그 약속을 이용해 부위별로 다르게 움직인다.
  */
 export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
   FREE: {
@@ -21,7 +22,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
     suggestedType: null,
     guide: [],
     parts: [],
-    motion: { ...NO_WAVE, bob: 0.02, bobSpeed: 2.4, lean: 0.1 },
+    archetype: 'FREE',
   },
 
   DEER: {
@@ -48,7 +49,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'HEAD', x: 0.58, y: 0.1, w: 0.28, h: 0.26 },
       { id: 'LEG', x: 0.26, y: 0.58, w: 0.34, h: 0.24 },
     ],
-    motion: { waveAmplitude: 0.02, waveCycles: 0.6, waveSpeed: 5, bob: 0.04, bobSpeed: 6.5, lean: 0.09 },
+    archetype: 'TALL_QUADRUPED',
   },
 
   RABBIT: {
@@ -70,8 +71,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'HEAD', x: 0.54, y: 0.14, w: 0.24, h: 0.26 },
       { id: 'LEG', x: 0.3, y: 0.68, w: 0.34, h: 0.16 },
     ],
-    // 토끼는 걷지 않고 통통 튄다. 보빙을 크고 빠르게.
-    motion: { waveAmplitude: 0.015, waveCycles: 0.5, waveSpeed: 6, bob: 0.085, bobSpeed: 9, lean: 0.06 },
+    archetype: 'SMALL_HOPPER',
   },
 
   CROC: {
@@ -96,8 +96,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'HEAD', x: 0.66, y: 0.48, w: 0.3, h: 0.16 },
       { id: 'LEG', x: 0.2, y: 0.62, w: 0.42, h: 0.14 },
     ],
-    // 몸통 전체가 느리게 굽이친다.
-    motion: { waveAmplitude: 0.05, waveCycles: 1.4, waveSpeed: 3.2, bob: 0.01, bobSpeed: 2, lean: 0.03 },
+    archetype: 'LOW_CRAWLER',
   },
 
   PARROT: {
@@ -121,7 +120,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'WING', x: 0.25, y: 0.4, w: 0.2, h: 0.28 },
       { id: 'TAIL', x: 0.32, y: 0.68, w: 0.32, h: 0.28 },
     ],
-    motion: { waveAmplitude: 0.022, waveCycles: 0.9, waveSpeed: 10, bob: 0.055, bobSpeed: 9.5, lean: 0.13 },
+    archetype: 'BROAD_WING',
   },
 
   OWL: {
@@ -146,8 +145,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'HEAD', x: 0.31, y: 0.09, w: 0.38, h: 0.3 },
       { id: 'WING', x: 0.27, y: 0.46, w: 0.14, h: 0.3 },
     ],
-    // 올빼미는 크고 느리게 난다.
-    motion: { waveAmplitude: 0.018, waveCycles: 0.7, waveSpeed: 5.5, bob: 0.07, bobSpeed: 5, lean: 0.08 },
+    archetype: 'ROUND_BIRD',
   },
 
   FISH: {
@@ -167,7 +165,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'TAIL', x: 0.06, y: 0.34, w: 0.2, h: 0.32 },
       { id: 'FIN', x: 0.4, y: 0.22, w: 0.22, h: 0.16 },
     ],
-    motion: { waveAmplitude: 0.075, waveCycles: 1.1, waveSpeed: 7, bob: 0.012, bobSpeed: 2, lean: 0.04 },
+    archetype: 'STREAMLINED',
   },
 
   TURTLE: {
@@ -194,8 +192,7 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'HEAD', x: 0.66, y: 0.44, w: 0.18, h: 0.16 },
       { id: 'LEG', x: 0.22, y: 0.58, w: 0.48, h: 0.16 },
     ],
-    // 아주 느긋하게 떠다닌다.
-    motion: { waveAmplitude: 0.025, waveCycles: 0.8, waveSpeed: 2.4, bob: 0.02, bobSpeed: 2.2, lean: 0.03 },
+    archetype: 'SHELLED',
   },
 }
 

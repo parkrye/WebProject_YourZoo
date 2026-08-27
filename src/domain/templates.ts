@@ -1,4 +1,5 @@
 import type { Habitat } from '@/assets/manifest'
+import type { MotionArchetype } from './motion'
 import type { AnimalTypeId } from './traits'
 
 export type TemplateId =
@@ -27,27 +28,6 @@ export interface TemplatePart {
   readonly h: number
 }
 
-/**
- * 절차적 애니메이션 프로파일.
- *
- * 이미지를 가로로 얇게 잘라 각 조각을 서로 다른 위상으로 밀면 몸이 물결친다.
- * 통짜 변형보다 훨씬 살아 있어 보이고, 조각 수가 적어 비용도 낮다.
- */
-export interface MotionProfile {
-  /** 물결 진폭 (그림 높이 대비). 0 이면 물결 없음. */
-  readonly waveAmplitude: number
-  /** 그림 전체에 걸치는 물결의 파장 수 */
-  readonly waveCycles: number
-  /** 물결 속도 (rad/s) */
-  readonly waveSpeed: number
-  /** 상하 보빙 진폭 (그림 높이 대비) */
-  readonly bob: number
-  /** 보빙 주파수 (rad/s) */
-  readonly bobSpeed: number
-  /** 진행 방향으로 기우는 각도(라디안) */
-  readonly lean: number
-}
-
 export interface AnimalTemplate {
   readonly id: TemplateId
   readonly label: string
@@ -57,7 +37,8 @@ export interface AnimalTemplate {
   readonly suggestedType: AnimalTypeId | null
   readonly guide: readonly GuideShape[]
   readonly parts: readonly TemplatePart[]
-  readonly motion: MotionProfile
+  /** 이 실루엣이 어떻게 움직이는지. 규격은 domain/motion.ts 에 있다. */
+  readonly archetype: MotionArchetype
 }
 
 /*

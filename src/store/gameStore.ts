@@ -3,7 +3,7 @@ import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
   ANIMAL_CREATE_COST, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
-  START_GOLD, START_REPUTATION, UNLOCK_COST,
+  START_GEMS, START_GOLD, START_REPUTATION, UNLOCK_COST,
 } from '@/domain/balance'
 import { advanceClock, type ClockState } from '@/domain/clock'
 import { settleDay, type DailyReport } from '@/domain/economy'
@@ -33,6 +33,8 @@ interface GameState {
   isDrawing: boolean
   tutorial: TutorialStep
   gold: number
+  /** 유료 재화. 충전·소모는 아직 없고 보유량만 들고 있는다. */
+  gems: number
   reputation: number
   clock: ClockState
   currentEnclosure: BiomeId
@@ -83,6 +85,7 @@ const initial = {
   isDrawing: false,
   tutorial: 'DONE' as TutorialStep,
   gold: START_GOLD,
+  gems: START_GEMS,
   reputation: START_REPUTATION,
   clock: { day: 1, elapsed: 0 } as ClockState,
   currentEnclosure: 'FIELD' as BiomeId,
@@ -311,6 +314,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       zooName: save.zooName ?? '',
       tutorial: save.tutorial ?? 'DONE',
       gold: save.gold,
+      gems: save.gems ?? START_GEMS,
       reputation: save.reputation,
       clock: save.clock,
       currentEnclosure: save.currentEnclosure,
@@ -332,6 +336,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       zooName: s.zooName,
       tutorial: s.tutorial,
       gold: s.gold,
+      gems: s.gems,
       reputation: s.reputation,
       clock: s.clock,
       currentEnclosure: s.currentEnclosure,

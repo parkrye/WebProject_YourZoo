@@ -64,3 +64,50 @@ export function clockLabel(elapsed: number): { hh: string; mm: string } {
   const hour = Math.floor((dayFraction * 24 + 6) % 24)
   return { hh: String(hour).padStart(2, '0'), mm: '00' }
 }
+
+/** 시간대별 화면 색조. 하늘만 바꾸면 땅과 물은 한낮 그대로라 시간이 흐르는 느낌이 약하다. */
+export interface LightTint {
+  /** 곱연산으로 깔리는 색. 전체를 물들인다. */
+  readonly multiply: string
+  /** 더해지는 빛. 노을이나 달빛의 번짐. */
+  readonly glow: string
+  readonly glowAlpha: number
+}
+
+const TINTS: Record<SkyPhase, LightTint> = {
+  DAY: { multiply: '#ffffff', glow: '#fff3d0', glowAlpha: 0 },
+  AFTERNOON: { multiply: '#ffb877', glow: '#ff9a4d', glowAlpha: 0.16 },
+  NIGHT: { multiply: '#5a6fae', glow: '#2c3f7a', glowAlpha: 0.22 },
+}
+
+/** 크로스페이드 중에는 두 시간대 색을 섞는다. 조명이 하늘보다 늦게 따라오면 어색하다. */
+export function lightTint(elapsed: number): LightTint {
+  const blend = phaseBlend(elapsed)
+  const from = TINTS[blend.from]
+  const to = TINTS[blend.to]
+  if (blend.t <= 0) return from
+
+  return {
+    multiply: mixHex(from.multiply, to.multiply, blend.t),
+    glow: mixHex(from.glow, to.glow, blend.t),
+    glowAlpha: from.glowAlpha + (to.glowAlpha - from.glowAlpha) * blend.t,
+  }
+}
+
+function mixHex(a: string, b: string, t: number): string {
+  const pa = hexToRgb(a)
+  const pb = hexToRgb(b)
+  const r = Math.round(pa[0] + (pb[0] - pa[0]) * t)
+  const g = Math.round(pa[1] + (pb[1] - pa[1]) * t)
+  const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t)
+  return `rgb(${r},${g},${bl})`
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const v = hex.replace('#', '')
+  return [
+    parseInt(v.slice(0, 2), 16),
+    parseInt(v.slice(2, 4), 16),
+    parseInt(v.slice(4, 6), 16),
+  ]
+}

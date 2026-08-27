@@ -1,4 +1,5 @@
 import type { Animal } from '@/domain/animal'
+import { MOTION_PROFILES } from '@/domain/motion'
 import { templateOf } from '@/domain/templates'
 import type { AnimalRenderer } from './AnimalRenderer'
 import { ProceduralRenderer } from './ProceduralRenderer'
@@ -14,5 +15,5 @@ export { SheetRenderer } from './SheetRenderer'
  */
 export function createAnimalRenderer(animal: Animal, bitmap: ImageBitmap): AnimalRenderer {
   if (animal.spriteSheet) return new SheetRenderer(bitmap, animal.spriteSheet)
-  return new ProceduralRenderer(bitmap, templateOf(animal.templateId).motion)
+  return new ProceduralRenderer(bitmap, MOTION_PROFILES[templateOf(animal.templateId).archetype])
 }

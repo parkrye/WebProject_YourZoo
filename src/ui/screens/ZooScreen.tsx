@@ -5,7 +5,7 @@ import {
 } from '@/assets/manifest'
 import { audio } from '@/audio/AudioManager'
 import { startTicker } from '@/core/ticker'
-import { UNLOCK_COST } from '@/domain/balance'
+import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST } from '@/domain/balance'
 import { clockLabel, phaseOf } from '@/domain/clock'
 import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
 import { SceneRenderer, type EnclosureTransition } from '@/render/SceneRenderer'
@@ -49,6 +49,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const panRef = useRef<{ x: number; y: number } | null>(null)
 
   const [trayOpen, setTrayOpen] = useState(false)
+  /** 관찰 전용 모드. HUD 를 전부 걷고 화면만 남긴다. */
+  const [hudHidden, setHudHidden] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const selectedIdRef = useRef<string | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
@@ -79,6 +81,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const unlocked = useGameStore((s) => s.unlocked)
   const gold = useGameStore((s) => s.gold)
   const reputation = useGameStore((s) => s.reputation)
+  const gems = useGameStore((s) => s.gems)
   const zooName = useGameStore((s) => s.zooName)
   const animals = useGameStore((s) => s.animals)
   const day = useGameStore((s) => s.clock.day)
@@ -108,6 +111,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     applyCameraState(createCamera())
     setTool('CURSOR')
     setTrayOpen(false)
+    setHudHidden(false)
     select(null)
   }, [detail, applyCameraState, select])
 
@@ -287,7 +291,9 @@ export function ZooScreen({ detail }: ZooScreenProps) {
 
     // 스토어가 갱신되면 EnclosureSim 이 새 에이전트를 만든다. 그 전에 시작 위치를 알려 둔다.
     sims.get(enclosure)?.setSpawnHint(state.animal.id, scene.x, scene.y)
-    if (placeAnimal(state.animal.id, enclosure)) select(state.animal.id)
+    // 배치 직후 카드를 띄우지 않는다. 창고가 열려 있는 동안에는 카드가 가려져 보이지도 않고,
+    // 연달아 여러 마리를 놓는 흐름이 매번 끊긴다. 보고 싶으면 커서로 집으면 된다.
+    placeAnimal(state.animal.id, enclosure)
   }
 
   const time = clockLabel(elapsed)
@@ -320,15 +326,26 @@ export function ZooScreen({ detail }: ZooScreenProps) {
         아래에서 버튼과 바가 비쳐 보이면 무엇을 눌러야 할지 헷갈린다.
         열린 UI 는 자기 닫기 버튼으로만 빠져나간다.
       */}
-      {!modal && !trayOpen && (
+      {/* 관찰 모드에서도 되돌아올 문은 남겨 둔다. */}
+      {hudHidden && !modal && !trayOpen && (
+        <button type="button" className="hud-restore" onClick={() => setHudHidden(false)}>
+          <IconGlyph icon={GUI.EYE_OFF} size={44} />
+        </button>
+      )}
+
+      {!modal && !trayOpen && !hudHidden && (
         <>
           {/*
             상세보기는 우리 안을 들여다보는 화면이다. 날짜·시각·재화는 바깥 살림이라
             여기서는 걷어내고, 지금 이 우리에 몇 마리가 있는지만 남긴다.
           */}
           {detail ? (
-            <div className="hud-enclosure-name">
-              <BitmapLabel text={`ANIMALS ${here}`} size={30} align="center" />
+            <div className="hud-top-right">
+              <BitmapLabel text={ENCLOSURES[enclosure].label} size={24} align="right" />
+              <div className="hud-purse">
+                <IconGlyph icon={GUI.BOOK} size={26} />
+                <BitmapLabel text={`${here} / ${MAX_ANIMALS_PER_ENCLOSURE}`} size={22} />
+              </div>
             </div>
           ) : (
             <>
@@ -344,6 +361,9 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                   <BitmapLabel text={`${gold}`} size={24} />
                   <IconGlyph icon={GUI.MEDAL} size={30} />
                   <BitmapLabel text={`${reputation}`} size={24} />
+                  {/* GUI 시트에 보석 아이콘이 없다. 무지개 팔레트가 가장 '특별한' 인상을 준다. */}
+                  <IconGlyph icon={GUI.PALETTE} size={30} />
+                  <BitmapLabel text={`${gems}`} size={24} />
                 </div>
               </div>
 
@@ -451,6 +471,14 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                   <BarButton icon={GUI.SETTINGS} label="OPTIONS" onClick={() => openModal('OPTIONS')} />
                 </>
               )}
+              <BarButton
+                icon={GUI.EYE_OFF}
+                label="HIDE UI"
+                onClick={() => {
+                  select(null)
+                  setHudHidden(true)
+                }}
+              />
             </div>
           </div>
         </>

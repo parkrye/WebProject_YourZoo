@@ -29,7 +29,10 @@ export function TitleScreen() {
     <div className="screen">
       <canvas ref={canvasRef} width={LOGICAL_WIDTH} height={LOGICAL_HEIGHT} className="screen-canvas" />
       <div className="title-overlay">
-        <BitmapLabel text="YOUR ZOO" size={110} align="center" />
+        {/* 배경이 먼저 자리를 잡고, 제목이 쿵 내려앉은 뒤, 버튼이 차례로 미끄러져 들어온다. */}
+        <div className="title-logo">
+          <BitmapLabel text="YOUR ZOO" size={110} align="center" />
+        </div>
         <div className="title-menu">
           {savedGame && (
             <button type="button" className="text-button" onClick={() => continueGame()}>

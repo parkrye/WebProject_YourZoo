@@ -4,7 +4,7 @@ import {
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
 import { easeInOutCubic } from '@/core/math'
-import { phaseBlend } from '@/domain/clock'
+import { lightTint, phaseBlend } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
 import { PROP_BOB, type PlacedProp } from '@/sim/props'
@@ -98,6 +98,31 @@ export class SceneRenderer {
     this.drawSortedLayer(ctx, sim, 'WATER', view)
     ctx.drawImage(getAssets().fence, 0, input.fenceOffset * view.height, view.width, view.height)
     this.drawVisitors(ctx, sim.visitors, input.fenceOffset, view)
+    this.drawLighting(ctx, input.elapsed, view)
+  }
+
+  /**
+   * 시간대 조명.
+   *
+   * 하늘만 갈아 끼우면 땅과 물은 한낮 그대로라 시간이 흐르는 느낌이 약하다.
+   * 씬 전체에 곱연산으로 색을 입혀 저녁엔 노랗게, 밤엔 푸르게 가라앉힌다.
+   * 그 위에 옅은 빛을 더해 노을과 달빛의 번짐을 낸다.
+   */
+  private drawLighting(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {
+    const tint = lightTint(elapsed)
+
+    ctx.save()
+    ctx.globalCompositeOperation = 'multiply'
+    ctx.fillStyle = tint.multiply
+    ctx.fillRect(0, 0, view.width, view.height)
+
+    if (tint.glowAlpha > 0) {
+      ctx.globalCompositeOperation = 'lighter'
+      ctx.globalAlpha = tint.glowAlpha
+      ctx.fillStyle = tint.glow
+      ctx.fillRect(0, 0, view.width, view.height)
+    }
+    ctx.restore()
   }
 
   private drawSky(ctx: CanvasRenderingContext2D, elapsed: number, view: ViewBox): void {
@@ -212,11 +237,13 @@ export class SceneRenderer {
 
     for (const v of visitors) {
       // 검출된 프레임은 손님마다 종횡비가 다르다. 프레임별로 폭을 계산해야 찌그러지지 않는다.
+      // 키 배율은 개체마다 다르다 — 어른·아이·노인이 섞여 있는 게 이 시트의 맛이다.
       const frame = visitor.frame(v.spriteIndex)
+      const own = drawH * v.heightScale
       const footY = (VISITOR_BASELINE_Y + fenceOffset + v.bobOffset) * view.height
       const sq = v.squash
-      const vh = drawH * sq
-      const vw = (drawH * (frame.sw / frame.sh)) / sq
+      const vh = own * sq
+      const vw = (own * (frame.sw / frame.sh)) / sq
       visitor.draw(ctx, v.spriteIndex, v.x * view.width - vw / 2, footY - vh, vw, vh)
     }
   }

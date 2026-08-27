@@ -18,6 +18,7 @@ export interface SaveV2 {
   zooName: string
   tutorial: TutorialStep
   gold: number
+  gems: number
   reputation: number
   clock: ClockState
   currentEnclosure: BiomeId

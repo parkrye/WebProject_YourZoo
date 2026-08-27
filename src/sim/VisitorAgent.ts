@@ -16,8 +16,16 @@ const EXIT_SPEED = 0.11
  * 그래서 이동은 전부 절차적으로 만든다: 느린 수평 이동 + sin 상하 보빙 +
  * 미세한 좌우 스케일 흔들림. (docs/01-assets.md §2.4)
  */
+/**
+ * 개체별 키 배율.
+ * 손님 시트에는 어른·아이·노인이 섞여 있다. 전부 같은 크기로 그리면 그 맛이 사라진다.
+ */
+const HEIGHT_SCALE = { min: 0.72, max: 1.12 } as const
+
 export class VisitorAgent {
   readonly spriteIndex: number
+  /** 이 손님의 키 배율. 스프라이트마다 원래 비율이 달라 그 위에 곱한다. */
+  readonly heightScale: number
   x: number
   private vx: number
   private idleTimer: number
@@ -27,6 +35,7 @@ export class VisitorAgent {
 
   constructor(private readonly rng: Rng) {
     this.spriteIndex = randInt(rng, 0, VISITOR_GRID.cols * VISITOR_GRID.rows)
+    this.heightScale = randRange(rng, HEIGHT_SCALE.min, HEIGHT_SCALE.max)
     this.x = randRange(rng, X_MIN, X_MAX)
     this.walkSpeed = randRange(rng, 0.008, 0.022)
     this.vx = rng() < 0.5 ? -this.walkSpeed : this.walkSpeed
