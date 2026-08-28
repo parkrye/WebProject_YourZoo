@@ -82,6 +82,19 @@ GUI2_LINE_PAD = 4
 # 파일명의 층 -> 게임의 서식지
 ANIMAL_HABITAT = {"upper": "SKY", "middle": "LAND", "lower": "WATER"}
 
+# ── 모션별 낱장 형식 ─────────────────────────────────────────
+#
+# `{이름}-{모션}.png` 로 모션마다 파일이 따로 온다. 한 장이 가로로 정확히 8칸이고
+# 배경이 이미 투명해서, 앞의 시트 형식과 달리 칸을 찾아낼 필요가 없다.
+MOTION_FILES = ("idle", "move", "signature")
+MOTION_COLS = 8
+# 층 이름이 파일에 없어서 여기서 정한다. `{층}_{이름}-{모션}.png` 로 오면 이 표를 안 본다.
+MOTION_HABITAT = {
+    "bear": "LAND", "orangutan": "LAND",
+    "parrot": "SKY",
+    "shark": "WATER",
+}
+
 # 잘라낸 프레임의 최대 높이(px). 화면에서 동물은 100px 안팎이라
 # 원본 341px 을 그대로 두면 쓰지도 않을 해상도로 번들만 부푼다.
 ANIMAL_MAX_FRAME_H = 220
@@ -443,12 +456,161 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
         "cols": cols,
         "rows": len(rows),
         "frames": frames,
+        "motions": ["IDLE", "MOVE", "SIGNATURE"][: len(rows)],
         "fit": round(-idle_top / bh, 4),
         "baseline": 1.0,
         "frameW": fw,
         "frameH": fh,
         "kb": round(out.stat().st_size / 1024),
     }
+
+
+def _cell_boxes(path: Path):
+    """낱장 한 줄을 칸으로 갈라, 칸마다의 잉크 상자를 잰다."""
+    rgba = np.array(Image.open(path).convert("RGBA"))
+    height, width = rgba.shape[:2]
+    cell = width / MOTION_COLS
+    boxes = []
+    for c in range(MOTION_COLS):
+        x0, x1 = round(cell * c), round(cell * (c + 1))
+        piece = rgba[:, x0:x1, 3] > 0
+        if not piece.any():
+            boxes.append((0, 0, 0, 0))
+            continue
+        ys, xs = np.where(piece)
+        boxes.append((x0 + int(xs.min()), int(ys.min()), x0 + int(xs.max()) + 1, int(ys.max()) + 1))
+    return rgba, boxes, round(cell), height
+
+
+def _row_datum(rgba: np.ndarray, boxes, cell: int, ground: bool) -> float:
+    """
+    한 줄의 세로 기준선.
+
+    땅 동물은 **발이 닿는 바닥**이 기준이다. 곰의 서 있는 줄은 바닥이 230, 걷는 줄은 208 로
+    22px 차이가 난다 — 통째로 같은 자리에서 잘라내면 걸을 때 곰이 떠오른다.
+
+    하늘과 물의 동물은 바닥이랄 게 없다. 상어의 헤엄치는 줄은 바닥이 169~208 로 40px 을
+    오르내리는데 그 최저점에 맞추면 몸이 프레임마다 튄다.
+    그래서 **잉크의 무게중심**을 쓴다 — 지느러미가 아무리 흔들려도 몸은 제자리에 있다.
+    """
+    if ground:
+        return float(max(b[3] for b in boxes))
+    rows = np.arange(rgba.shape[0], dtype=np.float64)
+    column = rgba[..., 3].astype(np.float64).sum(axis=1)
+    weight = float(column.sum())
+    return float((rows * column).sum()) / weight if weight else rgba.shape[0] / 2
+
+
+def prepare_animal_frames(name: str, habitat: str, files):
+    """
+    모션별 낱장을 한 장의 시트로 묶는다.
+
+    앞의 형식(`prepare_animal`)과 달리 칸을 찾아낼 일이 없다. 가로로 정확히 8등분이고
+    배경도 이미 투명하다. 여기서 하는 일은 **여백을 걷어내고 줄을 맞추는 것**뿐이다.
+
+    줄마다 기준선을 따로 잡는 이유는 낱장이 서로 다른 파일이라 세로가 맞지 않아서다.
+    자세한 이유는 `_row_datum` 에 적어 두었다.
+    """
+    ground = habitat == "LAND"
+    rows = []
+    for motion, path in files:
+        rgba, boxes, cell, height = _cell_boxes(path)
+        if not any(b[2] for b in boxes):
+            print(f"  [건너뜀] {path.name} 내용이 없음")
+            return None
+        rows.append((motion, rgba, boxes, cell, height, _row_datum(rgba, boxes, cell, ground)))
+
+    cell = rows[0][3]
+    # 봉투는 칸 가운데(가로)와 줄 기준선(세로)에서 잰다. 둘 다 프레임이 바뀌어도 안 움직인다.
+    lefts, rights, tops, bottoms = [], [], [], []
+    for _, _, boxes, _, _, datum in rows:
+        for c, box in enumerate(boxes):
+            if not box[2]:
+                continue
+            centre = cell * (c + 0.5)
+            lefts.append(box[0] - centre)
+            rights.append(box[2] - centre)
+            tops.append(box[1] - datum)
+            bottoms.append(box[3] - datum)
+
+    box_left, box_right = min(lefts), max(rights)
+    box_top, box_bottom = min(tops), max(bottoms)
+    bw, bh = round(box_right - box_left), round(box_bottom - box_top)
+
+    # `fit` 은 서 있는 줄만 보고 잰다. 봉투는 움직이는 줄까지 감싸느라 커서,
+    # 봉투를 기준으로 삼으면 서 있는 동물이 공중에 뜬 것처럼 그려진다.
+    idle_boxes = [b for b in rows[0][2] if b[2]]
+    idle_datum = rows[0][5]
+    idle_top = min(b[1] - idle_datum for b in idle_boxes)
+    idle_bottom = max(b[3] - idle_datum for b in idle_boxes)
+
+    scale = min(1.0, ANIMAL_MAX_FRAME_H / bh)
+    fw, fh = max(1, round(bw * scale)), max(1, round(bh * scale))
+
+    sheet = Image.new("RGBA", (fw * MOTION_COLS, fh * len(rows)), (0, 0, 0, 0))
+    for r, (_, rgba, _, _, height, datum) in enumerate(rows):
+        for c in range(MOTION_COLS):
+            left = round(cell * (c + 0.5) + box_left)
+            top = round(datum + box_top)
+
+            piece = np.zeros((bh, bw, 4), dtype=np.uint8)
+            sy0, sy1 = max(0, top), min(height, top + bh)
+            sx0, sx1 = max(left, cell * c), min(left + bw, cell * (c + 1))
+            if sy1 > sy0 and sx1 > sx0:
+                piece[sy0 - top : sy1 - top, sx0 - left : sx1 - left] = rgba[sy0:sy1, sx0:sx1]
+
+            crop = Image.fromarray(piece, mode="RGBA")
+            if scale < 1.0:
+                crop = crop.resize((fw, fh), Image.LANCZOS)
+            sheet.paste(crop, (c * fw, r * fh))
+
+    relative = f"animal/{habitat.lower()}-{name}.webp"
+    out = OUT_ROOT / relative
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(out, format="WEBP", quality=ANIMAL_WEBP_QUALITY, method=6)
+
+    return {
+        "id": name.upper(),
+        "habitat": habitat,
+        "file": relative,
+        "cols": MOTION_COLS,
+        "rows": len(rows),
+        "frames": [MOTION_COLS] * len(rows),
+        "motions": [m.upper() for m, *_ in rows],
+        "fit": round((idle_bottom - idle_top) / bh, 4),
+        "baseline": round((idle_bottom - box_top) / bh, 4),
+        "frameW": fw,
+        "frameH": fh,
+        "kb": round(out.stat().st_size / 1024),
+    }
+
+
+def collect_animal_frames(source: Path):
+    """`{이름}-{모션}.png` 낱장들을 동물별로 모은다. 층은 파일명이나 표에서 얻는다."""
+    found = {}
+    for path in sorted(source.glob("*-*.png")):
+        stem, _, motion = path.stem.rpartition("-")
+        if motion not in MOTION_FILES or not stem:
+            continue
+        found.setdefault(stem, {})[motion] = path
+
+    out = []
+    for stem, motions in sorted(found.items()):
+        layer, _, rest = stem.partition("_")
+        habitat = ANIMAL_HABITAT.get(layer) if rest else None
+        name = rest if habitat else stem
+        if habitat is None:
+            habitat = MOTION_HABITAT.get(name)
+        if habitat is None:
+            print(f"  [건너뜀] {stem} 어느 층인지 모름. MOTION_HABITAT 에 넣거나 "
+                  f"파일명 앞에 upper_ / middle_ / lower_ 를 붙일 것")
+            continue
+        ordered = [(m, motions[m]) for m in MOTION_FILES if m in motions]
+        if not ordered or ordered[0][0] != "idle":
+            print(f"  [건너뜀] {stem} idle 낱장이 없음")
+            continue
+        out.append((name, habitat, ordered))
+    return out
 
 
 def alpha_zero_ratio(image: Image.Image) -> float:
@@ -498,6 +660,14 @@ def main() -> int:
             print(f"  {SMALL_FONT_SRC:26s} -> {SMALL_FONT_OUT:24s} [격자 {size[0]}x{size[1]}]")
 
     animals = []
+    for name, habitat, files in collect_animal_frames(source):
+        entry = prepare_animal_frames(name, habitat, files)
+        if entry:
+            animals.append(entry)
+            joined = "+".join(m for m, _ in files)
+            print(f"  {name:18s} {joined:18s} -> {entry['file']:26s} "
+                  f"[fit {entry['fit']} base {entry['baseline']}] {entry['kb']}KB")
+
     for src in sorted(source.glob(f"{ANIMAL_PREFIX}*.png")):
         entry = prepare_animal(src)
         if entry:
@@ -714,6 +884,7 @@ def write_animal_manifest(animals: list[dict[str, object]]) -> None:
     lines = [
         "/* 이 파일은 scripts/prepare-assets.py 가 생성한다. 직접 고치지 말 것. */",
         "import type { Habitat } from './manifest'",
+        "import type { AnimalMotion } from '@/domain/animal'",
         "",
     ]
     for i, a in enumerate(animals):
@@ -737,6 +908,8 @@ def write_animal_manifest(animals: list[dict[str, object]]) -> None:
         "  readonly rows: number",
         "  /** 줄마다의 실제 프레임 수. 한 시트 안에서도 다르다 — 말은 8/7/8 이다. */",
         "  readonly frames: readonly number[]",
+        "  /** 줄 순서에 대응하는 모션. 시그니처가 없는 시트는 두 줄이다. */",
+        "  readonly motions: readonly AnimalMotion[]",
         "}",
         "",
         "export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [",
@@ -746,7 +919,8 @@ def write_animal_manifest(animals: list[dict[str, object]]) -> None:
             f"  {{ id: '{a['id']}', habitat: '{a['habitat']}', src: sheet{i}, "
             f"fit: {a['fit']}, baseline: {a['baseline']}, "
             f"frameW: {a['frameW']}, frameH: {a['frameH']}, "
-            f"cols: {a['cols']}, rows: {a['rows']}, frames: {list(a['frames'])} }},"
+            f"cols: {a['cols']}, rows: {a['rows']}, frames: {list(a['frames'])}, "
+            f"motions: {[str(m) for m in a['motions']]} }},"
         )
     lines += ["]", ""]
 

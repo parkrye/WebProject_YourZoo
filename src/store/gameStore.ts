@@ -507,7 +507,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         frames: item.sheet.frames,
         // 한 줄이 1초에 한 바퀴 돈다. 칸이 7개면 조금 느리게 돈다.
         fps: item.sheet.cols,
-        motions: ['IDLE', 'MOVE', 'SIGNATURE'],
+        /*
+          줄 수는 시트마다 다르다. 시그니처가 없는 두 줄짜리도 있고, 아직 걷는 줄이
+          안 온 한 줄짜리도 있다. 세 줄이라고 박아 두면 없는 줄을 읽어 빈 칸이 뜬다.
+          모르는 모션은 SheetRenderer 가 첫 줄로 돌린다.
+        */
+        motions: item.sheet.motions,
         fit: item.sheet.fit,
         baseline: item.sheet.baseline,
       },

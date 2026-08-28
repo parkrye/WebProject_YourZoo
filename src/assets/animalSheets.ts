@@ -1,5 +1,11 @@
 /* 이 파일은 scripts/prepare-assets.py 가 생성한다. 직접 고치지 말 것. */
 import type { Habitat } from './manifest'
+import type { AnimalMotion } from '@/domain/animal'
+
+import sheet0 from './images/animal/land-bear.webp'
+import sheet1 from './images/animal/land-orangutan.webp'
+import sheet2 from './images/animal/sky-parrot.webp'
+import sheet3 from './images/animal/water-shark.webp'
 
 export interface AnimalSheetAsset {
   readonly id: string
@@ -17,6 +23,13 @@ export interface AnimalSheetAsset {
   readonly rows: number
   /** 줄마다의 실제 프레임 수. 한 시트 안에서도 다르다 — 말은 8/7/8 이다. */
   readonly frames: readonly number[]
+  /** 줄 순서에 대응하는 모션. 시그니처가 없는 시트는 두 줄이다. */
+  readonly motions: readonly AnimalMotion[]
 }
 
-export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = []
+export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [
+  { id: 'BEAR', habitat: 'LAND', src: sheet0, fit: 1.0, baseline: 1.0, frameW: 256, frameH: 219, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+  { id: 'ORANGUTAN', habitat: 'LAND', src: sheet1, fit: 1.0, baseline: 1.0, frameW: 174, frameH: 220, cols: 8, rows: 1, frames: [8], motions: ['IDLE'] },
+  { id: 'PARROT', habitat: 'SKY', src: sheet2, fit: 0.8664, baseline: 0.9357, frameW: 243, frameH: 220, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+  { id: 'SHARK', habitat: 'WATER', src: sheet3, fit: 0.9161, baseline: 0.9161, frameW: 240, frameH: 155, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+]

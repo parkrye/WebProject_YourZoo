@@ -1152,6 +1152,11 @@ html, body, #root {
   align-self: stretch;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  /*
+    남는 세로 공간을 줄에 나눠 주지 않는다. 상품이 한 줄뿐일 때 그 줄이 판 전체로
+    늘어나 카드가 길쭉해지고 그림과 이름이 바닥에 몰린다.
+  */
+  align-content: start;
   gap: 12px;
   overflow-y: auto;
   padding: 4px 8px 4px 2px;
