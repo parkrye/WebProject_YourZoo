@@ -68,12 +68,11 @@ ANIMAL_MAX_FRAME_H = 220
 # WebP 품질. 90 아래로는 털결에 뭉개짐이 눈에 띈다.
 ANIMAL_WEBP_QUALITY = 90
 
-# 창을 얼마나 좁힐지(피치 대비). 0 이면 피치 그대로.
-#
-# 원본은 그림이 프레임 간격보다 넓게 그려져 이웃과 겹친다. 어떤 직사각형으로 잘라도
-# 남의 조각이 조금은 들어온다. 창을 살짝 좁혀 그 조각이 **가운데를 못 지나게** 만들면
-# 연결 성분 판정이 걸러 준다.
-WINDOW_SHRINK = 0.06
+# 이 비율보다 작은 덩어리는 먼지로 본다. 본체 대비.
+DUST_RATIO = 0.01
+# 이음매를 격자 자리에서 옮길 수 있는 폭(피치 대비).
+# 넓게 풀면 한 마리 안의 얇은 곳(목·허리)까지 찾아가 거기를 자른다.
+SEAM_REACH = 0.2
 
 
 OUT_ROOT = Path("src/assets/images")
@@ -179,60 +178,79 @@ def row_bounds(mask: np.ndarray) -> list[tuple[int, int]]:
     return list(zip(edges, edges[1:]))
 
 
-def centered_window(band: np.ndarray, index: int, pitch: float, window: int, width: int) -> tuple[int, int]:
+def slot_regions(band: np.ndarray, cols: int, pitch: float) -> list[tuple[int, int, np.ndarray]]:
     """
-    프레임 하나가 들어갈 창을 그림의 **무게중심에 맞춰** 잡는다.
+    한 줄에서 프레임 `cols` 개를 **덩어리 단위로** 나눠 담는다.
 
-    고정 격자로 자르면 그림이 슬롯 한쪽으로 치우쳐 반대편에 이웃이 크게 물린다.
-    무게중심에 맞추면 남의 조각이 양 끝으로 밀려나 가운데를 지나지 않고,
-    그때부터는 연결 성분 판정이 걸러 준다.
+    격자로 자르면 꼬리와 주둥이가 잘린다 — 그림이 프레임 간격보다 넓게 그려져 있어서다.
+    악어 꼬리와 제비 꽁지가 실제로 그렇게 날아갔다.
+
+    그래서 자르지 않고 나눠 담는다. 연결 성분을 찾아 각자 무게중심이 가장 가까운 칸에
+    배정하고, 칸의 범위는 담긴 덩어리를 다 감싸도록 잡는다. **배정 결과를 그대로 들고 나가**
+    남의 덩어리는 지운다 — 이러면 가로로 겹쳐도 서로의 그림을 침범하지 않는다.
+    겹치는 건 자리지 픽셀이 아니기 때문이다.
+
+    덩어리가 서로 붙어 칸 수만큼 안 나오면 이음매를 찾아 자르는 쪽으로 물러선다.
+    반환값은 칸마다 `(왼쪽, 오른쪽, 이 칸의 픽셀만 True 인 마스크)`.
     """
-    slot0 = round(pitch * index)
-    slot1 = round(pitch * (index + 1))
-    profile = band[:, slot0:slot1].sum(axis=0)
+    labels, count = ndimage.label(band)
+    if count == 0:
+        return seam_regions(band, cols, pitch)
 
-    total = profile.sum()
-    center = (slot0 + slot1) / 2
-    if total > 0:
-        center = slot0 + float((np.arange(len(profile)) * profile).sum() / total)
+    sizes = ndimage.sum(band, labels, range(1, count + 1))
+    # 먼지 같은 조각은 버린다. 본체의 1% 도 안 되는 것은 그림이 아니다.
+    threshold = max(sizes) * DUST_RATIO
 
-    x0 = int(round(center - window / 2))
-    x0 = max(0, min(x0, width - window))
-    return x0, x0 + window
-
-
-def strip_intruders(mask: np.ndarray) -> np.ndarray:
-    """
-    이웃 프레임에서 넘어온 조각을 지운다.
-
-    원본은 그림이 프레임 간격보다 넓어 칸마다 옆 그림의 앞뒤가 물려 들어온다 —
-    상어가 두 마리로 보였다. 창을 무게중심에 맞춰 잡으면 그 조각은 양 끝으로 밀려나므로,
-    여기서는 **몸통과 가로로 겹치지 않는 덩어리**를 버린다.
-    옆에 떨어져 있는 조각은 이 동물의 일부가 아니다.
-
-    크기로 가르려다 상어 머리를 못 걸렀고, 세로 픽셀 수의 골짜기로 가르려다
-    말과 호랑이의 **목을 잘랐다** — 진짜 동물은 목과 허리가 원래 가늘다.
-    """
-    labels, count = ndimage.label(mask)
-    if count <= 1:
-        return mask
-
-    sizes = ndimage.sum(mask, labels, range(1, count + 1))
-    main = int(np.argmax(sizes)) + 1
-    main_cols = np.where((labels == main).any(axis=0))[0]
-    lo, hi = int(main_cols.min()), int(main_cols.max())
-
-    keep = labels == main
-    for i in range(1, count + 1):
-        if i == main:
+    members: list[list[int]] = [[] for _ in range(cols)]
+    for i, size in enumerate(sizes, start=1):
+        if size < threshold:
             continue
-        part = labels == i
-        cols = np.where(part.any(axis=0))[0]
-        # 몸통이 차지한 가로 구간과 겹치면 이 동물의 일부로 본다.
-        if int(cols.min()) <= hi and int(cols.max()) >= lo:
-            keep |= part
+        hit = np.where((labels == i).any(axis=0))[0]
+        center = (int(hit.min()) + int(hit.max()) + 1) / 2
+        slot = min(cols - 1, max(0, int(round(center / pitch - 0.5))))
+        members[slot].append(i)
 
-    return keep
+    if any(not m for m in members):
+        return seam_regions(band, cols, pitch)
+
+    regions: list[tuple[int, int, np.ndarray]] = []
+    for group in members:
+        mine = np.isin(labels, group)
+        hit = np.where(mine.any(axis=0))[0]
+        regions.append((int(hit.min()), int(hit.max()) + 1, mine))
+    return regions
+
+
+def seam_regions(band: np.ndarray, cols: int, pitch: float) -> list[tuple[int, int, np.ndarray]]:
+    """
+    덩어리가 서로 붙어 성분으로 안 갈릴 때 쓰는 차선책.
+
+    균등 분할은 꼬리와 주둥이를 잘라 낸다. 대신 경계를 격자 자리 그대로 두지 않고
+    그 언저리에서 **세로 잉크가 가장 얇은 열**로 옮긴다.
+    두 그림이 만나는 자리는 어디든 몸통 한복판보다 얇기 때문이다.
+
+    옮기는 폭을 피치의 20% 로 묶는다. 풀어 주면 목이나 허리 같은
+    **한 마리 안의 얇은 곳**까지 찾아가 거기를 자른다 — 실제로 말과 호랑이의 목을 잘랐다.
+    """
+    width = band.shape[1]
+    profile = band.sum(axis=0)
+    reach = max(1, round(pitch * SEAM_REACH))
+
+    seams = [0]
+    for i in range(1, cols):
+        nominal = round(pitch * i)
+        lo = max(1, nominal - reach)
+        hi = min(width - 1, nominal + reach)
+        window = profile[lo:hi]
+        seams.append(lo + int(np.argmin(window)) if len(window) else nominal)
+    seams.append(width)
+
+    regions: list[tuple[int, int, np.ndarray]] = []
+    for x0, x1 in zip(seams, seams[1:]):
+        mine = np.zeros_like(band)
+        mine[:, x0:x1] = band[:, x0:x1]
+        regions.append((x0, x1, mine))
+    return regions
 
 
 def prepare_animal(src: Path) -> dict[str, object] | None:
@@ -260,53 +278,55 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
 
     rows = row_bounds(mask)
     pitch = w / ANIMAL_COLS
-    window = round(pitch * (1 - WINDOW_SHRINK))
 
-    # 칸마다 창을 그림의 무게중심에 맞추고, 이웃에서 넘어온 조각을 지운다.
+    # 줄마다 덩어리를 칸에 나눠 담고, 이웃에서 넘어온 조각을 지운다.
     # 상자를 먼저 재면 남의 주둥이까지 감싸느라 넓어진다.
-    cells: list[list[tuple[int, int]]] = []
+    cells: list[list[tuple[int, int, np.ndarray]]] = []
     for y0, y1 in rows:
-        row_cells: list[tuple[int, int]] = []
-        for c in range(ANIMAL_COLS):
-            x0, x1 = centered_window(mask[y0:y1], c, pitch, window, w)
-            cell = mask[y0:y1, x0:x1]
-            cleaned = strip_intruders(cell)
-            removed = cell & ~cleaned
-            if removed.any():
-                rgba[y0:y1, x0:x1][removed] = 0
-            mask[y0:y1, x0:x1] = cleaned
-            row_cells.append((x0, x1))
-        cells.append(row_cells)
-    cut = Image.fromarray(rgba, mode="RGBA")
+        cells.append(slot_regions(mask[y0:y1], ANIMAL_COLS, pitch))
 
     # 칸 안에서의 내용 상자를 전부 겹쳐 하나로 만든다.
-    box = None
-    idle_box = None
-    for r, (y0, y1) in enumerate(rows):
-        for x0, x1 in cells[r]:
-            cell = mask[y0:y1, x0:x1]
-            if not cell.any():
+    # 칸마다 폭이 다르므로 상자는 **가장 큰 칸에 맞춘다.** 좁은 칸은 가운데로 놓는다.
+    # 칸별 좌표로 union 을 잡으면 폭이 다른 칸들이 서로를 밀어 그림이 흔들린다.
+    spans: list[tuple[int, int, int, int, int]] = []  # (row, x0, y0, x1, y1) 화면 좌표
+    for r, (y0, _) in enumerate(rows):
+        for x0, x1, mine in cells[r]:
+            if not mine.any():
                 continue
-            ys, xs = np.where(cell)
-            local = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
-            box = local if box is None else union(box, local)
-            if r == 0:
-                idle_box = local if idle_box is None else union(idle_box, local)
+            ys, xs = np.where(mine)
+            spans.append((r, int(xs.min()), y0 + int(ys.min()),
+                          int(xs.max()) + 1, y0 + int(ys.max()) + 1))
 
-    if box is None:
+    if not spans:
         print(f"  [건너뜀] {src.name} 내용이 없음")
         return None
-    if idle_box is None:
-        idle_box = box
 
-    bw, bh = box[2] - box[0], box[3] - box[1]
+    bw = max(x1 - x0 for _, x0, _, x1, _ in spans)
+    # 세로는 줄 안에서의 상대 위치를 지켜야 점프가 산다. 줄 시작점 기준으로 잰다.
+    tops = [y0 - rows[r][0] for r, _, y0, _, _ in spans]
+    bots = [y1 - rows[r][0] for r, _, _, _, y1 in spans]
+    box_top, box_bot = min(tops), max(bots)
+    bh = box_bot - box_top
+
+    idle = [s for s in spans if s[0] == 0]
+    idle_top = min(y0 - rows[0][0] for _, _, y0, _, _ in idle) if idle else box_top
+    idle_bot = max(y1 - rows[0][0] for _, _, _, _, y1 in idle) if idle else box_bot
+    box = (0, box_top, bw, box_bot)
+    idle_box = (0, idle_top, bw, idle_bot)
     scale = min(1.0, ANIMAL_MAX_FRAME_H / bh)
     fw, fh = max(1, round(bw * scale)), max(1, round(bh * scale))
 
     sheet = Image.new("RGBA", (fw * ANIMAL_COLS, fh * ANIMAL_ROWS), (0, 0, 0, 0))
     for r, (y0, y1) in enumerate(rows):
-        for c, (x0, _) in enumerate(cells[r]):
-            crop = cut.crop((x0 + box[0], y0 + box[1], x0 + box[2], y0 + box[3]))
+        for c, (x0, x1, mine) in enumerate(cells[r]):
+            # 이 칸에 배정된 덩어리만 남긴다. 옆 그림이 가로로 겹쳐 들어와도 지워진다.
+            band = rgba[y0:y1].copy()
+            band[~mine] = 0
+            layer = Image.fromarray(band, mode="RGBA")
+
+            # 칸이 상자보다 좁으면 가운데로 놓는다. 늘리면 그림이 찌그러진다.
+            pad = (bw - (x1 - x0)) // 2
+            crop = layer.crop((x0 - pad, box_top, x0 - pad + bw, box_bot))
             if scale < 1.0:
                 crop = crop.resize((fw, fh), Image.LANCZOS)
             sheet.paste(crop, (c * fw, r * fh))
