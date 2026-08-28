@@ -11,10 +11,10 @@ import { useEffect, useRef } from 'react'
 const ID_MAX = 16
 const PASSWORD_MAX = 20
 
-export type AuthMode = 'LOGIN' | 'SIGNUP'
+type AuthMode = 'LOGIN' | 'SIGNUP'
 
 interface AuthScreenProps {
-  mode: AuthMode
+  /** 로그인 칸에서 뒤로 갈 때. 회원가입에서는 로그인으로 먼저 되돌아온다. */
   onBack: () => void
 }
 
@@ -26,12 +26,16 @@ interface AuthScreenProps {
  *
  * 계정이 있어야 하는 이유는 하나다 — **다른 기기에서 이어하기.**
  * 그래서 로그인에 성공하면 서버의 세이브를 받아 그대로 이어간다.
+ *
+ * 회원가입은 여기서 갈라져 나간다. 타이틀에서 로그인과 나란히 놓으면
+ * **처음 온 사람도 이미 계정이 있는 사람도** 둘 중 뭘 눌러야 하는지 매번 읽어야 한다.
  */
-export function AuthScreen({ mode, onBack }: AuthScreenProps) {
+export function AuthScreen({ onBack }: AuthScreenProps) {
   const signUpAndStart = useGameStore((s) => s.signUpAndStart)
   const logInAndStart = useGameStore((s) => s.logInAndStart)
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
+  const [mode, setMode] = useState<AuthMode>('LOGIN')
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -48,6 +52,19 @@ export function AuthScreen({ mode, onBack }: AuthScreenProps) {
   }, [])
 
   const ready = userId.trim().length >= 4 && password.length >= 4 && !busy
+
+  /** 비밀번호는 단계를 옮길 때마다 비운다. 가입 폼에 로그인 시도가 남아 있으면 안 된다. */
+  const goto = (next: AuthMode): void => {
+    setMode(next)
+    setPassword('')
+    setError(null)
+  }
+
+  const back = (): void => {
+    if (busy) return
+    if (mode === 'SIGNUP') goto('LOGIN')
+    else onBack()
+  }
 
   const submit = async (): Promise<void> => {
     if (!ready) return
@@ -99,6 +116,14 @@ export function AuthScreen({ mode, onBack }: AuthScreenProps) {
             />
           </div>
 
+          {mode === 'LOGIN' && (
+            <div className="auth-switch">
+              <button type="button" className="text-button" onClick={() => goto('SIGNUP')}>
+                <BitmapLabel text="NO ACCOUNT?  SIGN UP" size={17} align="center" />
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="auth-error">
               <BitmapLabel text={error} size={17} align="center" />
@@ -106,7 +131,7 @@ export function AuthScreen({ mode, onBack }: AuthScreenProps) {
           )}
 
           <div className="auth-actions">
-            <IconButton icon={GUI.BACK} size={58} title="BACK" onClick={onBack} />
+            <IconButton icon={GUI.BACK} size={58} title="BACK" onClick={back} />
             <IconButton
               icon={GUI.CONFIRM}
               size={72}

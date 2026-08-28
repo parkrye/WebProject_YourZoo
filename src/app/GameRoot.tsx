@@ -2,8 +2,8 @@ import { DayFade } from './DayFade'
 import { useState } from 'react'
 import { Stage } from './Stage'
 import { NamingScreen } from '@/ui/screens/NamingScreen'
-import { TitleScreen } from '@/ui/screens/TitleScreen'
-import { AuthScreen, type AuthMode } from '@/ui/screens/AuthScreen'
+import { TitleScreen, type TitleStep } from '@/ui/screens/TitleScreen'
+import { AuthScreen } from '@/ui/screens/AuthScreen'
 import { ZooScreen } from '@/ui/screens/ZooScreen'
 import { OptionsModal } from '@/ui/modals/OptionsModal'
 import { StatusModal } from '@/ui/modals/StatusModal'
@@ -18,19 +18,32 @@ export function GameRoot() {
   const screen = useGameStore((s) => s.screen)
   const modal = useGameStore((s) => s.modal)
   const setScreen = useGameStore((s) => s.setScreen)
-  const [authMode, setAuthMode] = useState<AuthMode>('LOGIN')
+  /*
+    타이틀 단계와 인트로 재생 여부는 여기서 들고 있는다.
+    TitleScreen 안에 두면 로그인 화면에 갔다 오는 사이 언마운트되어,
+    돌아왔을 때 첫 화면으로 튕기고 제목이 처음부터 다시 떨어진다.
+  */
+  const [titleStep, setTitleStep] = useState<TitleStep>('ROOT')
+  const [introShown, setIntroShown] = useState(false)
 
   return (
     <Stage>
       {screen === 'TITLE' && (
         <TitleScreen
-          onAuth={(mode) => {
-            setAuthMode(mode)
+          step={titleStep}
+          intro={!introShown}
+          onStep={(next) => {
+            setIntroShown(true)
+            setTitleStep(next)
+          }}
+          onLogin={() => {
+            setIntroShown(true)
             setScreen('AUTH')
           }}
         />
       )}
-      {screen === 'AUTH' && <AuthScreen mode={authMode} onBack={() => setScreen('TITLE')} />}
+      {/* 뒤로 가면 로그인을 고른 자리(PLAY 단계)로 돌아온다. 첫 화면까지 밀려나지 않는다. */}
+      {screen === 'AUTH' && <AuthScreen onBack={() => setScreen('TITLE')} />}
       {screen === 'NAMING' && <NamingScreen />}
       {/*
         두 화면을 각각 다른 JSX 자리에 두면 상세보기를 오갈 때 React 가 ZooScreen 을
