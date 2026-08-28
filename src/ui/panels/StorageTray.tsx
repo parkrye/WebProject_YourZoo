@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 import type { Animal } from '@/domain/animal'
-import { AnimalThumb } from '@/ui/components/AnimalThumb'
+import type { OwnedProp } from '@/domain/prop'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
+import { AnimalItemThumb, PropItemThumb } from '@/ui/components/ItemThumb'
+import { Tabs, type TabItem } from '@/ui/components/Tabs'
 
 const THUMB_SIZE = 72
 /** 이 거리를 넘겨야 드래그로 친다. 그 아래는 선택 클릭이다. */
@@ -11,20 +13,41 @@ const EXIT_MS = 180
 /** 항상 보여 주는 슬롯 수. 비어 있어도 자리를 남겨 두면 창고 크기가 한눈에 읽힌다. */
 const SLOT_COUNT = 8
 
+/**
+ * 창고에서 꺼내 놓을 수 있는 것.
+ *
+ * 동물과 프롭은 배치 방식이 같아 트레이와 드래그를 한 벌만 둔다 -
+ * 둘로 나누면 같은 조작을 두 곳에서 고쳐야 한다.
+ */
+export type TrayItem =
+  | { kind: 'ANIMAL'; id: string; animal: Animal }
+  | { kind: 'PROP'; id: string; prop: OwnedProp }
+
+export const animalItem = (animal: Animal): TrayItem => ({ kind: 'ANIMAL', id: animal.id, animal })
+export const propItem = (prop: OwnedProp): TrayItem => ({ kind: 'PROP', id: prop.id, prop })
+
 export interface DragState {
-  animal: Animal
+  item: TrayItem
   /** 화면(뷰포트) 좌표 */
   clientX: number
   clientY: number
 }
 
+type TrayTab = 'ANIMAL' | 'PROP'
+
+const TRAY_TABS: readonly TabItem<TrayTab>[] = [
+  { id: 'ANIMAL', label: 'ANIMALS' },
+  { id: 'PROP', label: 'PROPS' },
+]
+
 interface StorageTrayProps {
   stored: readonly Animal[]
+  storedProps: readonly OwnedProp[]
   shippingCount: number
   /** 손이 우리 위로 넘어갔을 때. 트레이를 내려 놓을 자리를 보여 준다. */
   lowered: boolean
   /** 트레이 항목을 짧게 눌렀을 때 — 정보 카드를 연다. */
-  onSelect: (animal: Animal) => void
+  onSelect: (item: TrayItem) => void
   onDragStart: (state: DragState) => void
   onDragMove: (state: DragState) => void
   onDragEnd: (state: DragState) => void
@@ -40,11 +63,14 @@ interface StorageTrayProps {
  * "여기 놓는다"는 조작이 성립하기 때문에 팝업이 아니라 트레이다.
  */
 export function StorageTray({
-  stored, shippingCount, lowered, onSelect, onDragStart, onDragMove, onDragEnd, onClose,
+  stored, storedProps, shippingCount, lowered, onSelect, onDragStart, onDragMove, onDragEnd, onClose,
 }: StorageTrayProps) {
   const originRef = useRef<{ x: number; y: number } | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [closing, setClosing] = useState(false)
+  const [tab, setTab] = useState<TrayTab>('ANIMAL')
+
+  const items: TrayItem[] = tab === 'ANIMAL' ? stored.map(animalItem) : storedProps.map(propItem)
 
   // 열릴 때 올라왔으면 닫힐 때도 같은 길로 내려가야 한다. 즉시 언마운트하면 뿅 사라진다.
   const requestClose = useCallback(() => {
@@ -59,16 +85,16 @@ export function StorageTray({
     originRef.current = { x: event.clientX, y: event.clientY }
   }
 
-  const handlePointerMove = (event: React.PointerEvent, animal: Animal): void => {
+  const handlePointerMove = (event: React.PointerEvent, item: TrayItem): void => {
     const origin = originRef.current
     if (!origin) return
 
-    const state: DragState = { animal, clientX: event.clientX, clientY: event.clientY }
+    const state: DragState = { item, clientX: event.clientX, clientY: event.clientY }
 
-    if (draggingId !== animal.id) {
+    if (draggingId !== item.id) {
       const moved = Math.hypot(event.clientX - origin.x, event.clientY - origin.y)
       if (moved < DRAG_THRESHOLD) return
-      setDraggingId(animal.id)
+      setDraggingId(item.id)
       onDragStart(state)
       return
     }
@@ -76,7 +102,7 @@ export function StorageTray({
     onDragMove(state)
   }
 
-  const handlePointerUp = (event: React.PointerEvent, animal: Animal): void => {
+  const handlePointerUp = (event: React.PointerEvent, item: TrayItem): void => {
     const origin = originRef.current
     originRef.current = null
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -84,13 +110,13 @@ export function StorageTray({
     }
     if (!origin) return
 
-    if (draggingId === animal.id) {
+    if (draggingId === item.id) {
       setDraggingId(null)
-      onDragEnd({ animal, clientX: event.clientX, clientY: event.clientY })
+      onDragEnd({ item, clientX: event.clientX, clientY: event.clientY })
       return
     }
 
-    onSelect(animal)
+    onSelect(item)
   }
 
   return (
@@ -98,7 +124,8 @@ export function StorageTray({
     // "어디에 놓는지" 가 보이지 않으면 물 동물을 배치할 수 없다.
     <div className={trayClass(draggingId !== null, closing, lowered)}>
       <div className="storage-tray-head">
-        <BitmapLabel text={`STORAGE ${stored.length}`} size={24} />
+        <Tabs items={TRAY_TABS} active={tab} onChange={setTab} />
+        <BitmapLabel text={`${items.length}`} size={24} />
         {shippingCount > 0 && <BitmapLabel text={`SHIPPING ${shippingCount}`} size={20} />}
         <BitmapLabel text="DRAG TO PLACE" size={18} />
         <button type="button" className="storage-tray-close text-button" onClick={requestClose}>
@@ -107,22 +134,32 @@ export function StorageTray({
       </div>
 
       <div className="storage-tray-items">
-        {Array.from({ length: Math.max(SLOT_COUNT, stored.length) }, (_, i) => {
-          const animal = stored[i]
-          if (!animal) return <div key={`slot-${i}`} className="storage-slot is-empty" />
+        {Array.from({ length: Math.max(SLOT_COUNT, items.length) }, (_, i) => {
+          const item = items[i]
+          if (!item) return <div key={`slot-${i}`} className="storage-slot is-empty" />
 
           return (
             <div
-              key={animal.id}
-              className={draggingId === animal.id ? 'storage-slot is-dragging' : 'storage-slot'}
+              key={item.id}
+              className={draggingId === item.id ? 'storage-slot is-dragging' : 'storage-slot'}
               onPointerDown={handlePointerDown}
-              onPointerMove={(e) => handlePointerMove(e, animal)}
-              onPointerUp={(e) => handlePointerUp(e, animal)}
-              onPointerCancel={(e) => handlePointerUp(e, animal)}
+              onPointerMove={(e) => handlePointerMove(e, item)}
+              onPointerUp={(e) => handlePointerUp(e, item)}
+              onPointerCancel={(e) => handlePointerUp(e, item)}
             >
-              <AnimalThumb imageId={animal.imageId} size={THUMB_SIZE} />
-              <BitmapLabel text={animal.name} size={15} align="center" />
-              <BitmapLabel text={animal.traits.habitat} size={13} align="center" />
+              {item.kind === 'ANIMAL' ? (
+                <>
+                  <AnimalItemThumb animal={item.animal} size={THUMB_SIZE} />
+                  <BitmapLabel text={item.animal.name} size={15} align="center" />
+                  <BitmapLabel text={item.animal.traits.habitat} size={13} align="center" />
+                </>
+              ) : (
+                <>
+                  <PropItemThumb prop={item.prop} size={THUMB_SIZE} />
+                  <BitmapLabel text={item.prop.name} size={15} align="center" />
+                  <BitmapLabel text={item.prop.layer} size={13} align="center" />
+                </>
+              )}
             </div>
           )
         })}

@@ -121,7 +121,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
       templateId,
       spriteSheet: null,
       orderedDay: day,
-      arrivalDay: day + SHIPPING_DAYS,
+      arrivalDay: day + SHIPPING_DAYS.DRAWN,
       appeal,
     }
 
@@ -174,7 +174,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
           <BitmapLabel text={drawing ? 'REDRAW' : 'DRAW'} size={22} />
         </button>
 
-        <FieldLabel text={`ARRIVES IN ${SHIPPING_DAYS} DAY`} />
+        <FieldLabel text={`ARRIVES IN ${SHIPPING_DAYS.DRAWN} DAYS`} />
       </section>
 
       <section className="request-col request-col-wide">

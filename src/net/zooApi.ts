@@ -1,5 +1,6 @@
 import type { BiomeId } from '@/assets/manifest'
 import type { Animal } from '@/domain/animal'
+import type { OwnedProp } from '@/domain/prop'
 
 /**
  * 서버에 올라가는 동물원 한 채.
@@ -15,6 +16,7 @@ export interface ZooDoc {
   readonly day: number
   readonly unlocked: readonly BiomeId[]
   readonly animals: readonly Animal[]
+  readonly props: readonly OwnedProp[]
   readonly updatedAt: number
 }
 

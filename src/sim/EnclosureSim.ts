@@ -7,7 +7,8 @@ import { visitorCount } from '@/domain/economy'
 import { createAnimalRenderer } from '@/render/animal'
 import { AnimalAgent } from './AnimalAgent'
 import { ensureBitmap, getBitmap } from './imageCache'
-import { generateProps, type PlacedProp } from './props'
+import { placedProps, type OwnedProp } from '@/domain/prop'
+import { toPlacedProps, type PlacedProp } from './props'
 import { pruneVisitors, stayingCount, trimVisitors, VisitorAgent } from './VisitorAgent'
 
 /** 화면에 보이는 우리의 BT 주기. 10Hz. */
@@ -32,7 +33,7 @@ export interface SimContext {
  * 얼어 있으면 살아 있다는 느낌이 깨진다. 대신 BT 주기를 낮춰 비용을 줄인다.
  */
 export class EnclosureSim {
-  readonly props: PlacedProp[]
+  props: PlacedProp[]
   readonly animals: AnimalAgent[] = []
   readonly visitors: VisitorAgent[] = []
 
@@ -42,7 +43,7 @@ export class EnclosureSim {
   private spawnAccumulator = 0
 
   constructor(readonly biome: BiomeId) {
-    this.props = generateProps(biome)
+    this.props = []
     this.rng = createRng(hashBiome(biome))
   }
 
@@ -55,6 +56,23 @@ export class EnclosureSim {
   }
 
   /** 스토어의 동물 목록과 에이전트 목록을 맞춘다. 기존 개체는 그대로 둔다. */
+  /** 이 우리에 놓인 프롭으로 갈아 끼운다. 자리는 플레이어가 정한 그대로다. */
+  syncProps(list: readonly OwnedProp[]): void {
+    this.props = toPlacedProps(placedProps(list, this.biome))
+  }
+
+  /** 정규화 좌표에서 프롭을 집는다. 앞에 있는 것(큰 y)부터 본다. */
+  pickProp(x: number, y: number): PlacedProp | null {
+    const ordered = [...this.props].sort((a, b) => b.y - a.y)
+    for (const prop of ordered) {
+      const half = prop.radius
+      if (x >= prop.x - half && x <= prop.x + half && y >= prop.y - prop.height && y <= prop.y + half) {
+        return prop
+      }
+    }
+    return null
+  }
+
   syncAnimals(list: readonly Animal[]): void {
     const wanted = list.filter((a) => a.status === 'PLACED' && a.enclosureId === this.biome)
     const wantedIds = new Set(wanted.map((a) => a.id))

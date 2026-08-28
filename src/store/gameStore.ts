@@ -3,9 +3,16 @@ import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
   ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
-  SHEET_COST, START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST,
+  PROP_CREATE_COST, PROP_SELL_RATIO, SHEET_COST, SHIPPING_DAYS,
+  START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST,
   productTotal, type CashProduct,
 } from '@/domain/balance'
+import { canPlaceProp, createPropId, propPrice, type OwnedProp } from '@/domain/prop'
+import {
+  SHOP_SHEET_COLS, SHOP_SHEET_FPS, SHOP_SHEET_ROWS,
+  shopAnimalAppeal, shopAnimalTraits, sheetImageId, shopPropName,
+  type ShopAnimal, type ShopProp,
+} from '@/domain/shop'
 import { MOTION_PROFILES } from '@/domain/motion'
 import { templateOf } from '@/domain/templates'
 import { bakeSheet } from '@/render/animal/bakeSheet'
@@ -26,7 +33,7 @@ import { publishZoo, type ZooDoc } from '@/net/zooApi'
 import { getImage } from './imageDb'
 
 export type ScreenId = 'TITLE' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
-export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | null
+export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'PROP' | null
 
 /**
  * 하루가 넘어갈 때의 암전 단계.
@@ -61,6 +68,8 @@ interface GameState {
   currentEnclosure: BiomeId
   unlocked: BiomeId[]
   animals: Animal[]
+  /** 소유한 프롭. 동물과 같은 배송 -> 창고 -> 배치 흐름을 탄다. */
+  props: OwnedProp[]
   orders: Order[]
   /** 작성 중인 요청서. 세션 동안만 유지되고 세이브에는 넣지 않는다. */
   draft: RequestDraft
@@ -111,6 +120,18 @@ interface GameState {
   animateAnimal(id: string): Promise<boolean>
   /** 동물 이름을 바꾼다. 빈 이름은 무시한다. */
   renameAnimal(id: string, name: string): void
+  /** 상점에서 동물을 산다. 코인을 내고 배송을 건다. */
+  buyShopAnimal(item: ShopAnimal): boolean
+  /** 상점에서 프롭을 산다. 코인을 내고 배송을 건다. */
+  buyShopProp(item: ShopProp): boolean
+  /** 직접 그린 프롭을 주문한다. */
+  orderProp(prop: OwnedProp): boolean
+  /** 창고에서 우리로. 자리를 함께 정한다. */
+  placeProp(id: string, enclosureId: BiomeId, x: number, y: number): boolean
+  /** 우리에서 창고로. */
+  storeProp(id: string): boolean
+  /** 창고에서 판매. 값의 절반을 돌려받는다. */
+  sellProp(id: string): boolean
   /** 의뢰를 이행한다. 동물을 넘기고 보상을 받는다. */
   fulfillOrder(orderId: string, animalId: string): boolean
   canPlaceIn(enclosureId: BiomeId): boolean
@@ -139,6 +160,7 @@ const initial = {
   currentEnclosure: 'FIELD' as BiomeId,
   unlocked: ['FIELD'] as BiomeId[],
   animals: [] as Animal[],
+  props: [] as OwnedProp[],
   orders: [] as Order[],
   draft: emptyDraft(randomTraits(createRng(1))),
   lastReport: null as DailyReport | null,
@@ -213,6 +235,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     let gold = state.gold
     let reputation = state.reputation
     let animals = state.animals
+    let props = state.props
     let orders = state.orders
     let report: DailyReport | null = null
 
@@ -227,6 +250,15 @@ export const useGameStore = create<GameState>((set, get) => ({
           a.status === 'SHIPPING' && a.arrivalDay <= today
             ? { ...a, status: 'STORED' as const }
             : a,
+        )
+      }
+
+      // 프롭도 같은 날 도착한다. 사육비가 없어 정산에는 들어가지 않는다.
+      if (props.some((p) => p.status === 'SHIPPING' && p.arrivalDay <= today)) {
+        props = props.map((p) =>
+          p.status === 'SHIPPING' && p.arrivalDay <= today
+            ? { ...p, status: 'STORED' as const }
+            : p,
         )
       }
 
@@ -253,6 +285,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       gold,
       reputation,
       animals,
+      props,
       orders,
       lastReport: report,
       reports: report ? [report, ...s.reports].slice(0, REPORT_HISTORY) : s.reports,
@@ -279,9 +312,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startVisit: async (doc) => {
     // 남의 그림은 내 IndexedDB 에 없다. 들어가기 전에 받아 둬야 빈 우리를 보지 않는다.
-    const ids = doc.animals.flatMap((a) =>
-      a.spriteSheet ? [a.imageId, a.spriteSheet.imageId] : [a.imageId],
-    )
+    const ids = [
+      ...doc.animals.flatMap((a) => (a.spriteSheet ? [a.imageId, a.spriteSheet.imageId] : [a.imageId])),
+      ...(doc.props ?? []).map((p) => p.imageId).filter((id): id is string => id !== null),
+    ]
     await preloadRemote(ids)
     set({
       visiting: doc,
@@ -393,6 +427,114 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   buyCash: (product) => set((s) => ({ cash: s.cash + productTotal(product) })),
 
+  buyShopAnimal: (item) => {
+    const { gold, clock } = get()
+    if (gold < item.price) return false
+
+    const animal: Animal = {
+      id: createAnimalId(),
+      name: item.catalogId,
+      // 상점 동물도 바로 우리에 들어가지 않는다. 배송 -> 창고 -> 배치 순이다.
+      status: 'SHIPPING',
+      enclosureId: null,
+      // 그림이 없다. 시트가 곧 이 동물의 모습이라 같은 키를 쓴다.
+      imageId: sheetImageId(item.catalogId),
+      traits: shopAnimalTraits(item),
+      templateId: 'FREE',
+      spriteSheet: {
+        imageId: sheetImageId(item.catalogId),
+        cols: SHOP_SHEET_COLS,
+        rows: SHOP_SHEET_ROWS,
+        fps: SHOP_SHEET_FPS,
+        motions: ['IDLE', 'MOVE', 'SIGNATURE'],
+        fit: item.sheet.fit,
+        baseline: item.sheet.baseline,
+      },
+      orderedDay: clock.day,
+      // 이미 만들어져 있는 물건이라 하루면 온다.
+      arrivalDay: clock.day + SHIPPING_DAYS.SHOP,
+      appeal: shopAnimalAppeal(item),
+    }
+
+    set((s) => ({ gold: s.gold - item.price, animals: [...s.animals, animal] }))
+    return true
+  },
+
+  buyShopProp: (item) => {
+    const { gold, clock } = get()
+    if (gold < item.price) return false
+
+    const prop: OwnedProp = {
+      id: createPropId(),
+      name: shopPropName(item),
+      status: 'SHIPPING',
+      enclosureId: null,
+      sheetBiome: item.biome,
+      sprite: item.sprite,
+      imageId: null,
+      layer: item.layer,
+      x: 0,
+      y: 0,
+      orderedDay: clock.day,
+      arrivalDay: clock.day + SHIPPING_DAYS.SHOP,
+    }
+
+    set((s) => ({ gold: s.gold - item.price, props: [...s.props, prop] }))
+    return true
+  },
+
+  orderProp: (prop) => {
+    const { gold } = get()
+    if (gold < PROP_CREATE_COST) return false
+    set((s) => ({ gold: s.gold - PROP_CREATE_COST, props: [...s.props, prop] }))
+    return true
+  },
+
+  placeProp: (id, enclosureId, x, y) => {
+    const { props } = get()
+    const target = props.find((p) => p.id === id)
+    if (!target || target.status !== 'STORED') return false
+    if (!canPlaceProp(props, enclosureId)) return false
+
+    set((s) => ({
+      props: s.props.map((p) =>
+        p.id === id ? { ...p, status: 'PLACED' as const, enclosureId, x, y } : p,
+      ),
+    }))
+    return true
+  },
+
+  storeProp: (id) => {
+    const { props } = get()
+    const target = props.find((p) => p.id === id)
+    if (!target || target.status !== 'PLACED') return false
+
+    set({
+      props: props.map((p) =>
+        p.id === id ? { ...p, status: 'STORED' as const, enclosureId: null } : p,
+      ),
+    })
+    return true
+  },
+
+  sellProp: (id) => {
+    const { props } = get()
+    const target = props.find((p) => p.id === id)
+    if (!target || target.status !== 'STORED') return false
+
+    // 그린 프롭의 그림은 더 이상 참조되지 않는다. 저장소와 메모리 양쪽에서 지운다.
+    if (target.imageId) {
+      void deleteImage(target.imageId)
+      forgetBitmap(target.imageId)
+    }
+
+    const refund = Math.floor(
+      (target.imageId ? PROP_CREATE_COST : propPrice(target.layer)) * PROP_SELL_RATIO,
+    )
+    set((s) => ({ gold: s.gold + refund, props: s.props.filter((p) => p.id !== id) }))
+    return true
+  },
+
   renameAnimal: (id, name) => {
     const trimmed = name.trim().slice(0, ANIMAL_NAME_MAX_LENGTH)
     // 이름을 지워 빈 칸으로 두면 카드 머리가 비어 무엇을 보는 중인지 알 수 없다.
@@ -481,6 +623,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentEnclosure: save.currentEnclosure,
       unlocked: save.unlocked,
       animals: save.animals,
+      props: save.props ?? [],
       orders: save.orders ?? [],
       lastReport: save.lastReport,
       reports: save.reports ?? [],
@@ -504,6 +647,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       currentEnclosure: s.currentEnclosure,
       unlocked: s.unlocked,
       animals: s.animals,
+      props: s.props,
       orders: s.orders,
       lastReport: s.lastReport,
       reports: s.reports,
@@ -536,6 +680,9 @@ function saveKey(state: GameState): string {
     state.animals.filter((a) => a.status === 'PLACED').length,
     // 시트를 구웠다는 사실도. 캐시가 나간 결과라 다음 주기까지 미룰 수 없다.
     state.animals.filter((a) => a.spriteSheet !== null).length,
+    // 프롭도 코인을 주고 산 것이다. 사고 나서 탭을 닫아도 남아 있어야 한다.
+    state.props.length,
+    state.props.filter((p) => p.status === 'PLACED').length,
     state.orders.length,
     state.tutorial,
     state.unlocked.length,
@@ -612,11 +759,15 @@ async function publishCurrentZoo(): Promise<void> {
 
   const animals = s.animals.filter((a) => a.status === 'PLACED')
   if (animals.length === 0) return
+  const props = s.props.filter((p) => p.status === 'PLACED')
 
   const images: Record<string, string> = {}
   for (const animal of animals) {
     await collectImage(images, animal.imageId)
     if (animal.spriteSheet) await collectImage(images, animal.spriteSheet.imageId)
+  }
+  for (const prop of props) {
+    if (prop.imageId) await collectImage(images, prop.imageId)
   }
 
   await publishZoo(
@@ -627,6 +778,7 @@ async function publishCurrentZoo(): Promise<void> {
       day: s.clock.day,
       unlocked: s.unlocked,
       animals,
+      props,
     },
     images,
   )

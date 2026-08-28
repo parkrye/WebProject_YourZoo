@@ -7,6 +7,7 @@ import { easeInOutCubic } from '@/core/math'
 import { phaseBlend, timeLighting, type AreaLight, type FenceLight } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
+import { ensureBitmap, getBitmap } from '@/sim/imageCache'
 import { PROP_BOB, type PlacedProp } from '@/sim/props'
 import type { VisitorAgent } from '@/sim/VisitorAgent'
 import type { ViewBox } from './animal'
@@ -296,22 +297,29 @@ export class SceneRenderer {
     ctx.restore()
   }
 
+  /**
+   * 프롭 하나.
+   *
+   * 상점 프롭은 바이옴 시트의 한 칸이고, 그린 프롭은 IndexedDB 의 비트맵이다.
+   * 시트는 **산 곳의 시트**로 그린다 — 사막 바위를 얼음 우리에 놓아도 사막 바위여야 한다.
+   */
   private drawProp(
     ctx: CanvasRenderingContext2D,
     biome: BiomeId,
     prop: PlacedProp,
     view: ViewBox,
   ): void {
-    const atlas = getAssets().prop[biome]
-    const frame = atlas.frame(prop.sprite)
+    const paint = this.propPainter(prop, biome)
+    if (!paint) return
+
     const height = prop.height * view.height
-    const width = height * (frame.sw / frame.sh)
+    const width = height * paint.aspect
     const x = prop.x * view.width
     const y = prop.y * view.height
 
     // 땅 프롭은 가만히 있는다. 물에 뜬 것만 잔물결에 흔들린다.
     if (prop.layer !== 'WATER') {
-      atlas.draw(ctx, prop.sprite, x - width / 2, y - height, width, height)
+      paint.draw(ctx, x - width / 2, y - height, width, height)
       return
     }
 
@@ -319,8 +327,32 @@ export class SceneRenderer {
     ctx.save()
     ctx.translate(x, y + Math.sin(wave) * PROP_BOB.amplitude * view.height)
     ctx.rotate(Math.sin(wave * 0.7) * PROP_BOB.tilt)
-    atlas.draw(ctx, prop.sprite, -width / 2, -height, width, height)
+    paint.draw(ctx, -width / 2, -height, width, height)
     ctx.restore()
+  }
+
+  private propPainter(prop: PlacedProp, biome: BiomeId): PropPainter | null {
+    if (prop.sprite !== null) {
+      const atlas = getAssets().prop[prop.sheetBiome ?? biome]
+      const frame = atlas.frame(prop.sprite)
+      const sprite = prop.sprite
+      return {
+        aspect: frame.sw / frame.sh,
+        draw: (ctx, x, y, w, h) => atlas.draw(ctx, sprite, x, y, w, h),
+      }
+    }
+
+    if (!prop.imageId) return null
+    // 그린 프롭. 아직 디코드 전이면 이번 프레임은 건너뛴다 — 곧 캐시에 들어온다.
+    const bitmap = getBitmap(prop.imageId)
+    if (!bitmap) {
+      void ensureBitmap(prop.imageId)
+      return null
+    }
+    return {
+      aspect: bitmap.width / bitmap.height,
+      draw: (ctx, x, y, w, h) => ctx.drawImage(bitmap, x, y, w, h),
+    }
   }
 
   private drawVisitors(
@@ -408,4 +440,10 @@ function blankCanvas(view: ViewBox): HTMLCanvasElement {
   canvas.width = view.width
   canvas.height = view.height
   return canvas
+}
+
+/** 프롭을 어떻게 그릴지. 시트 칸이든 그린 그림이든 이 모양으로 맞춰 쓴다. */
+interface PropPainter {
+  readonly aspect: number
+  draw(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void
 }

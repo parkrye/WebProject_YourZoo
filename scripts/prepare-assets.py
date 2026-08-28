@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+from scipy import ndimage
 
 # 원본 파일명 -> (출력 경로, 검은 배경 제거 임계 밝기 | None)
 #
@@ -66,6 +67,14 @@ ANIMAL_MAX_FRAME_H = 220
 
 # WebP 품질. 90 아래로는 털결에 뭉개짐이 눈에 띈다.
 ANIMAL_WEBP_QUALITY = 90
+
+# 창을 얼마나 좁힐지(피치 대비). 0 이면 피치 그대로.
+#
+# 원본은 그림이 프레임 간격보다 넓게 그려져 이웃과 겹친다. 어떤 직사각형으로 잘라도
+# 남의 조각이 조금은 들어온다. 창을 살짝 좁혀 그 조각이 **가운데를 못 지나게** 만들면
+# 연결 성분 판정이 걸러 준다.
+WINDOW_SHRINK = 0.06
+
 
 OUT_ROOT = Path("src/assets/images")
 AUDIO_OUT = Path("src/assets/audio")
@@ -170,6 +179,62 @@ def row_bounds(mask: np.ndarray) -> list[tuple[int, int]]:
     return list(zip(edges, edges[1:]))
 
 
+def centered_window(band: np.ndarray, index: int, pitch: float, window: int, width: int) -> tuple[int, int]:
+    """
+    프레임 하나가 들어갈 창을 그림의 **무게중심에 맞춰** 잡는다.
+
+    고정 격자로 자르면 그림이 슬롯 한쪽으로 치우쳐 반대편에 이웃이 크게 물린다.
+    무게중심에 맞추면 남의 조각이 양 끝으로 밀려나 가운데를 지나지 않고,
+    그때부터는 연결 성분 판정이 걸러 준다.
+    """
+    slot0 = round(pitch * index)
+    slot1 = round(pitch * (index + 1))
+    profile = band[:, slot0:slot1].sum(axis=0)
+
+    total = profile.sum()
+    center = (slot0 + slot1) / 2
+    if total > 0:
+        center = slot0 + float((np.arange(len(profile)) * profile).sum() / total)
+
+    x0 = int(round(center - window / 2))
+    x0 = max(0, min(x0, width - window))
+    return x0, x0 + window
+
+
+def strip_intruders(mask: np.ndarray) -> np.ndarray:
+    """
+    이웃 프레임에서 넘어온 조각을 지운다.
+
+    원본은 그림이 프레임 간격보다 넓어 칸마다 옆 그림의 앞뒤가 물려 들어온다 —
+    상어가 두 마리로 보였다. 창을 무게중심에 맞춰 잡으면 그 조각은 양 끝으로 밀려나므로,
+    여기서는 **몸통과 가로로 겹치지 않는 덩어리**를 버린다.
+    옆에 떨어져 있는 조각은 이 동물의 일부가 아니다.
+
+    크기로 가르려다 상어 머리를 못 걸렀고, 세로 픽셀 수의 골짜기로 가르려다
+    말과 호랑이의 **목을 잘랐다** — 진짜 동물은 목과 허리가 원래 가늘다.
+    """
+    labels, count = ndimage.label(mask)
+    if count <= 1:
+        return mask
+
+    sizes = ndimage.sum(mask, labels, range(1, count + 1))
+    main = int(np.argmax(sizes)) + 1
+    main_cols = np.where((labels == main).any(axis=0))[0]
+    lo, hi = int(main_cols.min()), int(main_cols.max())
+
+    keep = labels == main
+    for i in range(1, count + 1):
+        if i == main:
+            continue
+        part = labels == i
+        cols = np.where(part.any(axis=0))[0]
+        # 몸통이 차지한 가로 구간과 겹치면 이 동물의 일부로 본다.
+        if int(cols.min()) <= hi and int(cols.max()) >= lo:
+            keep |= part
+
+    return keep
+
+
 def prepare_animal(src: Path) -> dict[str, object] | None:
     """
     동물 시트 하나를 게임이 쓰는 규격으로 정리한다.
@@ -189,17 +254,36 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
         return None
 
     cut = cut_black_background(Image.open(src), ANIMAL_THRESHOLD)
-    mask = np.array(cut.getchannel("A")) > 0
+    rgba = np.array(cut)
+    mask = rgba[..., 3] > 0
     h, w = mask.shape
 
     rows = row_bounds(mask)
-    cols = [(round(w * i / ANIMAL_COLS), round(w * (i + 1) / ANIMAL_COLS)) for i in range(ANIMAL_COLS)]
+    pitch = w / ANIMAL_COLS
+    window = round(pitch * (1 - WINDOW_SHRINK))
+
+    # 칸마다 창을 그림의 무게중심에 맞추고, 이웃에서 넘어온 조각을 지운다.
+    # 상자를 먼저 재면 남의 주둥이까지 감싸느라 넓어진다.
+    cells: list[list[tuple[int, int]]] = []
+    for y0, y1 in rows:
+        row_cells: list[tuple[int, int]] = []
+        for c in range(ANIMAL_COLS):
+            x0, x1 = centered_window(mask[y0:y1], c, pitch, window, w)
+            cell = mask[y0:y1, x0:x1]
+            cleaned = strip_intruders(cell)
+            removed = cell & ~cleaned
+            if removed.any():
+                rgba[y0:y1, x0:x1][removed] = 0
+            mask[y0:y1, x0:x1] = cleaned
+            row_cells.append((x0, x1))
+        cells.append(row_cells)
+    cut = Image.fromarray(rgba, mode="RGBA")
 
     # 칸 안에서의 내용 상자를 전부 겹쳐 하나로 만든다.
     box = None
     idle_box = None
     for r, (y0, y1) in enumerate(rows):
-        for x0, x1 in cols:
+        for x0, x1 in cells[r]:
             cell = mask[y0:y1, x0:x1]
             if not cell.any():
                 continue
@@ -221,7 +305,7 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
 
     sheet = Image.new("RGBA", (fw * ANIMAL_COLS, fh * ANIMAL_ROWS), (0, 0, 0, 0))
     for r, (y0, y1) in enumerate(rows):
-        for c, (x0, _) in enumerate(cols):
+        for c, (x0, _) in enumerate(cells[r]):
             crop = cut.crop((x0 + box[0], y0 + box[1], x0 + box[2], y0 + box[3]))
             if scale < 1.0:
                 crop = crop.resize((fw, fh), Image.LANCZOS)
@@ -241,6 +325,8 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
         # 서 있는 자세를 기준으로 잰다. 상자는 점프까지 감싸느라 크다.
         "fit": round((idle_box[3] - idle_box[1]) / bh, 4),
         "baseline": round((idle_box[3] - box[1]) / bh, 4),
+        "frameW": fw,
+        "frameH": fh,
         "kb": round(out.stat().st_size / 1024),
     }
 
@@ -326,6 +412,9 @@ def write_animal_manifest(animals: list[dict[str, object]]) -> None:
         "  readonly fit: number",
         "  /** 프레임 안에서 발이 놓이는 y (0..1) */",
         "  readonly baseline: number",
+        "  /** 칸 하나의 픽셀 크기. 썸네일 비율을 맞출 때 쓴다. */",
+        "  readonly frameW: number",
+        "  readonly frameH: number",
         "}",
         "",
         "export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [",
@@ -333,7 +422,8 @@ def write_animal_manifest(animals: list[dict[str, object]]) -> None:
     for i, a in enumerate(animals):
         lines.append(
             f"  {{ id: '{a['id']}', habitat: '{a['habitat']}', src: sheet{i}, "
-            f"fit: {a['fit']}, baseline: {a['baseline']} }},"
+            f"fit: {a['fit']}, baseline: {a['baseline']}, "
+            f"frameW: {a['frameW']}, frameH: {a['frameH']} }},"
         )
     lines += ["]", ""]
 

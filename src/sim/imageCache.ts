@@ -1,5 +1,6 @@
 import { loadImageBitmap } from '@/store/imageDb'
 import { remoteImageUrl } from '@/net/zooApi'
+import { findSheet, SHEET_KEY_PREFIX } from '@/domain/shop'
 
 /**
  * 동물 그림 비트맵 캐시.
@@ -37,7 +38,8 @@ export async function ensureBitmap(id: string): Promise<ImageBitmap | null> {
   const inFlight = pending.get(id)
   if (inFlight) return inFlight
 
-  const task = loadImageBitmap(id)
+  // 상점 동물의 시트는 IndexedDB 가 아니라 번들에 있다. 키 접두사로 갈라 읽는다.
+  const task = id.startsWith(SHEET_KEY_PREFIX) ? loadCatalogSheet(id) : loadImageBitmap(id)
     .then((bitmap) => {
       if (bitmap) bitmaps.set(id, bitmap)
       return bitmap
@@ -47,6 +49,19 @@ export async function ensureBitmap(id: string): Promise<ImageBitmap | null> {
 
   pending.set(id, task)
   return task
+}
+
+/** 번들에 들어 있는 상점 동물 시트를 읽는다. */
+async function loadCatalogSheet(id: string): Promise<ImageBitmap | null> {
+  const asset = findSheet(id.slice(SHEET_KEY_PREFIX.length))
+  if (!asset) return null
+  try {
+    const res = await fetch(asset.src)
+    if (!res.ok) return null
+    return await createImageBitmap(await res.blob())
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -60,6 +75,11 @@ export async function preloadRemote(ids: readonly string[]): Promise<void> {
   await Promise.all(
     ids.map(async (id) => {
       if (bitmaps.has(id)) return
+      // 상점 동물 시트는 번들에 있다. 남의 동물원 것이어도 서버를 찌를 이유가 없다.
+      if (id.startsWith(SHEET_KEY_PREFIX)) {
+        await ensureBitmap(id)
+        return
+      }
       try {
         const res = await fetch(remoteImageUrl(id))
         if (!res.ok) return

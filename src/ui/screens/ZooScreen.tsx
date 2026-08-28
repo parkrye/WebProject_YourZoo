@@ -14,7 +14,8 @@ import {
 } from '@/render/camera'
 import { EnclosureSim } from '@/sim/EnclosureSim'
 import { useGameStore } from '@/store/gameStore'
-import { AnimalThumb } from '@/ui/components/AnimalThumb'
+import { canPlaceProp, storedProps, type OwnedProp } from '@/domain/prop'
+import { AnimalItemThumb, PropItemThumb } from '@/ui/components/ItemThumb'
 import { BarButton } from '@/ui/components/BarButton'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
@@ -60,6 +61,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   /** 관찰 전용 모드. HUD 를 전부 걷고 화면만 남긴다. */
   const [hudHidden, setHudHidden] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** 커서로 집은 배치된 프롭. 창고로 되돌릴 때만 쓴다. */
+  const [pickedProp, setPickedProp] = useState<OwnedProp | null>(null)
   const selectedIdRef = useRef<string | null>(null)
   const [drag, setDrag] = useState<DragState | null>(null)
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null)
@@ -80,6 +83,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const moveEnclosure = useGameStore((s) => s.moveEnclosure)
   const unlockEnclosure = useGameStore((s) => s.unlockEnclosure)
   const placeAnimal = useGameStore((s) => s.placeAnimal)
+  const placeProp = useGameStore((s) => s.placeProp)
+  const storePropAction = useGameStore((s) => s.storeProp)
   const storeAnimal = useGameStore((s) => s.storeAnimal)
   const sellAnimal = useGameStore((s) => s.sellAnimal)
   const canPlaceIn = useGameStore((s) => s.canPlaceIn)
@@ -105,6 +110,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const myReputation = useGameStore((s) => s.reputation)
   const myZooName = useGameStore((s) => s.zooName)
   const myAnimals = useGameStore((s) => s.animals)
+  const myProps = useGameStore((s) => s.props)
 
   const enclosure = visiting ? visitEnclosure : myEnclosure
   const unlocked = visiting ? visiting.unlocked : myUnlocked
@@ -114,12 +120,21 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     () => (visiting ? visiting.animals : myAnimals),
     [visiting, myAnimals],
   )
+  const props = useMemo(
+    // 구경 중인 동물원이 프롭 도입 전에 올라간 것이면 목록 자체가 없다.
+    () => (visiting ? (visiting.props ?? []) : myProps),
+    [visiting, myProps],
+  )
 
   // 구경 중에는 잠긴 우리를 아예 볼 수 없으므로 화면에 뜬 우리는 늘 열려 있다.
   const isOpen = unlocked.includes(enclosure)
   const canMove = visiting ? unlocked.length > 1 : true
   const stored = useMemo(() => animals.filter((a) => a.status === 'STORED'), [animals])
-  const shippingCount = useMemo(() => animals.filter((a) => a.status === 'SHIPPING').length, [animals])
+  const shippingCount = useMemo(
+    () => animals.filter((a) => a.status === 'SHIPPING').length + myProps.filter((p) => p.status === 'SHIPPING').length,
+    [animals, myProps],
+  )
+  const storedPropList = useMemo(() => storedProps(myProps), [myProps])
   const selected = useMemo(
     () => animals.find((a) => a.id === selectedId) ?? null,
     [animals, selectedId],
@@ -143,11 +158,16 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     setTrayOpen(false)
     setHudHidden(false)
     select(null)
+    setPickedProp(null)
   }, [detail, applyCameraState, select])
 
   useEffect(() => {
     for (const sim of sims.values()) sim.syncAnimals(animals)
   }, [animals, sims])
+
+  useEffect(() => {
+    for (const sim of sims.values()) sim.syncProps(props)
+  }, [props, sims])
 
   useEffect(() => {
     loweringRef.current = dragOverScene
@@ -268,8 +288,18 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     const scene = toScene(event.clientX, event.clientY)
     const sim = sims.get(enclosure)
     if (!scene || !sim) return
+
+    // 동물이 먼저다. 프롭 위에 서 있는 동물을 집으려는데 프롭이 잡히면 답답하다.
     const picked = sim.pickAnimal(scene.x, scene.y)
-    select(picked?.id ?? null)
+    if (picked) {
+      select(picked.id)
+      setPickedProp(null)
+      return
+    }
+
+    select(null)
+    const prop = sim.pickProp(scene.x, scene.y)
+    setPickedProp(prop && !visiting ? (props.find((p) => p.id === prop.id) ?? null) : null)
   }
 
   const handlePointerMove = (event: React.PointerEvent<HTMLCanvasElement>): void => {
@@ -319,12 +349,27 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     const scene = toScene(state.clientX, state.clientY)
     if (!scene) return
 
-    const box = ROAM_BOX[state.animal.traits.habitat]
+    // 놓을 수 있는 구역은 동물이면 서식지, 프롭이면 땅이냐 물이냐로 정해진다.
+    const layer = state.item.kind === 'ANIMAL'
+      ? state.item.animal.traits.habitat
+      : state.item.prop.layer
+    const box = ROAM_BOX[layer]
     const inside =
       scene.x >= box.x0 && scene.x <= box.x1 && scene.y >= box.y0 && scene.y <= box.y1
     if (!inside) {
       audio.playSting('DENY')
-      setDropError(`DROP IN ${state.animal.traits.habitat} AREA`)
+      setDropError(`DROP IN ${layer} AREA`)
+      return
+    }
+
+    if (state.item.kind === 'PROP') {
+      if (!canPlaceProp(props, enclosure)) {
+        audio.playSting('DENY')
+        setDropError('NO ROOM FOR PROPS')
+        return
+      }
+      // 프롭은 놓은 자리가 곧 제 자리다. 동물처럼 돌아다니지 않는다.
+      placeProp(state.item.prop.id, enclosure, scene.x, scene.y)
       return
     }
 
@@ -335,10 +380,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     }
 
     // 스토어가 갱신되면 EnclosureSim 이 새 에이전트를 만든다. 그 전에 시작 위치를 알려 둔다.
-    sims.get(enclosure)?.setSpawnHint(state.animal.id, scene.x, scene.y)
+    sims.get(enclosure)?.setSpawnHint(state.item.animal.id, scene.x, scene.y)
     // 배치 직후 카드를 띄우지 않는다. 창고가 열려 있는 동안에는 카드가 가려져 보이지도 않고,
     // 연달아 여러 마리를 놓는 흐름이 매번 끊긴다. 보고 싶으면 커서로 집으면 된다.
-    placeAnimal(state.animal.id, enclosure)
+    placeAnimal(state.item.animal.id, enclosure)
   }
 
   const time = clockLabel(elapsed)
@@ -448,6 +493,30 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             </>
           )}
 
+          {pickedProp && !selected && (
+            <div className="prop-card popup">
+              <header className="popup-header">
+                <BitmapLabel text={pickedProp.name} size={22} />
+                <IconButton icon={GUI.CLOSE} size={36} title="CLOSE" onClick={() => setPickedProp(null)} />
+              </header>
+              <div className="popup-content prop-card-body">
+                <PropItemThumb prop={pickedProp} size={96} />
+                <BitmapLabel text={pickedProp.layer} size={18} />
+                <button
+                  type="button"
+                  className="labeled-button"
+                  onClick={() => {
+                    storePropAction(pickedProp.id)
+                    setPickedProp(null)
+                  }}
+                >
+                  <IconButton icon={GUI.BACK} size={38} />
+                  <BitmapLabel text="STORE" size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+
           {selected && (
             <AnimalCard
               animal={selected}
@@ -532,6 +601,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                   onClick={() => setScreen('ZOO_DETAIL')}
                 />
               ) : (
+                <>
                 <BarButton
                   icon={GUI.SCROLL}
                   label="REQUEST"
@@ -541,6 +611,9 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                     openModal('REQUEST')
                   }}
                 />
+                {/* 프롭도 직접 그릴 수 있다. 동물 요청서 바로 옆이 찾기 쉽다. */}
+                <BarButton icon={GUI.PALETTE} label="MAKE PROP" onClick={() => openModal('PROP')} />
+                </>
               )}
             </div>
 
@@ -577,9 +650,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
 
           <StorageTray
             stored={stored}
+            storedProps={storedPropList}
             shippingCount={shippingCount}
             lowered={dragOverScene}
-            onSelect={(animal) => select(animal.id)}
+            onSelect={(item) => select(item.kind === 'ANIMAL' ? item.id : null)}
             onDragStart={trackGhost}
             onDragMove={trackGhost}
             onDragEnd={handleDrop}
@@ -591,7 +665,11 @@ export function ZooScreen({ detail }: ZooScreenProps) {
               className="drag-ghost"
               style={{ left: ghost.x - DRAG_GHOST_SIZE / 2, top: ghost.y - DRAG_GHOST_SIZE / 2 }}
             >
-              <AnimalThumb imageId={drag.animal.imageId} size={DRAG_GHOST_SIZE} />
+              {drag.item.kind === 'ANIMAL' ? (
+                <AnimalItemThumb animal={drag.item.animal} size={DRAG_GHOST_SIZE} />
+              ) : (
+                <PropItemThumb prop={drag.item.prop} size={DRAG_GHOST_SIZE} />
+              )}
             </div>
           )}
         </>

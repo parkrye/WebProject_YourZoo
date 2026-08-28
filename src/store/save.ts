@@ -1,5 +1,6 @@
 import type { BiomeId } from '@/assets/manifest'
 import type { Animal } from '@/domain/animal'
+import type { OwnedProp } from '@/domain/prop'
 import type { DailyReport } from '@/domain/economy'
 import type { Order } from '@/domain/orders'
 import type { TutorialStep } from '@/domain/tutorial'
@@ -28,6 +29,8 @@ export interface SaveV2 {
   unlocked: BiomeId[]
   /** 그림 픽셀은 IndexedDB 에 있고 여기에는 imageId 만 남는다. */
   animals: Animal[]
+  /** 소유한 프롭. 구버전 세이브에는 없다 — 그때는 빈 배열로 읽는다. */
+  props: OwnedProp[]
   orders: Order[]
   lastReport: DailyReport | null
   reports: DailyReport[]

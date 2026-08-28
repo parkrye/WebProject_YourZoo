@@ -43,8 +43,35 @@ export const ANIMAL_CREATE_COST = 50
 /** 동물을 판매할 때 제작비의 절반을 돌려준다. 잘못 만든 동물을 되돌릴 수 있어야 한다. */
 export const ANIMAL_SELL_REFUND = Math.floor(ANIMAL_CREATE_COST / 2)
 
-/** 요청서를 제출하고 창고에 도착하기까지 걸리는 일수. */
-export const SHIPPING_DAYS = 1
+/**
+ * 창고에 도착하기까지 걸리는 일수.
+ *
+ * 상점에서 산 건 이미 만들어져 있으니 하루면 온다.
+ * 직접 그린 건 그림 하나로 동물을 빚어내는 셈이라 하루 더 걸린다 —
+ * 기다림의 차이가 "만들어 달라고 맡긴 것"과 "사 온 것"을 구분한다.
+ */
+export const SHIPPING_DAYS = { SHOP: 1, DRAWN: 2 } as const
+
+// ─────────────────────────────────────────────────────────────
+// 상점 가격 (무료 재화)
+// ─────────────────────────────────────────────────────────────
+
+/** 상점 동물 가격. 서식지마다 다르다 — 물은 우리가 좁아 귀하게 매긴다. */
+export const SHOP_ANIMAL_PRICE = { SKY: 120, LAND: 100, WATER: 150 } as const
+
+/** 상점 프롭 가격. 물에 뜨는 프롭이 더 비싸다. */
+export const SHOP_PROP_PRICE = { LAND: 40, WATER: 60 } as const
+
+/** 프롭을 팔 때 돌려받는 비율. 동물과 같이 절반이다. */
+export const PROP_SELL_RATIO = 0.5
+
+/** 우리 하나에 놓을 수 있는 프롭 수. 더 놓으면 동물이 다닐 자리가 없다. */
+export const MAX_PROPS_PER_ENCLOSURE = 10
+
+/** 직접 그린 프롭의 제작비. */
+export const PROP_CREATE_COST = 30
+
+export const PROP_NAME_MAX_LENGTH = 10
 
 export const ANIMAL_UPKEEP_PER_DAY = 8
 /**

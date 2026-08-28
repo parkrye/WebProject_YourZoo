@@ -32,29 +32,32 @@ export interface AnimalSheetAsset {
   readonly fit: number
   /** 프레임 안에서 발이 놓이는 y (0..1) */
   readonly baseline: number
+  /** 칸 하나의 픽셀 크기. 썸네일 비율을 맞출 때 쓴다. */
+  readonly frameW: number
+  readonly frameH: number
 }
 
 export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [
-  { id: 'ALIGATOR', habitat: 'WATER', src: sheet0, fit: 0.3429, baseline: 1.0 },
-  { id: 'BELUGA', habitat: 'WATER', src: sheet1, fit: 0.2989, baseline: 1.0 },
-  { id: 'MARLIN', habitat: 'WATER', src: sheet2, fit: 0.4626, baseline: 1.0 },
-  { id: 'PENGUIN', habitat: 'WATER', src: sheet3, fit: 0.4412, baseline: 1.0 },
-  { id: 'PIRANHA', habitat: 'WATER', src: sheet4, fit: 0.5023, baseline: 1.0 },
-  { id: 'SHARK', habitat: 'WATER', src: sheet5, fit: 0.5072, baseline: 1.0 },
-  { id: 'TURTLE', habitat: 'WATER', src: sheet6, fit: 0.4226, baseline: 1.0 },
-  { id: 'BEAR', habitat: 'LAND', src: sheet7, fit: 0.5792, baseline: 1.0 },
-  { id: 'HORSE', habitat: 'LAND', src: sheet8, fit: 0.7, baseline: 1.0 },
-  { id: 'MONKEY', habitat: 'LAND', src: sheet9, fit: 0.5861, baseline: 1.0 },
-  { id: 'ORANGUTAN', habitat: 'LAND', src: sheet10, fit: 0.6122, baseline: 1.0 },
-  { id: 'POLARBEAR', habitat: 'LAND', src: sheet11, fit: 0.4938, baseline: 1.0 },
-  { id: 'RABBIT', habitat: 'LAND', src: sheet12, fit: 0.7176, baseline: 1.0 },
-  { id: 'TIGGER', habitat: 'LAND', src: sheet13, fit: 0.5022, baseline: 1.0 },
-  { id: 'BUTTERFLY', habitat: 'SKY', src: sheet14, fit: 0.6849, baseline: 1.0 },
-  { id: 'CHICKEN', habitat: 'SKY', src: sheet15, fit: 0.7227, baseline: 1.0 },
-  { id: 'CROW', habitat: 'SKY', src: sheet16, fit: 0.8622, baseline: 1.0 },
-  { id: 'DRAGONFLY', habitat: 'SKY', src: sheet17, fit: 0.7514, baseline: 1.0 },
-  { id: 'PARROT', habitat: 'SKY', src: sheet18, fit: 0.8221, baseline: 1.0 },
-  { id: 'PEACOCK', habitat: 'SKY', src: sheet19, fit: 0.6667, baseline: 1.0 },
-  { id: 'PIGEON', habitat: 'SKY', src: sheet20, fit: 0.5914, baseline: 1.0 },
-  { id: 'SPAROW', habitat: 'SKY', src: sheet21, fit: 0.6653, baseline: 1.0 },
+  { id: 'ALIGATOR', habitat: 'WATER', src: sheet0, fit: 0.3429, baseline: 1.0, frameW: 180, frameH: 210 },
+  { id: 'BELUGA', habitat: 'WATER', src: sheet1, fit: 0.2989, baseline: 1.0, frameW: 146, frameH: 220 },
+  { id: 'MARLIN', habitat: 'WATER', src: sheet2, fit: 0.4626, baseline: 1.0, frameW: 174, frameH: 220 },
+  { id: 'PENGUIN', habitat: 'WATER', src: sheet3, fit: 0.4412, baseline: 1.0, frameW: 171, frameH: 204 },
+  { id: 'PIRANHA', habitat: 'WATER', src: sheet4, fit: 0.5023, baseline: 1.0, frameW: 180, frameH: 215 },
+  { id: 'SHARK', habitat: 'WATER', src: sheet5, fit: 0.5072, baseline: 1.0, frameW: 180, frameH: 207 },
+  { id: 'TURTLE', habitat: 'WATER', src: sheet6, fit: 0.4226, baseline: 1.0, frameW: 165, frameH: 220 },
+  { id: 'BEAR', habitat: 'LAND', src: sheet7, fit: 0.5792, baseline: 1.0, frameW: 165, frameH: 220 },
+  { id: 'HORSE', habitat: 'LAND', src: sheet8, fit: 0.7, baseline: 1.0, frameW: 158, frameH: 220 },
+  { id: 'MONKEY', habitat: 'LAND', src: sheet9, fit: 0.5861, baseline: 1.0, frameW: 145, frameH: 220 },
+  { id: 'ORANGUTAN', habitat: 'LAND', src: sheet10, fit: 0.6122, baseline: 1.0, frameW: 162, frameH: 220 },
+  { id: 'POLARBEAR', habitat: 'LAND', src: sheet11, fit: 0.4938, baseline: 1.0, frameW: 163, frameH: 220 },
+  { id: 'RABBIT', habitat: 'LAND', src: sheet12, fit: 0.7176, baseline: 1.0, frameW: 155, frameH: 220 },
+  { id: 'TIGGER', habitat: 'LAND', src: sheet13, fit: 0.5022, baseline: 1.0, frameW: 174, frameH: 220 },
+  { id: 'BUTTERFLY', habitat: 'SKY', src: sheet14, fit: 0.6849, baseline: 1.0, frameW: 149, frameH: 220 },
+  { id: 'CHICKEN', habitat: 'SKY', src: sheet15, fit: 0.7227, baseline: 1.0, frameW: 155, frameH: 220 },
+  { id: 'CROW', habitat: 'SKY', src: sheet16, fit: 0.8622, baseline: 1.0, frameW: 176, frameH: 220 },
+  { id: 'DRAGONFLY', habitat: 'SKY', src: sheet17, fit: 0.7514, baseline: 1.0, frameW: 176, frameH: 181 },
+  { id: 'PARROT', habitat: 'SKY', src: sheet18, fit: 0.8221, baseline: 1.0, frameW: 179, frameH: 208 },
+  { id: 'PEACOCK', habitat: 'SKY', src: sheet19, fit: 0.6667, baseline: 1.0, frameW: 150, frameH: 220 },
+  { id: 'PIGEON', habitat: 'SKY', src: sheet20, fit: 0.5914, baseline: 1.0, frameW: 137, frameH: 220 },
+  { id: 'SPAROW', habitat: 'SKY', src: sheet21, fit: 0.6653, baseline: 1.0, frameW: 151, frameH: 220 },
 ]
