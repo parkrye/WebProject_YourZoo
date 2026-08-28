@@ -110,7 +110,7 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
 
           {!baking && canAnimate && (
             <button type="button" className="labeled-button" onClick={() => setConfirmAnimate(true)}>
-              <IconButton icon={GUI.PALETTE} size={40} />
+              <IconButton icon={GUI.COIN_LARGE} size={40} />
               <BitmapLabel text={`ANIMATE ${SHEET_COST}`} size={17} />
             </button>
           )}

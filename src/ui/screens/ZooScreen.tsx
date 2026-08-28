@@ -433,7 +433,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             <div className="hud-top-right">
               <BitmapLabel text={ENCLOSURES[enclosure].label} size={24} align="right" />
               <div className="hud-purse">
-                <IconGlyph icon={GUI.BOOK} size={26} />
+                <IconGlyph icon={GUI.PAW} size={26} />
                 <BitmapLabel text={`${here} / ${MAX_ANIMALS_PER_ENCLOSURE}`} size={22} />
               </div>
             </div>
@@ -468,7 +468,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                       <IconGlyph icon={GUI.MEDAL} size={30} />
                       <BitmapLabel text={`${reputation}`} size={24} />
                       {/* GUI 시트에 캐시다운 아이콘이 없다. 무지개 팔레트가 가장 '특별한' 인상을 준다. */}
-                      <IconGlyph icon={GUI.PALETTE} size={30} />
+                      <IconGlyph icon={GUI.COIN_LARGE} size={30} />
                       <BitmapLabel text={`${cash}`} size={24} />
                     </>
                   )}
@@ -582,7 +582,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                   {/* 배치는 상세보기에서만. 펜스 너머 멀리서 던져 넣는 그림은 어색하다. */}
                   {!visiting && (
                     <BarButton
-                      icon={GUI.BOOK}
+                      icon={GUI.CRATE}
                       label="STORAGE"
                       data-tutorial="storage"
                       onClick={() => {
@@ -617,7 +617,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             <div className="bar-group bar-right">
               {!detail && !visiting && (
                 <>
-                  <BarButton icon={GUI.PALETTE} label="SHOP" onClick={() => openModal('SHOP')} />
+                  <BarButton icon={GUI.SHOP} label="SHOP" onClick={() => openModal('SHOP')} />
                   <BarButton icon={GUI.MAP} label="VISIT" onClick={() => openModal('VISIT')} />
                   <BarButton icon={GUI.INFO} label="STATUS" onClick={() => openModal('STATUS')} />
                   <BarButton icon={GUI.SETTINGS} label="OPTIONS" onClick={() => openModal('OPTIONS')} />
@@ -687,10 +687,11 @@ function LockedOverlay({ id, gold, onUnlock }: LockedOverlayProps) {
 
   return (
     <div className="locked-overlay">
+      <IconGlyph icon={GUI.LOCK} size={72} />
       <BitmapLabel text="LOCKED" size={64} align="center" />
       <BitmapLabel text={`UNLOCK FOR ${cost} GOLD`} size={28} align="center" />
       <IconButton
-        icon={affordable ? GUI.CONFIRM : GUI.EYE_OFF}
+        icon={affordable ? GUI.LOCK_OPEN : GUI.EYE_OFF}
         size={86}
         title="UNLOCK"
         disabled={!affordable}

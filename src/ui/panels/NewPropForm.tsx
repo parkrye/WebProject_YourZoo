@@ -147,6 +147,15 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
                 setLayer(PROP_TEMPLATES[id].layer)
               }}
             >
+              {/*
+                아이콘이 없는 템플릿도 자리는 남긴다. 있는 카드만 키가 커지면
+                한 줄에 놓인 카드들의 이름이 서로 어긋나 읽기 나빠진다.
+              */}
+              <span className="wizard-card-icon">
+                {PROP_TEMPLATES[id].icon !== undefined && (
+                  <IconGlyph icon={PROP_TEMPLATES[id].icon} size={40} />
+                )}
+              </span>
               <BitmapLabel text={PROP_TEMPLATES[id].label} size={22} align="center" />
               <BitmapLabel text={PROP_TEMPLATES[id].layer} size={13} align="center" />
             </button>

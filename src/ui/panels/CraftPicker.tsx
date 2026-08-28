@@ -55,7 +55,7 @@ export function CraftPicker<T extends string>({
 
                 <div className="craft-card-foot">
                   <span className="shop-price">
-                    <IconGlyph icon={paysCash ? GUI.PALETTE : GUI.COIN} size={22} />
+                    <IconGlyph icon={paysCash ? GUI.COIN_LARGE : GUI.COIN} size={22} />
                     <BitmapLabel text={`${paysCash ? spec.cash : spec.coins}`} size={20} />
                   </span>
                   <BitmapLabel

@@ -24,7 +24,7 @@ export function ArrivalModal() {
     <Popup title="DELIVERY ARRIVED" width={780} height={560} onClose={closeModal}>
       <div className="arrival">
         <div className="arrival-head">
-          <IconGlyph icon={GUI.BOOK} size={34} />
+          <IconGlyph icon={GUI.CRATE} size={34} />
           <BitmapLabel text={`${total} IN STORAGE`} size={26} />
         </div>
 

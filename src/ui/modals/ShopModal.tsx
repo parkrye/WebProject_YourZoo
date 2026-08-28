@@ -54,7 +54,7 @@ export function ShopModal() {
             <div className="shop-purse">
               <IconGlyph icon={GUI.COIN} size={30} />
               <BitmapLabel text={`${gold}`} size={24} />
-              <IconGlyph icon={GUI.PALETTE} size={30} />
+              <IconGlyph icon={GUI.COIN_LARGE} size={30} />
               <BitmapLabel text={`${cash}`} size={24} />
             </div>
           </div>
@@ -68,7 +68,7 @@ export function ShopModal() {
                   className="shop-item"
                   onClick={() => setPending({ kind: 'CASH', item: product })}
                 >
-                  <IconGlyph icon={GUI.PALETTE} size={54} />
+                  <IconGlyph icon={GUI.COIN_LARGE} size={54} />
                   {/* 덤은 합치지 않고 `10 + 1` 로 적는다. 11 이라고만 쓰면 이득이 안 보인다. */}
                   <BitmapLabel
                     text={product.bonus > 0 ? `${product.cash} + ${product.bonus}` : `${product.cash} CASH`}

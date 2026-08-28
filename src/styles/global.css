@@ -1407,6 +1407,22 @@ html, body, #root {
 
 .tray-hint { margin-left: 8px; opacity: 0.6; }
 
+/* 템플릿 카드의 그림 자리. 그림이 없어도 높이를 지켜 이름 줄을 맞춘다. */
+.wizard-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+}
+
+/* 알약과 표 왼쪽 칸에서 아이콘과 글자를 나란히 놓는다. */
+.tray-count,
+.report-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .tray-empty {
   display: flex;
   flex-direction: column;

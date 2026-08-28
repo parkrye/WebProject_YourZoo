@@ -4,6 +4,7 @@ import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
 import { UNLOCK_COST } from '@/domain/balance'
 import { useState } from 'react'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
+import { IconGlyph } from '@/ui/components/IconGlyph'
 import { IconButton } from '@/ui/components/IconButton'
 import { Popup } from '@/ui/components/Popup'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
@@ -68,7 +69,7 @@ export function StatusModal() {
             <BitmapLabel text={`FAME ${reputation}`} size={30} />
           </div>
           <div className="stat-row">
-            <IconButton icon={GUI.BOOK} size={52} />
+            <IconButton icon={GUI.PAW} size={52} />
             <BitmapLabel text={`PLACED ${placed}`} size={30} />
           </div>
           <div className="stat-row">
@@ -103,7 +104,10 @@ export function StatusModal() {
             <BitmapLabel text="TODAY FORECAST" size={22} />
           </div>
           <div className="report-row">
-            <BitmapLabel text="VISITORS" size={24} />
+            <span className="report-label">
+              <IconGlyph icon={GUI.PEOPLE} size={22} />
+              <BitmapLabel text="VISITORS" size={24} />
+            </span>
             <BitmapLabel text={`${forecast.visitors}`} size={24} align="right" />
           </div>
           <div className="report-row is-plus">

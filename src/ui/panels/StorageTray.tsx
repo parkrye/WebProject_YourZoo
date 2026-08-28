@@ -1,7 +1,9 @@
 import { useCallback, useRef, useState } from 'react'
 import type { Animal } from '@/domain/animal'
 import type { OwnedProp } from '@/domain/prop'
+import { GUI } from '@/assets/manifest'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
+import { IconGlyph } from '@/ui/components/IconGlyph'
 import { AnimalItemThumb, PropItemThumb } from '@/ui/components/ItemThumb'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
 
@@ -132,6 +134,7 @@ export function StorageTray({
         </span>
         {shippingCount > 0 && (
           <span className="tray-count is-muted">
+              <IconGlyph icon={GUI.TRUCK} size={18} />
             <BitmapLabel text={`${shippingCount} ON THE WAY`} size={17} />
           </span>
         )}

@@ -120,7 +120,7 @@ export function VisitModal() {
                   <BitmapLabel text={`${zoo.reputation}`} size={20} />
                 </span>
                 <span className="visit-stat">
-                  <IconGlyph icon={GUI.BOOK} size={24} />
+                  <IconGlyph icon={GUI.PAW} size={24} />
                   <BitmapLabel text={`${zoo.animalCount}`} size={20} />
                 </span>
                 <span className="visit-stat">
