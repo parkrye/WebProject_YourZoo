@@ -52,8 +52,14 @@ export interface Animal {
   readonly traits: AnimalTraits
   /** 그림을 그릴 때 고른 템플릿. 움직임 프로파일과 파츠 힌트를 정한다. */
   readonly templateId: TemplateId
-  /** SDK 연동 전까지 항상 null */
   readonly spriteSheet: SheetMeta | null
+  /**
+   * 파츠로 만든 동물. 부위마다 IndexedDB 키를 들고 있다.
+   *
+   * `spriteSheet` 와 함께 쓰지 않는다 — 시트가 있으면 프레임이 곧 자세이고,
+   * 리그가 있으면 파츠를 관절로 돌려 자세를 만든다. 둘은 서로 다른 방식이다.
+   */
+  readonly rig: Record<string, string> | null
   /** 요청서를 제출한 날 */
   readonly orderedDay: number
   /** 창고에 도착하는 날 */

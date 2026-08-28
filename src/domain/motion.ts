@@ -62,6 +62,9 @@ export type MotionArchetype =
   | 'ROUND_BIRD'
   | 'STREAMLINED'
   | 'SHELLED'
+  | 'HEAVY_QUADRUPED'
+  | 'UPRIGHT_BIPED'
+  | 'WADDLER'
 
 export const MOTION_PROFILES: Record<MotionArchetype, MotionProfile> = {
   /** 템플릿 없이 그린 그림. 어떤 형태가 올지 모르니 무난한 숨쉬기와 기울기만. */
@@ -162,6 +165,55 @@ export const MOTION_PROFILES: Record<MotionArchetype, MotionProfile> = {
     bands: [
       { axis: 'ROW', from: 0.62, to: 1, swayX: 0.1, swayY: 0.015, stretchY: 0, cycles: 1, speed: 3.6, alternate: true },
       { axis: 'ROW', from: 0, to: 0.25, swayX: 0.03, swayY: 0.012, stretchY: 0, cycles: 0, speed: 2.2, alternate: false },
+    ],
+  },
+
+  /**
+   * 사자·곰처럼 무겁고 낮은 네발. 사슴과 같은 네발이지만 **박자가 다르다** —
+   * 보폭이 크고 느리며 몸통이 좌우로 묵직하게 흔들린다.
+   */
+  HEAVY_QUADRUPED: {
+    bob: 0.028,
+    bobSpeed: 4.2,
+    lean: 0.05,
+    squash: 0.035,
+    bands: [
+      // 다리: 사슴보다 낮고 크게 내딛는다
+      { axis: 'ROW', from: 0.62, to: 1, swayX: 0.16, swayY: 0.012, stretchY: 0, cycles: 1, speed: 4.2, alternate: true },
+      // 어깨와 갈기가 걸음에 맞춰 묵직하게 흔들린다
+      { axis: 'ROW', from: 0, to: 0.36, swayX: 0.05, swayY: 0.025, stretchY: 0, cycles: 0, speed: 4.2, alternate: false },
+      // 꼬리
+      { axis: 'ROW', from: 0.4, to: 0.62, swayX: 0.07, swayY: 0, stretchY: 0, cycles: 0.8, speed: 2.6, alternate: false },
+    ],
+  },
+
+  /** 원숭이처럼 서서 걷고 팔이 긴 형태. 팔과 다리가 서로 엇갈린다. */
+  UPRIGHT_BIPED: {
+    bob: 0.05,
+    bobSpeed: 5.4,
+    lean: 0.06,
+    squash: 0.05,
+    bands: [
+      // 두 다리
+      { axis: 'ROW', from: 0.66, to: 1, swayX: 0.12, swayY: 0, stretchY: 0, cycles: 0, speed: 5.4, alternate: true },
+      // 팔은 다리와 반대로 흔들린다. 속도를 같게 두고 방향만 엇갈리게 한다
+      { axis: 'ROW', from: 0.26, to: 0.55, swayX: 0.1, swayY: 0.015, stretchY: 0, cycles: 0, speed: 5.4, alternate: true },
+      // 머리는 걸음마다 살짝 끄덕인다
+      { axis: 'ROW', from: 0, to: 0.24, swayX: 0.025, swayY: 0.02, stretchY: 0, cycles: 0, speed: 5.4, alternate: false },
+    ],
+  },
+
+  /** 펭귄처럼 서서 뒤뚱거리는 형태. 다리는 거의 안 보이고 몸통이 통째로 기운다. */
+  WADDLER: {
+    bob: 0.035,
+    bobSpeed: 3.6,
+    lean: 0.16,
+    squash: 0.04,
+    bands: [
+      // 짧은 다리
+      { axis: 'ROW', from: 0.82, to: 1, swayX: 0.07, swayY: 0, stretchY: 0, cycles: 0, speed: 3.6, alternate: true },
+      // 지느러미 같은 날개가 몸 옆에서 파닥인다
+      { axis: 'ROW', from: 0.32, to: 0.68, swayX: 0.06, swayY: 0.02, stretchY: 0.05, cycles: 0, speed: 7.2, alternate: false },
     ],
   },
 }

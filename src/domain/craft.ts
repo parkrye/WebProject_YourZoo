@@ -5,7 +5,7 @@
  * 값싼 쪽을 없애지 않는 이유는 **그림 한 장으로도 놀 수 있어야** 하기 때문이다 —
  * 24프레임을 그려야만 동물을 가질 수 있다면 대부분은 시작조차 못 한다.
  */
-export type AnimalCraft = 'SIMPLE' | 'TEMPLATE' | 'DETAILED' | 'COMMISSION'
+export type AnimalCraft = 'SIMPLE' | 'TEMPLATE' | 'RIG' | 'FRAMES' | 'COMMISSION'
 export type PropCraft = 'SIMPLE' | 'TEMPLATE' | 'DETAILED'
 
 export interface CraftSpec {
@@ -44,8 +44,21 @@ export const ANIMAL_CRAFTS: Record<AnimalCraft, CraftSpec> = {
     cash: 0,
     frames: 1,
   },
-  DETAILED: {
-    label: 'DETAILED',
+  /**
+   * 부위만 그리면 기계가 관절로 돌린다.
+   *
+   * 24칸을 그리는 것과의 차이는 **누가 움직이느냐**다. 손은 훨씬 덜 가는데
+   * 결과는 통짜 변형보다 살아 있다 — 다리가 엉덩이를 축으로 실제로 돌기 때문이다.
+   */
+  RIG: {
+    label: 'RIGGED',
+    hint: 'DRAW EACH BODY PART  JOINTS DO THE REST',
+    coins: 150,
+    cash: 0,
+    frames: 5,
+  },
+  FRAMES: {
+    label: 'FRAME BY FRAME',
     hint: 'DRAW ALL 24 FRAMES YOURSELF',
     coins: 240,
     cash: 0,
@@ -88,7 +101,7 @@ export const PROP_CRAFTS: Record<PropCraft, CraftSpec> = {
 }
 
 export const ANIMAL_CRAFT_ORDER: readonly AnimalCraft[] = [
-  'SIMPLE', 'TEMPLATE', 'DETAILED', 'COMMISSION',
+  'SIMPLE', 'TEMPLATE', 'RIG', 'FRAMES', 'COMMISSION',
 ]
 export const PROP_CRAFT_ORDER: readonly PropCraft[] = ['SIMPLE', 'TEMPLATE', 'DETAILED']
 

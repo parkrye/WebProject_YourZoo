@@ -510,6 +510,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         fit: item.sheet.fit,
         baseline: item.sheet.baseline,
       },
+      rig: null,
       orderedDay: clock.day,
       // 이미 만들어져 있는 물건이라 하루면 온다.
       arrivalDay: clock.day + SHIPPING_DAYS.SHOP,

@@ -1,7 +1,13 @@
 import type { AnimalTemplate, TemplateId } from './templates'
 
 export const TEMPLATE_ORDER: readonly TemplateId[] = [
-  'FREE', 'DEER', 'RABBIT', 'CROC', 'PARROT', 'OWL', 'FISH', 'TURTLE',
+  'FREE',
+  'DEER', 'LION',
+  'RABBIT',
+  'MONKEY', 'PENGUIN',
+  'PARROT', 'OWL',
+  'FISH',
+  'CROC', 'TURTLE',
 ]
 
 /**
@@ -50,6 +56,93 @@ export const TEMPLATES: Record<TemplateId, AnimalTemplate> = {
       { id: 'LEG', x: 0.26, y: 0.58, w: 0.34, h: 0.24 },
     ],
     archetype: 'TALL_QUADRUPED',
+  },
+
+  /**
+   * 사자·곰처럼 낮고 무거운 네발. 사슴과 같은 네발이지만 실루엣이 다르다 —
+   * 다리가 짧고 몸통이 두꺼우며 목이 굵다. 걸음도 그만큼 느리고 묵직하다.
+   */
+  LION: {
+    id: 'LION',
+    label: 'LION',
+    habitat: 'LAND',
+    suggestedType: 'BEAST',
+    guide: [
+      { kind: 'ELLIPSE', cx: 0.44, cy: 0.5, rx: 0.22, ry: 0.14 },
+      { kind: 'ELLIPSE', cx: 0.72, cy: 0.42, rx: 0.11, ry: 0.1 },
+      // 갈기
+      { kind: 'ELLIPSE', cx: 0.71, cy: 0.42, rx: 0.16, ry: 0.15 },
+      { kind: 'PATH', points: [[0.78, 0.46], [0.84, 0.48]] },
+      { kind: 'PATH', points: [[0.3, 0.62], [0.29, 0.78]] },
+      { kind: 'PATH', points: [[0.4, 0.63], [0.4, 0.78]] },
+      { kind: 'PATH', points: [[0.54, 0.63], [0.55, 0.78]] },
+      { kind: 'PATH', points: [[0.62, 0.62], [0.64, 0.78]] },
+      { kind: 'PATH', points: [[0.22, 0.46], [0.12, 0.38], [0.09, 0.48]] },
+    ],
+    parts: [
+      { id: 'BODY', x: 0.2, y: 0.36, w: 0.44, h: 0.28 },
+      { id: 'HEAD', x: 0.56, y: 0.26, w: 0.34, h: 0.32 },
+      { id: 'LEG', x: 0.26, y: 0.6, w: 0.42, h: 0.22 },
+      { id: 'TAIL', x: 0.06, y: 0.34, w: 0.18, h: 0.2 },
+    ],
+    archetype: 'HEAVY_QUADRUPED',
+  },
+
+  /**
+   * 원숭이처럼 서서 걷고 팔이 긴 형태.
+   * 토끼와 같은 '작고 둥근 몸'이 아니다 — 팔다리가 길고 서로 엇갈려 움직인다.
+   */
+  MONKEY: {
+    id: 'MONKEY',
+    label: 'MONKEY',
+    habitat: 'LAND',
+    suggestedType: 'BEAST',
+    guide: [
+      { kind: 'ELLIPSE', cx: 0.5, cy: 0.5, rx: 0.13, ry: 0.17 },
+      { kind: 'ELLIPSE', cx: 0.52, cy: 0.24, rx: 0.11, ry: 0.1 },
+      { kind: 'ELLIPSE', cx: 0.42, cy: 0.22, rx: 0.04, ry: 0.045 },
+      { kind: 'ELLIPSE', cx: 0.62, cy: 0.22, rx: 0.04, ry: 0.045 },
+      // 긴 팔
+      { kind: 'PATH', points: [[0.38, 0.4], [0.26, 0.56], [0.3, 0.68]] },
+      { kind: 'PATH', points: [[0.62, 0.4], [0.74, 0.56], [0.7, 0.68]] },
+      // 다리
+      { kind: 'PATH', points: [[0.45, 0.67], [0.42, 0.86]] },
+      { kind: 'PATH', points: [[0.55, 0.67], [0.58, 0.86]] },
+      // 꼬리
+      { kind: 'PATH', points: [[0.62, 0.6], [0.78, 0.66], [0.8, 0.5]] },
+    ],
+    parts: [
+      { id: 'BODY', x: 0.35, y: 0.33, w: 0.3, h: 0.36 },
+      { id: 'HEAD', x: 0.38, y: 0.12, w: 0.28, h: 0.24 },
+      { id: 'LEG', x: 0.38, y: 0.66, w: 0.26, h: 0.24 },
+      { id: 'TAIL', x: 0.6, y: 0.46, w: 0.24, h: 0.24 },
+    ],
+    archetype: 'UPRIGHT_BIPED',
+  },
+
+  /** 펭귄처럼 서서 뒤뚱거리는 형태. 다리는 거의 안 보이고 몸통이 통째로 기운다. */
+  PENGUIN: {
+    id: 'PENGUIN',
+    label: 'PENGUIN',
+    habitat: 'LAND',
+    suggestedType: 'BIRD',
+    guide: [
+      { kind: 'PATH', points: [[0.5, 0.16], [0.66, 0.42], [0.64, 0.8], [0.36, 0.8], [0.34, 0.42]], closed: true },
+      { kind: 'ELLIPSE', cx: 0.5, cy: 0.24, rx: 0.11, ry: 0.1 },
+      { kind: 'PATH', points: [[0.56, 0.26], [0.66, 0.29], [0.56, 0.32]], closed: true },
+      // 지느러미 같은 날개
+      { kind: 'PATH', points: [[0.34, 0.4], [0.24, 0.62], [0.33, 0.64]], closed: true },
+      { kind: 'PATH', points: [[0.66, 0.4], [0.76, 0.62], [0.67, 0.64]], closed: true },
+      { kind: 'PATH', points: [[0.42, 0.8], [0.36, 0.88], [0.46, 0.88]], closed: true },
+      { kind: 'PATH', points: [[0.58, 0.8], [0.54, 0.88], [0.64, 0.88]], closed: true },
+    ],
+    parts: [
+      { id: 'BODY', x: 0.32, y: 0.32, w: 0.36, h: 0.5 },
+      { id: 'HEAD', x: 0.37, y: 0.12, w: 0.3, h: 0.24 },
+      { id: 'WING', x: 0.22, y: 0.36, w: 0.16, h: 0.3 },
+      { id: 'LEG', x: 0.34, y: 0.78, w: 0.32, h: 0.14 },
+    ],
+    archetype: 'WADDLER',
   },
 
   RABBIT: {

@@ -6,7 +6,9 @@ import {
   ANIMAL_CRAFTS, ANIMAL_CRAFT_ORDER, DETAIL_COLS, DETAIL_ROW_LABELS,
   type AnimalCraft,
 } from '@/domain/craft'
-import { TEMPLATES, TEMPLATE_ORDER, type TemplateId } from '@/domain/templates'
+import { LOCOMOTIONS, LOCOMOTION_ORDER, type Locomotion } from '@/domain/locomotion'
+import { rigOf } from '@/domain/rig'
+import { TEMPLATES, type TemplateId } from '@/domain/templates'
 import {
   ANIMAL_TYPE_ORDER, HABITATS, TRAIT_KEYS, TRAIT_LABELS,
   randomTraits, traitsFromType, withTrait,
@@ -25,9 +27,10 @@ import { Slider } from '@/ui/components/Slider'
 import { DrawModal } from '@/ui/modals/DrawModal'
 import { CraftPicker } from './CraftPicker'
 import { FrameStudio } from './FrameStudio'
+import { RigStudio } from './RigStudio'
 import { WizardFrame } from './WizardFrame'
 
-type Step = 'CRAFT' | 'TEMPLATE' | 'DRAW' | 'TRAITS' | 'NAME'
+type Step = 'CRAFT' | 'LOCOMOTION' | 'TEMPLATE' | 'DRAW' | 'TRAITS' | 'NAME'
 type TraitMode = 'TYPE' | 'CUSTOM' | 'RANDOM'
 
 const TRAIT_MODES: readonly TraitMode[] = ['TYPE', 'CUSTOM', 'RANDOM']
@@ -59,6 +62,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
 
   const [step, setStep] = useState<Step>('CRAFT')
   const [craft, setCraft] = useState<AnimalCraft>('SIMPLE')
+  const [locomotion, setLocomotion] = useState<Locomotion>('QUADRUPED')
   const [templateId, setTemplateId] = useState<TemplateId>('DEER')
   const [name, setName] = useState('')
   const [mode, setMode] = useState<TraitMode>('TYPE')
@@ -69,6 +73,8 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const [habitat, setHabitat] = useState<AnimalTraits['habitat']>('LAND')
 
   const [single, setSingle] = useState<ExportedDrawing | null>(null)
+  /** 리그 파츠. 부위 id 로 찾는다. */
+  const [rigParts, setRigParts] = useState<Record<string, ExportedDrawing>>({})
   const [frames, setFrames] = useState<(ExportedDrawing | null)[]>(
     () => Array(DETAIL_TOTAL).fill(null),
   )
@@ -76,20 +82,29 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const [busy, setBusy] = useState(false)
 
   const spec = ANIMAL_CRAFTS[craft]
-  const detailed = craft === 'DETAILED'
-  // SIMPLE 은 빈 도화지다. 템플릿 위에 그리는 건 TEMPLATE 뿐이다.
-  const guide = craft === 'TEMPLATE' ? TEMPLATES[templateId].guide : []
+  const framed = craft === 'FRAMES'
+  const rigged = craft === 'RIG'
+  // 실루엣을 고르는 방식들. SIMPLE 은 빈 도화지라 여기 들지 않는다.
+  const usesTemplate = craft === 'TEMPLATE' || craft === 'RIG' || craft === 'FRAMES'
+  const guide = usesTemplate ? TEMPLATES[templateId].guide : []
+  const rig = rigOf(TEMPLATES[templateId].archetype)
 
-  const drawn = detailed ? frames.some(Boolean) : single !== null
+  const drawn = framed
+    ? frames.some(Boolean)
+    : rigged
+      ? Object.keys(rigParts).length > 0
+      : single !== null
   const affordable = gold >= spec.coins
 
   const base: AnimalTraits =
     mode === 'TYPE' ? traitsFromType(typeId) : mode === 'CUSTOM' ? custom : rolled
   const traits: AnimalTraits = { ...base, habitat }
 
-  const colorCount = detailed
+  const colorCount = framed
     ? Math.max(...frames.map((f) => f?.colorCount ?? 0), 0)
-    : (single?.colorCount ?? 0)
+    : rigged
+      ? Math.max(...Object.values(rigParts).map((d) => d.colorCount), 0)
+      : (single?.colorCount ?? 0)
   const appeal = computeAppeal({
     traits,
     colorCount,
@@ -104,7 +119,10 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
 
   const startCraft = (id: AnimalCraft): void => {
     setCraft(id)
-    setStep(id === 'TEMPLATE' ? 'TEMPLATE' : 'DRAW')
+    // 실루엣을 쓰는 방식은 이동 유형부터 고른다. 실루엣 열 몇 개를 한 번에
+    // 늘어놓으면 사자와 거북이가 나란히 놓여 무엇이 다른지 읽히지 않는다.
+    const needsShape = id === 'TEMPLATE' || id === 'RIG' || id === 'FRAMES'
+    setStep(needsShape ? 'LOCOMOTION' : 'DRAW')
   }
 
   /** 템플릿을 고르면 서식지도 그에 맞춘다. 물 템플릿을 땅에 두면 움직임이 어긋난다. */
@@ -124,12 +142,28 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
 
     const imageId = createAnimalId()
     let sheet: SheetMeta | null = null
+    let rigIds: Record<string, string> | null = null
     let blob: Blob
 
-    if (detailed) {
+    if (framed) {
       const made = await composeSheet(frames.map((f) => f?.blob ?? null))
       blob = made.blob
       sheet = { imageId, ...made.meta }
+    } else if (rigged) {
+      // 파츠는 각자 따로 저장한다. 렌더러가 부위별로 돌려야 하기 때문이다.
+      rigIds = {}
+      for (const [partId, drawing] of Object.entries(rigParts)) {
+        const partImageId = `${imageId}-${partId}`
+        rigIds[partId] = partImageId
+        await registerFromBlob(partImageId, drawing.blob)
+        try {
+          await putImage(partImageId, drawing.blob)
+        } catch {
+          // 저장 실패는 세이브 단계에서 다시 드러난다.
+        }
+      }
+      // 대표 그림은 몸통이다. 썸네일과 창고 목록에 쓴다.
+      blob = (rigParts.BODY ?? Object.values(rigParts)[0]!).blob
     } else {
       blob = single!.blob
     }
@@ -151,8 +185,9 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
       imageId,
       traits,
       // 움직임 프로파일은 여기서 갈린다. SIMPLE 은 무난한 기본값을 쓴다.
-      templateId: craft === 'TEMPLATE' ? templateId : 'FREE',
+      templateId: usesTemplate ? templateId : 'FREE',
       spriteSheet: sheet,
+      rig: rigIds,
       orderedDay: day,
       arrivalDay: day + SHIPPING_DAYS.DRAWN,
       appeal,
@@ -175,16 +210,44 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     )
   }
 
+  if (step === 'LOCOMOTION') {
+    return (
+      <WizardFrame
+        title="HOW DOES IT MOVE"
+        onBack={() => setStep('CRAFT')}
+        onNext={() => setStep('TEMPLATE')}
+      >
+        <div className="wizard-grid">
+          {LOCOMOTION_ORDER.map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={locomotion === id ? 'wizard-card is-active' : 'wizard-card'}
+              onClick={() => {
+                setLocomotion(id)
+                const first = LOCOMOTIONS[id].templates[0]
+                if (first) pickTemplate(first)
+              }}
+            >
+              <BitmapLabel text={LOCOMOTIONS[id].label} size={21} align="center" />
+              <BitmapLabel text={LOCOMOTIONS[id].hint} size={12} align="center" />
+            </button>
+          ))}
+        </div>
+      </WizardFrame>
+    )
+  }
+
   if (step === 'TEMPLATE') {
     return (
       <WizardFrame
         title="PICK A SHAPE"
-        onBack={() => setStep('CRAFT')}
+        onBack={() => setStep('LOCOMOTION')}
         onNext={() => setStep('DRAW')}
         nextLabel="DRAW"
       >
         <div className="wizard-grid">
-          {TEMPLATE_ORDER.filter((id) => id !== 'FREE').map((id) => (
+          {LOCOMOTIONS[locomotion].templates.map((id) => (
             <button
               key={id}
               type="button"
@@ -203,12 +266,21 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   if (step === 'DRAW') {
     return (
       <WizardFrame
-        title={detailed ? 'DRAW 24 FRAMES' : 'DRAW IT'}
-        onBack={() => setStep(craft === 'TEMPLATE' ? 'TEMPLATE' : 'CRAFT')}
+        title={framed ? 'DRAW 24 FRAMES' : rigged ? 'DRAW EACH PART' : 'DRAW IT'}
+        onBack={() => setStep(usesTemplate ? 'TEMPLATE' : 'CRAFT')}
         onNext={() => setStep('TRAITS')}
         nextReady={drawn}
       >
-        {detailed ? (
+        {rigged ? (
+          <RigStudio
+            spec={rig}
+            parts={rigParts}
+            guide={guide}
+            onChange={(partId, drawing) =>
+              setRigParts((prev) => ({ ...prev, [partId]: drawing }))
+            }
+          />
+        ) : framed ? (
           <FrameStudio
             rows={DETAIL_ROW_LABELS.map((label) => ({ label, count: DETAIL_COLS }))}
             frames={frames}

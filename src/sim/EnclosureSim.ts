@@ -4,7 +4,7 @@ import type { AnimalBlackboard } from '@/ai/types'
 import { createRng, type Rng } from '@/core/rng'
 import type { Animal } from '@/domain/animal'
 import { visitorCount } from '@/domain/economy'
-import { createAnimalRenderer } from '@/render/animal'
+import { createAnimalRenderer, createRigRenderer } from '@/render/animal'
 import { AnimalAgent } from './AnimalAgent'
 import { ensureBitmap, getBitmap } from './imageCache'
 import { placedProps, type OwnedProp } from '@/domain/prop'
@@ -210,6 +210,20 @@ export class EnclosureSim {
     const source = getBitmap(animal.imageId) ?? (await ensureBitmap(animal.imageId))
     if (!source) return
     agent.aspect = source.width / source.height
+
+    // 파츠로 만든 동물은 부위를 모두 읽어 리그로 그린다.
+    if (animal.rig) {
+      const parts = new Map<string, ImageBitmap>()
+      for (const [partId, imageId] of Object.entries(animal.rig)) {
+        const part = getBitmap(imageId) ?? (await ensureBitmap(imageId))
+        if (part) parts.set(partId, part)
+      }
+      if (parts.size > 0) {
+        agent.renderer = createRigRenderer(animal, parts)
+        return
+      }
+      // 파츠를 하나도 못 읽었다. 원본 그림으로라도 그린다.
+    }
 
     const sheetId = animal.spriteSheet?.imageId
     if (!sheetId) {

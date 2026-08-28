@@ -4,9 +4,12 @@ import type { AnimalTypeId } from './traits'
 
 export type TemplateId =
   | 'FREE'
-  | 'DEER' | 'RABBIT' | 'CROC'
+  | 'DEER' | 'LION'
+  | 'RABBIT'
+  | 'MONKEY' | 'PENGUIN'
   | 'PARROT' | 'OWL'
-  | 'FISH' | 'TURTLE'
+  | 'FISH'
+  | 'CROC' | 'TURTLE'
 
 /** 그림판에 옅게 깔리는 가이드 도형. 좌표는 캔버스 기준 정규화(0..1). */
 export type GuideShape =
