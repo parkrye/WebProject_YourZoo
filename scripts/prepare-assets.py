@@ -64,8 +64,6 @@ FRAMES_MAX = 12
 SINGLE_SLACK = 1.45
 # 본체 대비 이 비율보다 작은 덩어리는 옆 그림에서 스친 조각으로 본다.
 DUST_RATIO = 0.03
-# 붙어 버린 칸을 가를 때 기대 위치에서 옮길 수 있는 폭(칸 폭 대비).
-SEAM_REACH = 0.25
 
 # 파일명의 층 -> 게임의 서식지
 ANIMAL_HABITAT = {"upper": "SKY", "middle": "LAND", "lower": "WATER"}
@@ -76,16 +74,6 @@ ANIMAL_MAX_FRAME_H = 220
 
 # WebP 품질. 90 아래로는 털결에 뭉개짐이 눈에 띈다.
 ANIMAL_WEBP_QUALITY = 90
-
-# 이음매를 격자 자리에서 옮길 수 있는 폭(피치 대비).
-# 넓게 풀면 한 마리 안의 얇은 곳(목·허리)까지 찾아가 거기를 자른다.
-# 덩어리 판정. 그 줄 최대 덩어리의 이 비율 아래는 먼지로 본다.
-BLOB_FLOOR = 0.01
-# 중앙값의 이 배를 넘는 폭은 옆 프레임과 붙어 한 덩어리가 된 것으로 본다.
-MERGED_WIDTH = 1.45
-# 붙은 덩어리를 가를 때 격자 자리에서 옮길 수 있는 폭(피치 대비).
-# 넓게 풀면 목이나 허리 같은 한 마리 안의 얇은 곳까지 찾아가 거기를 자른다.
-SEAM_REACH = 0.2
 
 
 OUT_ROOT = Path("src/assets/images")
@@ -232,43 +220,79 @@ def row_frames(mask: np.ndarray, rows: list[tuple[int, int]], single: float) -> 
     return counts
 
 
-def row_cells(band: np.ndarray, count: int, width: int) -> list[tuple[int, int]]:
+def row_layout(band: np.ndarray, count: int) -> tuple[list[tuple[int, int]], np.ndarray]:
     """
-    한 줄을 정확히 `count` 칸으로 나눈다.
+    한 줄에서 프레임 `count` 개가 **실제로 놓인 자리**를 찾는다.
+    돌려주는 것은 칸 범위와 칸마다의 기준점이다.
 
-    경계는 **격자 자리에서 출발해 실제로 비어 있는 열로 옮긴다.**
+    이미지 폭을 `count` 로 나눈 격자를 쓰면 안 된다. 그림은 이미지의 양 끝에 닿지 않고,
+    실제 간격도 폭÷칸수가 아니다 — 말의 서 있는 줄은 간격이 186 인데 격자는 192 라
+    끝 칸에서 **25px 이나 밀린다.** 그만큼 밀린 자리를 기준으로 잘라 내니
+    프레임마다 몸이 좌우로 튀고, 격자 경계가 동물 한복판에 떨어져 오랑우탄이 갈렸다.
 
-    격자 그대로 자르면 그림이 칸 간격보다 넓은 곳에서 꼬리와 주둥이가 날아간다.
-    반대로 빈 구간만 보고 나누면 **한 마리 안을 가른다** —
-    두 프레임이 붙어 있으면 그 사이보다 한 마리 안(목·허리)이 더 얇을 수 있기 때문이다.
+    빈 틈만 보고 나눠도 안 된다. 물고기와 악어는 프레임끼리 붙어 있어
+    한 줄이 통째로 구간 하나다 (마를린은 8칸이 구간 1개다).
 
-    프레임은 고르게 놓여 있으니 격자가 "어디쯤"을, 빈 열이 "정확히 어디"를 알려 준다.
+    그래서 **프레임이 등간격이라는 사실**을 쓴다. 간격 `p` 와 첫 경계 `s0` 를 훑어,
+    경계 `count-1` 개가 다 같이 잉크에서 가장 멀리 떨어지는 조합을 고른다.
+    떨어져 있는 줄에서는 경계가 정확히 틈에 꽂히고,
+    붙어 있는 줄에서는 등간격을 지킨 채 가장 얇은 자리로 간다.
     """
-    pitch = width / count
-    profile = band.sum(axis=0)
-    reach = max(1, int(pitch * SEAM_REACH))
+    width = band.shape[1]
+    ink = band.any(axis=0)
+    if count < 2 or not ink.any():
+        return [(0, width)], np.array([width / 2.0])
 
-    edges = [0]
-    for i in range(1, count):
-        nominal = pitch * i
-        lo = max(1, int(nominal - reach))
-        hi = min(width - 1, int(nominal + reach))
-        if hi <= lo:
-            edges.append(int(nominal))
+    lo, hi = int(np.argmax(ink)), width - int(np.argmax(ink[::-1]))
+    profile = band.sum(axis=0).astype(np.float64)
+
+    # 각 열이 잉크에서 몇 칸 떨어져 있는가. 경계는 이 값이 클수록 좋다.
+    clear = ndimage.distance_transform_edt(~ink)
+
+    # 잉크 전체가 `count` 칸에 담기므로 간격은 이 범위를 벗어날 수 없다.
+    span = hi - lo
+    pitches = np.arange(span / count * 0.75, span / (count - 1) * 1.05 + 1e-9, 0.5)
+    seams = np.arange(count - 1)
+
+    best: tuple[tuple[float, float, float], float, float] | None = None
+    for pitch in pitches:
+        # 첫 경계는 첫 프레임 뒤 어딘가다.
+        first = np.arange(lo + pitch * 0.35, lo + pitch * 1.3)
+        cuts = np.round(first[:, None] + pitch * seams[None, :]).astype(int)
+
+        # 모든 경계가 잉크 안에 들어와야 한다. 밖으로 밀린 것은 후보가 아니다 —
+        # 이걸 막지 않으면 간격을 잔뜩 벌려 경계를 오른쪽 여백으로 밀어내는 답이
+        # 그 여백의 여유 거리를 점수로 챙겨 이긴다. 오랑우탄이 그렇게 두 마리씩 잘렸다.
+        inside = (cuts[:, 0] > lo) & (cuts[:, -1] < hi)
+        if not inside.any():
             continue
+        cuts = np.clip(cuts, 1, width - 1)
 
-        window = profile[lo:hi]
-        empty = np.where(window == 0)[0]
-        if empty.size:
-            # 빈 열 중 격자 자리에 가장 가까운 것. 두 그림 사이가 여기다.
-            pick = int(empty[np.argmin(np.abs(empty + lo - nominal))])
-        else:
-            # 겹쳐 그려져 빈 열이 없다. 가장 얇은 자리로 옮긴다.
-            pick = int(np.argmin(window))
-        edges.append(lo + pick)
+        room = clear[cuts]
+        ink_at = profile[cuts].sum(axis=1)
+        # 먼저 **모든** 경계가 틈에 들어갔는지 본다. 하나라도 그림을 밟으면 실격에 가깝다.
+        # 다 통과한 것들끼리는 틈 한가운데에 가까운 쪽을, 다 붙어 있으면 얇은 쪽을 고른다.
+        rank = np.stack([room.min(axis=1), room.sum(axis=1), -ink_at], axis=1)
+        rank[~inside] = -np.inf
 
-    edges.append(width)
-    return list(zip(edges, edges[1:]))
+        i = int(np.lexsort((rank[:, 2], rank[:, 1], rank[:, 0]))[-1])
+        key = (rank[i, 0], rank[i, 1], rank[i, 2])
+        if best is None or key > best[0]:
+            best = (key, float(first[i]), float(pitch))
+
+    if best is None:
+        pitch = span / count
+        best = ((0.0, 0.0, 0.0), lo + pitch, pitch)
+
+    _, first, pitch = best
+    edges = [0] + [int(round(first + pitch * i)) for i in range(count - 1)] + [width]
+    edges = sorted(set(np.clip(edges, 0, width).tolist()))
+    while len(edges) < count + 1:
+        edges.append(width)
+
+    cells = list(zip(edges, edges[1:]))
+    anchors = first + pitch * (np.arange(count) - 0.5)
+    return cells, anchors
 
 
 def drop_dust(piece: np.ndarray) -> np.ndarray:
@@ -329,7 +353,9 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
 
     single = single_width(mask, rows)
     frames = row_frames(mask, rows, single)
-    cells = [row_cells(mask[y0:y1], frames[r], width) for r, (y0, y1) in enumerate(rows)]
+    layouts = [row_layout(mask[y0:y1], frames[r]) for r, (y0, y1) in enumerate(rows)]
+    cells = [c for c, _ in layouts]
+    anchors = [a for _, a in layouts]
     cols = max(frames)
 
     # 칸마다 잉크 상자. 옆 칸의 그림은 범위 밖이라 들어오지 않는다.
@@ -351,11 +377,10 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
 
     lefts, rights, tops = [], [], []
     for r, row in enumerate(boxes):
-        pitch = width / frames[r]
         for c, box in enumerate(row):
             if not box:
                 continue
-            anchor = pitch * (c + 0.5)
+            anchor = anchors[r][c]
             lefts.append(box[0] - anchor)
             rights.append(box[2] - anchor)
             tops.append(box[1] - bottoms[r])
@@ -374,9 +399,8 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
     sheet = Image.new("RGBA", (fw * cols, fh * len(rows)), (0, 0, 0, 0))
     for r, (y0, y1) in enumerate(rows):
         band = rgba[y0:y1]
-        pitch = width / frames[r]
         for c, (x0, x1) in enumerate(cells[r]):
-            left = round(pitch * (c + 0.5) + box_left)
+            left = round(anchors[r][c] + box_left)
             top = bottoms[r] + box_top
 
             piece = np.zeros((bh, bw, 4), dtype=np.uint8)
