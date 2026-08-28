@@ -8,8 +8,8 @@ import { StatusModal } from '@/ui/modals/StatusModal'
 import { RequestModal } from '@/ui/modals/RequestModal'
 import { ReportModal } from '@/ui/modals/ReportModal'
 import { ShopModal } from '@/ui/modals/ShopModal'
+import { ArrivalModal } from '@/ui/modals/ArrivalModal'
 import { VisitModal } from '@/ui/modals/VisitModal'
-import { PropModal } from '@/ui/modals/PropModal'
 import { useGameStore } from '@/store/gameStore'
 
 export function GameRoot() {
@@ -35,8 +35,9 @@ export function GameRoot() {
       {modal === 'REQUEST' && <RequestModal />}
       {modal === 'REPORT' && <ReportModal />}
       {modal === 'SHOP' && <ShopModal />}
+      {/* 정산 다음에 뜬다. 이게 닫혀야 화면이 다시 밝아진다. */}
+      {modal === 'ARRIVAL' && <ArrivalModal />}
       {modal === 'VISIT' && <VisitModal />}
-      {modal === 'PROP' && <PropModal />}
     </Stage>
   )
 }

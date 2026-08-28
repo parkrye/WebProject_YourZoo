@@ -69,44 +69,63 @@ export function VisitModal() {
   return (
     <Popup title="VISIT A ZOO" width={860} height={640} onClose={closeModal}>
       <div className="visit">
-        <div className="visit-me">
-          <BitmapLabel text="YOUR ID" size={18} />
-          <BitmapLabel text={userId || 'NONE'} size={26} />
-        </div>
-
-        <div className="visit-search">
-          <BitmapInput
-            value={query}
-            maxLength={ZOO_NAME_MAX_LENGTH}
-            placeholder="ID OR ZOO NAME"
-            onChange={setQuery}
-          />
-          <IconButton icon={GUI.BINOCULARS} size={52} title="SEARCH" onClick={() => void run(query)} />
-          <button type="button" className="labeled-button" disabled={busy} onClick={() => void surprise()}>
-            <IconGlyph icon={GUI.MAP} size={40} />
-            <BitmapLabel text="RANDOM" size={17} />
+        {/*
+          검색줄과 내 아이디를 한 띠에 묶는다. 예전에는 아이디가 위에 따로 떠 있어
+          제목과 검색줄 사이에 아무것도 아닌 줄이 하나 끼어 있었다.
+        */}
+        <div className="visit-bar">
+          <div className="visit-search">
+            <BitmapInput
+              value={query}
+              maxLength={ZOO_NAME_MAX_LENGTH}
+              placeholder="ID OR ZOO NAME"
+              onChange={setQuery}
+            />
+            <IconButton icon={GUI.BINOCULARS} size={48} title="SEARCH" onClick={() => void run(query)} />
+          </div>
+          <button type="button" className="visit-random" disabled={busy} onClick={() => void surprise()}>
+            <IconGlyph icon={GUI.MAP} size={34} />
+            <BitmapLabel text="RANDOM" size={18} />
           </button>
+          <div className="visit-me">
+            <BitmapLabel text="YOUR ID" size={13} />
+            <BitmapLabel text={userId || 'NONE'} size={20} />
+          </div>
         </div>
 
-        <div className="visit-list">
-          {status !== '' && <BitmapLabel text={status} size={22} align="center" />}
+        {status !== '' && (
+          <div className="visit-empty">
+            <IconGlyph icon={GUI.MAP} size={54} />
+            <BitmapLabel text={status} size={22} align="center" />
+          </div>
+        )}
+
+        {/* 한 줄짜리 목록은 어느 동물원이 볼 만한지 읽히지 않았다. 카드로 늘어놓는다. */}
+        <div className="visit-grid">
           {results.map((zoo) => (
             <button
               key={zoo.userId}
               type="button"
-              className="visit-row"
+              className="visit-card"
               disabled={busy}
               onClick={() => void enter(zoo.userId)}
             >
-              <div className="visit-row-name">
-                <BitmapLabel text={zoo.zooName || 'MY ZOO'} size={26} />
-                <BitmapLabel text={zoo.userId} size={16} />
+              <div className="visit-card-head">
+                <BitmapLabel text={zoo.zooName || 'MY ZOO'} size={24} />
+                <BitmapLabel text={zoo.userId} size={14} />
               </div>
-              <div className="visit-row-stats">
-                <IconGlyph icon={GUI.MEDAL} size={26} />
-                <BitmapLabel text={`${zoo.reputation}`} size={22} />
-                <BitmapLabel text={`ANIMALS ${zoo.animalCount}`} size={18} />
-                <BitmapLabel text={`DAY ${zoo.day}`} size={18} />
+              <div className="visit-card-stats">
+                <span className="visit-stat">
+                  <IconGlyph icon={GUI.MEDAL} size={24} />
+                  <BitmapLabel text={`${zoo.reputation}`} size={20} />
+                </span>
+                <span className="visit-stat">
+                  <IconGlyph icon={GUI.BOOK} size={24} />
+                  <BitmapLabel text={`${zoo.animalCount}`} size={20} />
+                </span>
+                <span className="visit-stat">
+                  <BitmapLabel text={`DAY ${zoo.day}`} size={17} />
+                </span>
               </div>
             </button>
           ))}

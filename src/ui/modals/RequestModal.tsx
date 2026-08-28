@@ -23,11 +23,13 @@ import { Slider } from '@/ui/components/Slider'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
 import { OrdersTab } from '@/ui/panels/OrdersTab'
 import { DrawModal } from './DrawModal'
+import { NewPropForm } from '@/ui/panels/NewPropForm'
 
-type RequestTab = 'NEW' | 'ORDERS'
+type RequestTab = 'NEW' | 'PROP' | 'ORDERS'
 
 const TABS: readonly TabItem<RequestTab>[] = [
   { id: 'NEW', label: 'NEW ANIMAL' },
+  { id: 'PROP', label: 'NEW PROP' },
   { id: 'ORDERS', label: 'ORDERS' },
 ]
 
@@ -43,7 +45,10 @@ export function RequestModal() {
   return (
     <Popup title="REQUEST FORM" width={POPUP_WIDTH} height={POPUP_HEIGHT} onClose={closeModal}>
       <Tabs items={TABS} active={tab} onChange={setTab} />
-      {tab === 'NEW' ? <NewAnimalForm onDone={closeModal} /> : <OrdersTab />}
+      {tab === 'NEW' && <NewAnimalForm onDone={closeModal} />}
+      {/* 프롭도 여기서 만든다. 만드는 일은 한 곳에 모여 있어야 찾기 쉽다. */}
+      {tab === 'PROP' && <NewPropForm onDone={closeModal} />}
+      {tab === 'ORDERS' && <OrdersTab />}
     </Popup>
   )
 }
@@ -270,7 +275,7 @@ function NewAnimalForm({ onDone }: NewAnimalFormProps) {
 
       {drawOpen && (
         <DrawModal
-          templateId={templateId}
+          guide={TEMPLATES[templateId].guide}
           onClose={() => setDrawOpen(false)}
           onDone={(result) => {
             setDrawing(result)

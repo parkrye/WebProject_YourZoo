@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  FENCE_OFFSET_DETAIL, FENCE_OFFSET_ZOO, GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH, ROAM_BOX,
+  FENCE_OFFSET_DETAIL, FENCE_OFFSET_ZOO, GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH,
+  PROP_HEIGHT, ROAM_BOX,
   type BiomeId,
 } from '@/assets/manifest'
 import { audio } from '@/audio/AudioManager'
@@ -349,27 +350,26 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     const scene = toScene(state.clientX, state.clientY)
     if (!scene) return
 
-    // 놓을 수 있는 구역은 동물이면 서식지, 프롭이면 땅이냐 물이냐로 정해진다.
-    const layer = state.item.kind === 'ANIMAL'
-      ? state.item.animal.traits.habitat
-      : state.item.prop.layer
-    const box = ROAM_BOX[layer]
-    const inside =
-      scene.x >= box.x0 && scene.x <= box.x1 && scene.y >= box.y0 && scene.y <= box.y1
-    if (!inside) {
-      audio.playSting('DENY')
-      setDropError(`DROP IN ${layer} AREA`)
-      return
-    }
-
+    // 프롭은 어디에나 놓을 수 있다. 만들 때 고른 것은 자리가 아니라 거동이다.
     if (state.item.kind === 'PROP') {
       if (!canPlaceProp(props, enclosure)) {
         audio.playSting('DENY')
         setDropError('NO ROOM FOR PROPS')
         return
       }
-      // 프롭은 놓은 자리가 곧 제 자리다. 동물처럼 돌아다니지 않는다.
-      placeProp(state.item.prop.id, enclosure, scene.x, scene.y)
+      // 프롭은 y 를 **발밑**으로 그린다. 커서에 몸 가운데가 오도록 반 칸 내려 잡는다 —
+      // 그대로 넣으면 놓은 자리보다 프롭이 반 칸 위에 뜬다.
+      const half = PROP_HEIGHT[state.item.prop.layer === 'WATER' ? 'WATER' : 'LAND'] / 2
+      placeProp(state.item.prop.id, enclosure, scene.x, scene.y + half)
+      return
+    }
+
+    const box = ROAM_BOX[state.item.animal.traits.habitat]
+    const inside =
+      scene.x >= box.x0 && scene.x <= box.x1 && scene.y >= box.y0 && scene.y <= box.y1
+    if (!inside) {
+      audio.playSting('DENY')
+      setDropError(`DROP IN ${state.item.animal.traits.habitat} AREA`)
       return
     }
 
@@ -601,7 +601,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                   onClick={() => setScreen('ZOO_DETAIL')}
                 />
               ) : (
-                <>
                 <BarButton
                   icon={GUI.SCROLL}
                   label="REQUEST"
@@ -611,9 +610,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                     openModal('REQUEST')
                   }}
                 />
-                {/* 프롭도 직접 그릴 수 있다. 동물 요청서 바로 옆이 찾기 쉽다. */}
-                <BarButton icon={GUI.PALETTE} label="MAKE PROP" onClick={() => openModal('PROP')} />
-                </>
               )}
             </div>
 

@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { templateOf, type TemplateId } from '@/domain/templates'
+import type { GuideShape } from '@/domain/templates'
 
 interface TemplateGuideProps {
-  templateId: TemplateId
+  /** 밑그림 도형. 동물 템플릿이든 프롭 템플릿이든 여기서는 같은 도형일 뿐이다. */
+  guide: readonly GuideShape[]
   size: number
 }
 
@@ -15,7 +16,7 @@ const GUIDE_DASH = [7, 6]
  * **캔버스 뒤 별도 레이어다.** 그림 캔버스에 직접 그리면 내보낸 PNG 에 가이드가 섞인다.
  * 새 템플릿을 고르면 날개가 어디쯤인지 보이므로, 그린 그림과 움직임 프로파일이 어긋나지 않는다.
  */
-export function TemplateGuide({ templateId, size }: TemplateGuideProps) {
+export function TemplateGuide({ guide, size }: TemplateGuideProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -35,7 +36,7 @@ export function TemplateGuide({ templateId, size }: TemplateGuideProps) {
     ctx.lineCap = 'round'
     ctx.setLineDash(GUIDE_DASH)
 
-    for (const shape of templateOf(templateId).guide) {
+    for (const shape of guide) {
       ctx.beginPath()
       if (shape.kind === 'ELLIPSE') {
         ctx.ellipse(shape.cx * size, shape.cy * size, shape.rx * size, shape.ry * size, 0, 0, Math.PI * 2)
@@ -50,7 +51,7 @@ export function TemplateGuide({ templateId, size }: TemplateGuideProps) {
       }
       ctx.stroke()
     }
-  }, [templateId, size])
+  }, [guide, size])
 
   return <canvas ref={canvasRef} className="drawing-guide-canvas" style={{ width: size, height: size }} />
 }

@@ -8,7 +8,7 @@ import { phaseBlend, timeLighting, type AreaLight, type FenceLight } from '@/dom
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
 import { ensureBitmap, getBitmap } from '@/sim/imageCache'
-import { PROP_BOB, type PlacedProp } from '@/sim/props'
+import { propBand, PROP_BOB, PROP_SWAY, type PlacedProp } from '@/sim/props'
 import type { VisitorAgent } from '@/sim/VisitorAgent'
 import type { ViewBox } from './animal'
 import { applyCamera, type Camera } from './camera'
@@ -101,7 +101,8 @@ export class SceneRenderer {
     dim(ctx, view, light.sky.brightness)
 
     ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
-    this.drawSkyAnimals(ctx, sim, view)
+    // 하늘도 같은 패스를 쓴다. 예전에는 동물만 그려서 **하늘에 매단 프롭이 사라졌다.**
+    this.drawSortedLayer(ctx, sim, 'SKY', view)
     this.drawSortedLayer(ctx, sim, 'LAND', view)
     this.drawSortedLayer(ctx, sim, 'WATER', view)
     this.drawAreaLight(ctx, light.area, view)
@@ -236,14 +237,6 @@ export class SceneRenderer {
     ctx.globalAlpha = 1
   }
 
-  /** 하늘 동물은 원경이라 y 정렬이 의미 없다. 바이옴 배경 바로 위에 그린다. */
-  private drawSkyAnimals(ctx: CanvasRenderingContext2D, sim: EnclosureSim, view: ViewBox): void {
-    for (const agent of sim.animals) {
-      if (agent.habitat !== 'SKY') continue
-      this.drawAgent(ctx, agent, view)
-    }
-  }
-
   private drawSortedLayer(
     ctx: CanvasRenderingContext2D,
     sim: EnclosureSim,
@@ -253,8 +246,10 @@ export class SceneRenderer {
     // 프레임마다 배열을 새로 만들면 GC 압력이 커진다. 하나를 비워 재사용한다.
     this.buffer.length = 0
 
+    // 프롭은 만들 때 고른 거동과 무관하게 **놓인 높이**로 층이 정해진다.
+    // 하늘에 매단 통나무가 땅 동물보다 앞에 오면 안 된다.
     for (const prop of sim.props) {
-      if (prop.layer === layer) this.buffer.push({ kind: 'PROP', y: prop.y, prop })
+      if (propBand(prop.y) === layer) this.buffer.push({ kind: 'PROP', y: prop.y, prop })
     }
     for (const agent of sim.animals) {
       if (agent.habitat === layer) this.buffer.push({ kind: 'ANIMAL', y: agent.y, agent })
@@ -317,16 +312,24 @@ export class SceneRenderer {
     const x = prop.x * view.width
     const y = prop.y * view.height
 
-    // 땅 프롭은 가만히 있는다. 물에 뜬 것만 잔물결에 흔들린다.
-    if (prop.layer !== 'WATER') {
+    // 땅 프롭은 가만히 있는다.
+    if (prop.layer === 'LAND') {
       paint.draw(ctx, x - width / 2, y - height, width, height)
       return
     }
 
-    const wave = this.time * PROP_BOB.speed + prop.bobPhase
+    // 물은 위아래로 뜨고, 하늘은 좌우로 밀린다. 흔들리는 축만 다르고 방식은 같다.
+    const water = prop.layer === 'WATER'
+    const spec = water ? PROP_BOB : PROP_SWAY
+    const wave = this.time * spec.speed + prop.bobPhase
+    const offset = Math.sin(wave) * spec.amplitude
+
     ctx.save()
-    ctx.translate(x, y + Math.sin(wave) * PROP_BOB.amplitude * view.height)
-    ctx.rotate(Math.sin(wave * 0.7) * PROP_BOB.tilt)
+    ctx.translate(
+      x + (water ? 0 : offset * view.width),
+      y + (water ? offset * view.height : 0),
+    )
+    ctx.rotate(Math.sin(wave * 0.7) * spec.tilt)
     paint.draw(ctx, -width / 2, -height, width, height)
     ctx.restore()
   }

@@ -29,7 +29,16 @@ export interface OwnedProp {
   readonly sprite: number | null
   /** 그린 프롭의 IndexedDB 키. 상점 프롭은 null. */
   readonly imageId: string | null
-  /** 땅에 놓느냐 물에 띄우느냐. 배치 가능한 구역을 정한다. */
+  /**
+   * 놓았을 때의 거동. **놓을 수 있는 자리를 제한하지는 않는다.**
+   *
+   * `LAND`  가만히 있는다
+   * `WATER` 잔물결에 위아래로 뜬다
+   * `SKY`   좌우로 흔들린다
+   *
+   * 프롭은 우리를 꾸미는 물건이다. 물 위에 나무를, 하늘에 풍선을 매달고 싶을 수 있어
+   * 자리를 막지 않는다 — 대신 어떻게 움직일지를 만들 때 고른다.
+   */
   readonly layer: Habitat
   /** 놓인 자리 (정규화). 배치 전에는 0. */
   readonly x: number

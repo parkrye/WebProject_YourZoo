@@ -3,7 +3,7 @@ import { GUI, PALETTE_COLORS, type GuiIcon } from '@/assets/manifest'
 import { DrawingCanvas, type DrawingCanvasHandle } from '@/draw/DrawingCanvas'
 import type { ExportedDrawing } from '@/draw/export'
 import type { DrawTool } from '@/draw/history'
-import type { TemplateId } from '@/domain/templates'
+import type { GuideShape } from '@/domain/templates'
 import { useGameStore } from '@/store/gameStore'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconGlyph } from '@/ui/components/IconGlyph'
@@ -15,7 +15,10 @@ const POPUP_WIDTH = 720
 const POPUP_HEIGHT = 700
 
 interface DrawModalProps {
-  templateId: TemplateId
+  /** 바탕에 옅게 깔릴 밑그림. 없으면 빈 캔버스다. */
+  guide: readonly GuideShape[]
+  /** 창 제목. 동물인지 프롭인지 알려 준다. */
+  title?: string
   onDone: (drawing: ExportedDrawing) => void
   onClose: () => void
 }
@@ -29,7 +32,7 @@ const FIRST_COLOR = PALETTE_COLORS[0].hex
  * 도구가 하나 늘 때마다 아래쪽이 화면 밖으로 밀렸고, 어떤 버튼이 무슨 갈래인지도 읽히지 않았다.
  * 그리기 / 색 / 편집 세 묶음으로 나누고 완료는 따로 떼어 둔다.
  */
-export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
+export function DrawModal({ guide, title = 'DRAW ANIMAL', onDone, onClose }: DrawModalProps) {
   const boardRef = useRef<DrawingCanvasHandle>(null)
   const [tool, setTool] = useState<DrawTool>('PENCIL')
   const [color, setColor] = useState<string>(FIRST_COLOR)
@@ -55,7 +58,7 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
   }
 
   return (
-    <Popup title="DRAW ANIMAL" width={POPUP_WIDTH} height={POPUP_HEIGHT} onClose={onClose}>
+    <Popup title={title} width={POPUP_WIDTH} height={POPUP_HEIGHT} onClose={onClose}>
       <div className="draw-column">
         <div className="draw-toolbar">
           <div className="tool-group">
@@ -114,7 +117,8 @@ export function DrawModal({ templateId, onDone, onClose }: DrawModalProps) {
             ref={boardRef}
             tool={tool}
             color={color}
-            templateId={templateId}
+            guide={guide}
+            showFacingHint={guide.length === 0}
             displaySize={CANVAS_DISPLAY}
             onHistoryChange={setHistory}
           />

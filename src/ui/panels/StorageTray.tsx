@@ -125,16 +125,37 @@ export function StorageTray({
     <div className={trayClass(draggingId !== null, closing, lowered)}>
       <div className="storage-tray-head">
         <Tabs items={TRAY_TABS} active={tab} onChange={setTab} />
-        <BitmapLabel text={`${items.length}`} size={24} />
-        {shippingCount > 0 && <BitmapLabel text={`SHIPPING ${shippingCount}`} size={20} />}
-        <BitmapLabel text="DRAG TO PLACE" size={18} />
+
+        {/* 개수는 탭 옆 알약에 붙인다. 숫자만 덩그러니 있으면 무엇의 수인지 알 수 없다. */}
+        <span className="tray-count">
+          <BitmapLabel text={`${items.length} IN STORAGE`} size={17} />
+        </span>
+        {shippingCount > 0 && (
+          <span className="tray-count is-muted">
+            <BitmapLabel text={`${shippingCount} ON THE WAY`} size={17} />
+          </span>
+        )}
+
+        <span className="tray-hint">
+          <BitmapLabel text="DRAG TO PLACE" size={16} />
+        </span>
         <button type="button" className="storage-tray-close text-button" onClick={requestClose}>
           <BitmapLabel text="CLOSE" size={20} />
         </button>
       </div>
 
       <div className="storage-tray-items">
-        {Array.from({ length: Math.max(SLOT_COUNT, items.length) }, (_, i) => {
+        {items.length === 0 && (
+          <div className="tray-empty">
+            <BitmapLabel
+              text={tab === 'ANIMAL' ? 'NO ANIMALS YET' : 'NO PROPS YET'}
+              size={20}
+            />
+            <BitmapLabel text="MAKE ONE OR VISIT THE SHOP" size={15} />
+          </div>
+        )}
+
+        {Array.from({ length: items.length === 0 ? 0 : Math.max(SLOT_COUNT, items.length) }, (_, i) => {
           const item = items[i]
           if (!item) return <div key={`slot-${i}`} className="storage-slot is-empty" />
 

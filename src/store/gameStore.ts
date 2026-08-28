@@ -33,7 +33,14 @@ import { publishZoo, type ZooDoc } from '@/net/zooApi'
 import { getImage } from './imageDb'
 
 export type ScreenId = 'TITLE' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
-export type ModalId = 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'PROP' | null
+export type ModalId =
+  | 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'ARRIVAL' | null
+
+/** 하루가 시작될 때 창고에 도착한 것들. */
+export interface Arrivals {
+  readonly animals: readonly Animal[]
+  readonly props: readonly OwnedProp[]
+}
 
 /**
  * 하루가 넘어갈 때의 암전 단계.
@@ -85,6 +92,8 @@ interface GameState {
   visiting: ZooDoc | null
   /** 구경 중에 보고 있는 우리. 내 `currentEnclosure` 를 건드리지 않는다. */
   visitEnclosure: BiomeId
+  /** 오늘 아침 창고에 도착한 것들. 알림을 닫으면 비운다. 세이브에는 넣지 않는다. */
+  arrivals: Arrivals | null
 
   setScreen(screen: ScreenId): void
   setDrawing(drawing: boolean): void
@@ -101,6 +110,8 @@ interface GameState {
   startVisit(doc: ZooDoc): Promise<void>
   /** 구경을 끝내고 내 동물원으로 돌아온다. */
   endVisit(): void
+  /** 도착 알림을 닫는다. */
+  clearArrivals(): void
   moveEnclosure(direction: -1 | 1): void
   setOption<K extends keyof OptionsState>(key: K, value: OptionsState[K]): void
   /** 요청서 제출. 비용을 차감하고 배송 대기 상태로 넣는다. */
@@ -170,6 +181,7 @@ const initial = {
   pendingDay: null as ClockAdvanceResult | null,
   visiting: null as ZooDoc | null,
   visitEnclosure: 'FIELD' as BiomeId,
+  arrivals: null as Arrivals | null,
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -186,9 +198,16 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   skipTutorial: () => set({ tutorial: 'DONE' }),
   openModal: (modal) => set({ modal }),
-  // 정산 팝업을 닫는 건 하루 연출의 마지막 단계다. 닫히면서 화면이 다시 밝아진다.
+  /**
+   * 정산 팝업을 닫는 건 하루 연출의 마지막 단계다. 닫히면서 화면이 다시 밝아진다.
+   * 다만 오늘 도착한 것이 있으면 알림을 먼저 띄우고, 그게 닫힐 때 밝아진다.
+   */
   closeModal: () =>
-    set((s) => (s.dayFade === 'HOLD' ? { modal: null, dayFade: 'IN' } : { modal: null })),
+    set((s) => {
+      if (s.dayFade !== 'HOLD') return { modal: null }
+      if (s.modal === 'REPORT' && s.arrivals) return { modal: 'ARRIVAL' as const }
+      return { modal: null, dayFade: 'IN' as const, arrivals: null }
+    }),
 
   /**
    * 게임 시계. 자정을 넘기면 정산하고 결과 팝업을 띄운다.
@@ -237,6 +256,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     let animals = state.animals
     let props = state.props
     let orders = state.orders
+    // 여러 날이 한 번에 넘어갈 수 있다. 그 사이 도착한 것을 모아 한 번에 알린다.
+    const arrivedAnimals: Animal[] = []
+    const arrivedProps: OwnedProp[] = []
     let report: DailyReport | null = null
 
     // 탭이 오래 비활성이었다면 여러 날이 한 번에 넘어갈 수 있다.
@@ -251,15 +273,18 @@ export const useGameStore = create<GameState>((set, get) => ({
             ? { ...a, status: 'STORED' as const }
             : a,
         )
+        arrivedAnimals.push(...arriving.map((a) => ({ ...a, status: 'STORED' as const })))
       }
 
       // 프롭도 같은 날 도착한다. 사육비가 없어 정산에는 들어가지 않는다.
-      if (props.some((p) => p.status === 'SHIPPING' && p.arrivalDay <= today)) {
+      const arrivingProps = props.filter((p) => p.status === 'SHIPPING' && p.arrivalDay <= today)
+      if (arrivingProps.length > 0) {
         props = props.map((p) =>
           p.status === 'SHIPPING' && p.arrivalDay <= today
             ? { ...p, status: 'STORED' as const }
             : p,
         )
+        arrivedProps.push(...arrivingProps.map((p) => ({ ...p, status: 'STORED' as const })))
       }
 
       report = settleDay({
@@ -292,6 +317,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       modal: 'REPORT',
       dayFade: 'HOLD',
       pendingDay: null,
+      // 도착 알림은 정산을 읽은 뒤에 뜬다. 둘을 한 화면에 겹치면 어느 쪽도 안 읽힌다.
+      arrivals:
+        arrivedAnimals.length + arrivedProps.length > 0
+          ? { animals: arrivedAnimals, props: arrivedProps }
+          : null,
     }))
 
     // 하루가 끝날 때 한 번만 올린다. 구경하는 사람이 보는 건 '어제 자정의 동물원'이다.
@@ -299,6 +329,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   endDayFade: () => set({ dayFade: 'NONE' }),
+
+  clearArrivals: () => set({ arrivals: null }),
 
   moveEnclosure: (direction) => {
     const { visiting, visitEnclosure, currentEnclosure } = get()

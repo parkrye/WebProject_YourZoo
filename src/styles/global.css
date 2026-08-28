@@ -1210,63 +1210,106 @@ html, body, #root {
 .visit {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
   height: 100%;
 }
 
-.visit-me {
+/* 검색·랜덤·내 아이디를 한 띠로 묶는다. 셋이 흩어져 있으면 어디를 눌러야 할지 흐려진다. */
+.visit-bar {
   display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 12px;
-  padding: 6px 0;
-  opacity: 0.85;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: rgba(120, 78, 34, 0.12);
+  box-shadow: inset 0 0 0 2px rgba(160, 116, 58, 0.32);
 }
 
 .visit-search {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
-/* 목록은 길어질 수 있다. 팝업 높이는 고정이므로 여기만 스크롤한다. */
-.visit-list {
-  flex: 1 1 auto;
+.visit-random {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #fbf3e0 0%, #efdfba 100%);
+  box-shadow: inset 0 0 0 2px rgba(200, 168, 106, 0.85), 0 2px 0 3px #8a5a2b;
+}
+.visit-random:hover:not(:disabled) { filter: brightness(1.06); }
+.visit-random:disabled { opacity: 0.5; cursor: default; }
+
+.visit-me {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: auto;
+  opacity: 0.8;
+}
+
+/* 아무것도 없을 때. 빈 네모만 남으면 고장 난 것처럼 보인다. */
+.visit-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin: auto;
+  opacity: 0.6;
+}
+
+.visit-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  align-content: start;
+  gap: 12px;
   overflow-y: auto;
   padding-right: 6px;
 }
 
-.visit-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 10px 16px;
-  border: 0;
-  border-radius: 12px;
-  cursor: pointer;
-  text-align: left;
-  background: rgba(120, 78, 34, 0.1);
-  box-shadow: inset 0 0 0 2px rgba(160, 116, 58, 0.35);
-  transition: background 0.12s ease, transform 0.08s ease;
-}
-.visit-row:hover { background: rgba(120, 78, 34, 0.2); transform: translateX(3px); }
-.visit-row:disabled { opacity: 0.5; cursor: default; transform: none; }
-
-.visit-row-name {
+.visit-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 0;
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  background: linear-gradient(180deg, #fbf3e0 0%, #eedfbc 100%);
+  box-shadow: inset 0 0 0 2px rgba(200, 168, 106, 0.85), 0 2px 0 3px #8a5a2b;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+.visit-card:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.05); }
+.visit-card:disabled { opacity: 0.5; cursor: default; }
+
+.visit-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 }
 
-.visit-row-stats {
+.visit-card-stats {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
+  padding-top: 8px;
+  border-top: 2px solid rgba(138, 90, 43, 0.28);
 }
+
+.visit-stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 
 /* 카드 머리글의 오른쪽 버튼 묶음. 이름 고치기와 닫기가 나란히 선다. */
 .card-header-actions {
@@ -1335,4 +1378,100 @@ html, body, #root {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+}
+
+/* ── 창고 트레이 ─────────────────────────────────────────── */
+
+/* 개수는 알약에 담는다. 숫자만 떠 있으면 무엇의 수인지 알 수 없다. */
+.tray-count {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(217, 164, 65, 0.22);
+}
+.tray-count.is-muted { background: rgba(255, 255, 255, 0.08); opacity: 0.75; }
+
+.tray-hint { margin-left: 8px; opacity: 0.6; }
+
+.tray-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 112px;
+  opacity: 0.55;
+}
+
+/* ── 도착 알림 ───────────────────────────────────────────── */
+
+.arrival {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+}
+
+.arrival-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.arrival-grid {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.arrival-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  padding: 10px 6px;
+  border-radius: 12px;
+  background: rgba(120, 78, 34, 0.1);
+  box-shadow: inset 0 0 0 2px rgba(160, 116, 58, 0.32);
+}
+
+.arrival-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 18px;
+}
+
+/* ── 프롭 거동 고르기 ────────────────────────────────────── */
+
+.motion-row {
+  display: flex;
+  gap: 12px;
+}
+
+.motion-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  background: rgba(120, 92, 52, 0.16);
+  box-shadow: inset 0 0 0 2px rgba(160, 116, 58, 0.3);
+  transition: transform 0.08s ease;
+}
+.motion-card:hover { background: rgba(120, 92, 52, 0.28); }
+.motion-card.is-active {
+  background: #d9a441;
+  box-shadow: inset 0 0 0 2px #7a5320;
 }
