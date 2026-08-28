@@ -3,7 +3,7 @@ import { getAssets } from '@/assets/AssetStore'
 import { frameToBackgroundStyle } from '@/assets/atlas'
 import { PROP_GRID, PROP_SRC, type BiomeId } from '@/assets/manifest'
 import type { AnimalSheetAsset } from '@/assets/animalSheets'
-import { SHOP_SHEET_COLS, SHOP_SHEET_ROWS } from '@/domain/shop'
+
 
 interface PropThumbProps {
   biome: BiomeId
@@ -43,7 +43,7 @@ export function SheetThumb({ sheet, size }: SheetThumbProps) {
     const h = sheet.frameH * scale
     return {
       backgroundImage: `url(${sheet.src})`,
-      backgroundSize: `${w * SHOP_SHEET_COLS}px ${h * SHOP_SHEET_ROWS}px`,
+      backgroundSize: `${w * sheet.cols}px ${h * sheet.rows}px`,
       backgroundPosition: '0px 0px',
       backgroundRepeat: 'no-repeat',
       width: `${w}px`,

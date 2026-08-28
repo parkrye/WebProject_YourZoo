@@ -11,10 +11,13 @@ import type { AnimalTraits } from './traits'
 // 동물 상점
 // ─────────────────────────────────────────────────────────────
 
-/** 시트가 초당 넘어가는 프레임 수. 8프레임이 1초에 한 바퀴 돈다. */
+/**
+ * 시트가 초당 넘어가는 프레임 수. 한 줄이 1초에 한 바퀴 돈다.
+ *
+ * 격자 크기는 여기 두지 않는다 — **시트마다 다르다.** 닭과 까마귀와 공작은 7칸이다.
+ * 칸 수는 전처리가 그림에서 직접 재어 `animalSheets.ts` 에 적어 둔다.
+ */
 export const SHOP_SHEET_FPS = 8
-export const SHOP_SHEET_COLS = 8
-export const SHOP_SHEET_ROWS = 3
 
 /**
  * 상점 동물의 시트를 가리키는 이미지 키.

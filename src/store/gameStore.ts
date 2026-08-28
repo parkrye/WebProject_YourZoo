@@ -9,7 +9,6 @@ import {
 } from '@/domain/balance'
 import { canPlaceProp, createPropId, propPrice, type OwnedProp } from '@/domain/prop'
 import {
-  SHOP_SHEET_COLS, SHOP_SHEET_FPS, SHOP_SHEET_ROWS,
   shopAnimalAppeal, shopAnimalTraits, sheetImageId, shopPropName,
   type ShopAnimal, type ShopProp,
 } from '@/domain/shop'
@@ -503,9 +502,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       templateId: 'FREE',
       spriteSheet: {
         imageId: sheetImageId(item.catalogId),
-        cols: SHOP_SHEET_COLS,
-        rows: SHOP_SHEET_ROWS,
-        fps: SHOP_SHEET_FPS,
+        cols: item.sheet.cols,
+        rows: item.sheet.rows,
+        // 한 줄이 1초에 한 바퀴 돈다. 칸이 7개면 조금 느리게 돈다.
+        fps: item.sheet.cols,
         motions: ['IDLE', 'MOVE', 'SIGNATURE'],
         fit: item.sheet.fit,
         baseline: item.sheet.baseline,
