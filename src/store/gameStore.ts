@@ -831,8 +831,13 @@ export function startAutosave(): () => void {
    */
   const flush = (urgent = false): void => {
     const state = useGameStore.getState()
-    // 타이틀과 이름 짓기 중에는 저장하지 않는다. 기존 세이브를 덮으면 안 된다.
-    if (state.screen === 'TITLE' || state.screen === 'NAMING') return
+    /*
+      **동물원 안에 있을 때만** 저장한다. 저장하지 않을 화면을 나열하는 방식이었는데
+      로그인 화면이 빠져 있었다 — 로그인 칸만 열어 보고 나와도 주기 저장이 돌아
+      시작하지도 않은 동물원이 써지고, 타이틀에 CONTINUE 가 생겼다.
+      화면은 앞으로도 늘어나므로 허용할 곳을 적는 쪽이 안전하다.
+    */
+    if (state.screen !== 'ZOO' && state.screen !== 'ZOO_DETAIL') return
     // 암전 중에는 시계가 어제 끝에 멈춰 있고 정산은 아직 안 끝났다.
     // 이때 저장하면 다시 켰을 때 같은 날을 한 번 더 정산한다.
     if (state.dayFade === 'OUT') return
