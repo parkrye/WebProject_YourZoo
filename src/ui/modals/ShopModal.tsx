@@ -80,7 +80,14 @@ export function ShopModal() {
             </div>
           )}
 
-          {tab === 'ANIMAL' && (
+          {tab === 'ANIMAL' && SHOP_ANIMALS.length === 0 && (
+            <div className="tray-empty">
+              <BitmapLabel text="NO ANIMALS IN STOCK" size={20} />
+              <BitmapLabel text="COME BACK LATER" size={15} />
+            </div>
+          )}
+
+          {tab === 'ANIMAL' && SHOP_ANIMALS.length > 0 && (
             <div className="shop-grid">
               {SHOP_ANIMALS.map((item) => (
                 <button
