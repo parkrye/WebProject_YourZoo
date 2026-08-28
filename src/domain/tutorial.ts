@@ -46,8 +46,3 @@ export const TUTORIAL_HINTS: Record<Exclude<TutorialStep, 'DONE'>, TutorialHint>
     body: 'DRAG IT ONTO ITS HABITAT AREA. ONLY PLACED ANIMALS EARN GOLD.',
   },
 }
-
-/** 튜토리얼 중 첫 동물은 배송을 건너뛴다. 하루를 기다리게 하면 흐름이 끊긴다. */
-export function skipsShipping(step: TutorialStep): boolean {
-  return step !== 'DONE'
-}

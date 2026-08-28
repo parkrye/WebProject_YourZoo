@@ -2,14 +2,15 @@ import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
-  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
+  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, DAY_DURATION_SEC,
+  MAX_ANIMALS_PER_ENCLOSURE,
   PROP_CREATE_COST, PROP_SELL_RATIO, SHEET_COST, SHIPPING_DAYS,
   START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST,
   productTotal, type CashProduct,
 } from '@/domain/balance'
 import { canPlaceProp, createPropId, propPrice, type OwnedProp } from '@/domain/prop'
 import {
-  shopAnimalAppeal, shopAnimalTraits, sheetImageId, shopPropName,
+  isShopAnimal, shopAnimalAppeal, shopAnimalTraits, sheetImageId, shopPropName,
   type ShopAnimal, type ShopProp,
 } from '@/domain/shop'
 import { MOTION_PROFILES } from '@/domain/motion'
@@ -17,12 +18,12 @@ import { templateOf } from '@/domain/templates'
 import { bakeSheet } from '@/render/animal/bakeSheet'
 import { advanceClock, type ClockAdvanceResult, type ClockState } from '@/domain/clock'
 import { createUserId, isUserId } from '@/domain/userId'
-import { settleDay, type DailyReport } from '@/domain/economy'
+import { dayIncome, settleDay, type DailyReport } from '@/domain/economy'
 import { ENCLOSURE_ORDER, neighborEnclosure, neighborUnlocked } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
 import { emptyDraft, type RequestDraft } from '@/domain/requestDraft'
 import { randomTraits } from '@/domain/traits'
-import { skipsShipping, type TutorialStep } from '@/domain/tutorial'
+import { type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
 import { ensureBitmap, forgetBitmap, getBitmap, preloadRemote, registerFromBlob } from '@/sim/imageCache'
@@ -81,6 +82,13 @@ interface GameState {
   isDrawing: boolean
   tutorial: TutorialStep
   gold: number
+  /**
+   * 오늘 이미 손에 쥔 수입.
+   *
+   * 수입은 하루가 끝날 때 한꺼번에 들어오는 게 아니라 **시간에 비례해 조금씩** 들어온다.
+   * 자정 정산은 오늘치에서 이 값을 뺀 나머지만 준다 — 안 그러면 두 번 받는다.
+   */
+  earnedToday: number
   /** 유료 재화. 충전·소모는 아직 없고 보유량만 들고 있는다. */
   /** 캐시(유료 재화). 상점에서 사고, 스프라이트 시트를 만들 때 쓴다. */
   cash: number
@@ -189,6 +197,7 @@ const initial = {
   isDrawing: false,
   tutorial: 'DONE' as TutorialStep,
   gold: START_GOLD,
+  earnedToday: 0,
   cash: START_CASH,
   reputation: START_REPUTATION,
   clock: { day: 1, elapsed: 0 } as ClockState,
@@ -255,7 +264,22 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     const advance = advanceClock(state.clock, dt)
     if (advance.daysPassed <= 0) {
-      set({ clock: advance.next })
+      /*
+        수입을 시간에 비례해 조금씩 준다. 하루가 끝날 때 한꺼번에 주면
+        노는 동안에는 아무 일도 안 일어나고 자정에만 숫자가 튄다.
+
+        소수점은 들고 있지 않는다. **지금까지 벌었어야 할 총액**을 매번 새로 구하고
+        이미 준 만큼을 뺀다. 그러면 반올림 오차가 쌓이지 않고,
+        하루가 끝나는 순간 정확히 하루치가 된다.
+      */
+      const earned = Math.floor(
+        dayIncome(state.animals, state.unlocked, state.reputation)
+        * (advance.next.elapsed / DAY_DURATION_SEC),
+      )
+      const gain = earned - state.earnedToday
+      set(gain > 0
+        ? { clock: advance.next, gold: state.gold + gain, earnedToday: earned }
+        : { clock: advance.next })
       return
     }
 
@@ -319,7 +343,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         reputation,
         arrivedCount: arriving.length,
       })
-      gold = Math.max(0, gold + report.net)
+      // 오늘치는 이미 조금씩 줬다. 그만큼 빼야 두 번 주지 않는다.
+      // 탭이 오래 꺼져 여러 날이 한 번에 넘어가면 첫날만 뺀다 — 나머지 날은 준 적이 없다.
+      gold = Math.max(0, gold + report.net - (i === 0 ? state.earnedToday : 0))
       reputation = Math.max(0, reputation + report.reputationDelta)
 
       // 기한이 지난 의뢰를 걷어내고 자리가 있으면 하나 게시한다.
@@ -333,6 +359,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => ({
       clock: next,
       gold,
+      earnedToday: 0,
       reputation,
       animals,
       props,
@@ -405,10 +432,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     if (state.gold < cost) return false
 
-    // 튜토리얼 첫 동물은 배송을 건너뛴다. 하루를 기다리게 하면 흐름이 끊긴다.
-    const placed = skipsShipping(state.tutorial)
-      ? { ...animal, status: 'STORED' as const }
-      : animal
+    /*
+      **처음 그린 동물은 배송을 건너뛴다.** 하루를 기다리게 하면 흐름이 끊긴다 —
+      막 그림을 그려 놓고 아무 일도 일어나지 않으면 무엇을 만들었는지 확인할 수가 없다.
+
+      튜토리얼을 봤는지와는 무관하다. 건너뛰고 시작한 사람도 첫 동물은 바로 받는다.
+      두 번째부터는 배송을 기다린다 — 그때는 이미 흐름을 안다.
+    */
+    const first = !state.animals.some((a) => !isShopAnimal(a))
+    const placed = first ? { ...animal, status: 'STORED' as const } : animal
 
     set((s) => ({
       gold: s.gold - cost,
@@ -523,7 +555,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       appeal: shopAnimalAppeal(item),
     }
 
-    set((s) => ({ gold: s.gold - item.price, animals: [...s.animals, animal] }))
+    // 처음 산 동물은 바로 창고에 넣는다. 그린 동물과 같은 이유다.
+    const first = !get().animals.some(isShopAnimal)
+    const arrived = first ? { ...animal, status: 'STORED' as const } : animal
+
+    set((s) => ({ gold: s.gold - item.price, animals: [...s.animals, arrived] }))
     return true
   },
 
@@ -740,6 +776,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       zooName: save.zooName ?? '',
       tutorial: save.tutorial ?? 'DONE',
       gold: save.gold,
+      earnedToday: save.earnedToday ?? 0,
       cash: save.cash ?? START_CASH,
       reputation: save.reputation,
       clock: save.clock,
@@ -764,6 +801,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       zooName: s.zooName,
       tutorial: s.tutorial,
       gold: s.gold,
+      earnedToday: s.earnedToday,
       cash: s.cash,
       reputation: s.reputation,
       clock: s.clock,
@@ -794,6 +832,8 @@ function saveKey(state: GameState): string {
     // 타이틀 -> 우리 전환도 저장 시점이다. 새 게임을 시작하자마자 새로고침해도 이어지도록.
     state.screen,
     state.gold,
+    // 오늘치 수입은 소지금과 함께 움직인다. 이것만 빠지면 새로고침으로 다시 받는다.
+    state.earnedToday,
     // 캐시는 돈 주고 산 것이다. 사자마자 탭을 닫아도 남아 있어야 한다.
     state.cash,
     state.reputation,

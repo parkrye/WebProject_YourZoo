@@ -31,6 +31,16 @@ export function sheetImageId(catalogId: string): string {
   return `${SHEET_KEY_PREFIX}${catalogId}`
 }
 
+/**
+ * 상점에서 산 동물인가.
+ *
+ * 산 동물의 그림 키는 `sheet:` 로 시작한다 — 미리 만들어 둔 시트를 가리키기 때문이다.
+ * 그린 동물의 키는 플레이어가 그린 그림의 IndexedDB 키라 이 접두사가 붙지 않는다.
+ */
+export function isShopAnimal(animal: { readonly imageId: string }): boolean {
+  return animal.imageId.startsWith(SHEET_KEY_PREFIX)
+}
+
 export function findSheet(catalogId: string): AnimalSheetAsset | null {
   return ANIMAL_SHEETS.find((s) => s.id === catalogId) ?? null
 }

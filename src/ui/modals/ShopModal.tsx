@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react'
 import { GUI } from '@/assets/manifest'
 import { CASH_PRODUCTS, SHIPPING_DAYS, type CashProduct } from '@/domain/balance'
-import { shopProps, shopPropName, SHOP_ANIMALS, type ShopAnimal, type ShopProp } from '@/domain/shop'
+import {
+  isShopAnimal, shopProps, shopPropName, SHOP_ANIMALS,
+  type ShopAnimal, type ShopProp,
+} from '@/domain/shop'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { ConfirmPopup } from '@/ui/components/ConfirmPopup'
 import { IconGlyph } from '@/ui/components/IconGlyph'
@@ -45,6 +48,7 @@ export function ShopModal() {
   const gold = useGameStore((s) => s.gold)
   const cash = useGameStore((s) => s.cash)
   const unlocked = useGameStore((s) => s.unlocked)
+  const animals = useGameStore((s) => s.animals)
 
   const [tab, setTab] = useState<ShopTab>('ANIMAL')
   const [pending, setPending] = useState<Pending | null>(null)
@@ -135,7 +139,7 @@ export function ShopModal() {
           )}
 
           <div className="shop-note">
-            <BitmapLabel text={noteFor(tab)} size={18} align="center" />
+            <BitmapLabel text={noteFor(tab, !animals.some(isShopAnimal))} size={18} align="center" />
           </div>
         </div>
       </Popup>
@@ -157,8 +161,10 @@ export function ShopModal() {
   )
 }
 
-function noteFor(tab: ShopTab): string {
+function noteFor(tab: ShopTab, firstBuy: boolean): string {
   if (tab === 'CASH') return '1 CASH ANIMATES ONE DRAWN ANIMAL'
+  // 처음 사는 동물은 기다리지 않는다. 그 사실을 사기 전에 알려 준다.
+  if (tab === 'ANIMAL' && firstBuy) return 'YOUR FIRST ONE ARRIVES RIGHT AWAY'
   return `ARRIVES IN STORAGE IN ${SHIPPING_DAYS.SHOP} DAY`
 }
 

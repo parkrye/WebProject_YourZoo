@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { GUI } from '@/assets/manifest'
 import { computeAppeal, countHabitat, createAnimalId, type Animal, type SheetMeta } from '@/domain/animal'
 import { ANIMAL_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
+import { isShopAnimal } from '@/domain/shop'
 import {
   ANIMAL_CRAFTS, ANIMAL_CRAFT_ORDER, DETAIL_COLS, DETAIL_ROW_LABELS,
   type AnimalCraft,
@@ -54,6 +55,8 @@ interface NewAnimalFormProps {
  */
 export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const enclosureId = useGameStore((s) => s.currentEnclosure)
+  // 그린 동물이 아직 하나도 없다면 이번이 처음이다.
+  const firstDraw = useGameStore((s) => !s.animals.some((a) => !isShopAnimal(a)))
   const animals = useGameStore((s) => s.animals)
   const day = useGameStore((s) => s.clock.day)
   const gold = useGameStore((s) => s.gold)
@@ -409,7 +412,12 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
       onSubmit={() => void submit()}
       submitReady={drawn && affordable && !busy && name.trim().length > 0}
       cost={spec.coins}
-      note={`APPEAL ${appeal}  ARRIVES IN ${SHIPPING_DAYS.DRAWN} DAYS`}
+      note={
+        firstDraw
+          // 처음 그린 동물은 기다리지 않는다. 그 사실을 그리기 전에 알려 준다.
+          ? `APPEAL ${appeal}  ARRIVES RIGHT AWAY`
+          : `APPEAL ${appeal}  ARRIVES IN ${SHIPPING_DAYS.DRAWN} DAYS`
+      }
       warning={affordable ? null : 'NOT ENOUGH COINS'}
     >
       <div className="wizard-fields">

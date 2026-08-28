@@ -126,13 +126,25 @@ export class EnclosureSim {
    * 스폰 간격을 `평균 체류 / 목표` 로 잡으면 인원이 목표 주위에서 오르내린다.
    */
   private updateVisitors(dt: number, ctx: SimContext): void {
-    const target = visitorCount(ctx.reputation, ctx.phase, this.animals.length > 0)
+    const target = visitorCount(ctx.reputation, ctx.phase)
 
     pruneVisitors(this.visitors)
     // 명성이 떨어져 목표가 확 줄었을 때만 강제로 돌려보낸다.
     if (stayingCount(this.visitors) > target + 2) trimVisitors(this.visitors, target + 1)
 
     if (target > 0) {
+      /*
+        아무도 없으면 **기다리지 않고 부른다.**
+
+        평소에는 시간 간격을 두고 들어오게 두는 게 자연스럽지만, 목표가 1명일 때는
+        그 간격이 곧 평균 체류 시간(43초)이라 텅 빈 시간이 그만큼 길어진다.
+        문을 연 동물원에 한참 아무도 없으면 망한 것처럼 보인다.
+      */
+      if (stayingCount(this.visitors) === 0) {
+        this.visitors.push(new VisitorAgent(this.rng))
+        this.spawnAccumulator = 0
+      }
+
       const meanStay = (VISITOR_STAY_SEC.min + VISITOR_STAY_SEC.max) / 2
       const interval = meanStay / target
       this.spawnAccumulator += dt

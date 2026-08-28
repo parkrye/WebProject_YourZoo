@@ -4,21 +4,21 @@ import { placedIn, type Animal } from './animal'
 import {
   ANIMAL_UPKEEP_PER_DAY, DAY_DURATION_SEC, MAX_VISITORS_PER_ENCLOSURE, OVERCROWD_PENALTY,
   OVERCROWD_THRESHOLD, PHASE_END, REPUTATION_PER_APPEAL, REPUTATION_PER_VISITOR,
-  MIN_VISITORS_WITH_ANIMALS,
+  MIN_VISITORS,
   STORED_UPKEEP_PER_DAY, TICKET_PRICE, VIEW_INCOME_PER_APPEAL, VISITOR_PHASE_MULTIPLIER,
 } from './balance'
 
 /**
  * 명성과 시간대로부터 해당 우리의 동시 관람객 수를 구한다.
  *
- * 동물이 한 마리라도 있으면 **최소 한 명은 온다.** 밤에는 배율이 0.15 라
- * 반올림하면 0 이 되는데, 그러면 그 시간대에는 수입이 통째로 끊긴다 —
+ * 문을 연 우리에는 **동물이 없어도 최소 한 명은 온다.** 아무도 안 오면 화면이 죽고,
+ * 무엇보다 수입이 0 이라 처음 시작한 사람이 첫 동물을 살 돈을 모을 길이 없다.
+ * 밤에도 마찬가지다 — 배율이 0.15 라 반올림하면 0 이 되는데,
  * 하루의 3분의 1 을 아무 일도 일어나지 않는 시간으로 두면 볼 이유가 없어진다.
  */
-export function visitorCount(reputation: number, phase: SkyPhase, hasAnimals: boolean): number {
-  if (!hasAnimals) return 0
+export function visitorCount(reputation: number, phase: SkyPhase): number {
   const scaled = baseVisitors(reputation) * VISITOR_PHASE_MULTIPLIER[phase]
-  return clamp(Math.round(scaled), MIN_VISITORS_WITH_ANIMALS, MAX_VISITORS_PER_ENCLOSURE)
+  return clamp(Math.round(scaled), MIN_VISITORS, MAX_VISITORS_PER_ENCLOSURE)
 }
 
 function baseVisitors(reputation: number): number {
@@ -61,6 +61,28 @@ export interface DailyReport {
   arrivedCount: number
 }
 
+/**
+ * 하루 동안 벌어들일 수입. 실시간 적립과 자정 정산이 **같은 값을 봐야 한다.**
+ * 둘이 어긋나면 하루가 끝나는 순간 소지금이 눈앞에서 튄다.
+ */
+export function dayIncome(
+  animals: readonly Animal[], unlocked: readonly BiomeId[], reputation: number,
+): number {
+  const multiplier = averageVisitorMultiplier()
+  let ticket = 0
+  for (const _ of unlocked) {
+    ticket += clamp(
+      Math.round(baseVisitors(reputation) * multiplier),
+      MIN_VISITORS,
+      MAX_VISITORS_PER_ENCLOSURE,
+    ) * TICKET_PRICE
+  }
+  const appeal = animals
+    .filter((a) => a.status === 'PLACED')
+    .reduce((sum, a) => sum + a.appeal, 0)
+  return ticket + Math.round(appeal * VIEW_INCOME_PER_APPEAL)
+}
+
 export interface SettleInput {
   day: number
   animals: readonly Animal[]
@@ -83,13 +105,13 @@ export function settleDay({
   let visitors = 0
   let overcrowdPenalty = 0
 
+  // 문을 연 우리는 비어 있어도 손님을 받는다. 그래야 처음 시작한 사람도 돈이 모인다.
   for (const biome of unlocked) {
     const inBiome = placedIn(animals, biome)
-    if (inBiome.length === 0) continue
 
     const average = clamp(
       Math.round(baseVisitors(reputation) * multiplier),
-      0,
+      MIN_VISITORS,
       MAX_VISITORS_PER_ENCLOSURE,
     )
     visitors += average

@@ -21,6 +21,12 @@ export interface SaveV2 {
   zooName: string
   tutorial: TutorialStep
   gold: number
+  /**
+   * 오늘 이미 받은 수입. 구버전 세이브에는 없다 — 그때는 0 으로 읽는다.
+   *
+   * 이게 없으면 새로고침할 때마다 오늘치를 처음부터 다시 받는다.
+   */
+  earnedToday: number
   /** 캐시(유료 재화). 구버전 세이브에는 없다 — 그때는 0 으로 읽는다. */
   cash: number
   reputation: number

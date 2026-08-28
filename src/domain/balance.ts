@@ -111,7 +111,7 @@ export const MAX_VISITORS_PER_ENCLOSURE = 14
  * 수입이 통째로 끊긴다. 하루의 3분의 1 을 아무 일도 없는 시간으로 두면
  * 화면을 볼 이유가 없어진다. 한 명은 늘 있게 해서 기본 수입을 만든다.
  */
-export const MIN_VISITORS_WITH_ANIMALS = 1
+export const MIN_VISITORS = 1
 
 /**
  * 한 손님이 머무는 시간(초).
