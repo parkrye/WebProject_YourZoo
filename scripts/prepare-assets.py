@@ -652,11 +652,11 @@ def main() -> int:
         if size:
             print(f"  {GUI2_SRC:26s} -> {GUI2_OUT:24s} [격자 {size[0]}x{size[1]}]")
 
-    for name, relative in FONT_SHEETS:
+    for name, relative, drops in FONT_SHEETS:
         sheet = source / name
         if not sheet.exists():
             continue
-        size = prepare_font(sheet, relative)
+        size = prepare_font(sheet, relative, drops)
         if size:
             print(f"  {name:26s} -> {relative:24s} [격자 {size[0]}x{size[1]}]")
 
@@ -687,22 +687,29 @@ def main() -> int:
 # 큰 폰트. 글자가 명목 칸 경계를 넘나들어 자르지 않는다 — 실제 칸은 런타임이 알파로 찾는다.
 # 다만 배경에 알파 1~4 짜리 잔향이 6만 픽셀 깔려 있어, 그대로 두면 그 잔향이 줄과 줄을
 # 이어 버려 검출이 7줄을 3줄로 본다. 그러면 `0` 이 통째로 사라지고 `X` 가 `WX` 를 덮는다.
-# 두 폰트 시트는 규격이 같다. 큰 것과 작은 것의 차이는 그림뿐이다.
+# 두 폰트 시트는 규격이 같다. 다른 것은 그림과, **어느 글자가 베이스라인 아래로
+# 내려가는가** 뿐이다. 큰 폰트는 대문자라 처지는 글자가 없고,
+# 작은 폰트는 소문자라 g j p q y 의 꼬리가 내려간다.
+# 이걸 안 나누면 대문자 G J P Q Y 가 아래로 처져 글줄이 울퉁불퉁해진다.
 FONT_SHEETS = (
-    ("fonts1.png", "sprite/icon-font.png"),
-    ("fonts2.png", "sprite/icon-font-small.png"),
+    ("fonts1.png", "sprite/icon-font.png", ""),
+    ("fonts2.png", "sprite/icon-font-small.png", "gjpqy"),
 )
 FONT_GRID_SIZE = 7
 
 # 칸 순서. 원본 시트에 이 순서로 들어 있다. 7x7 = 49칸을 다 쓴다.
 FONT_SHEET_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789-/+?.%:!',()>"
 
-# 잉크로 칠 알파 하한을 **시트마다 스스로 고른다.**
+# 잉크로 칠 알파 하한. 글자의 흐린 가장자리를 살리려고 낮게 잡는다.
+# 상자를 재고 테두리를 지울 때 쓴다.
+FONT_ALPHA = 16
+
+# **격자를 찾을 때만** 쓰는 하한은 따로 고른다.
 #
-# 배경에 옅은 알파가 넓게 깔려 있는데 그 세기가 시트마다 다르다 —
-# 큰 폰트는 16 이면 되고 작은 폰트는 128 이라야 줄이 갈린다.
-# 고정값을 쓰면 시트가 바뀔 때마다 조용히 어긋나므로, 격자가 제대로 나오는
-# **가장 낮은** 값을 찾는다. 낮을수록 글자의 흐린 가장자리가 더 남는다.
+# 낮은 값에서는 글자가 조각난다 — 큰 폰트는 16 에서 한 줄이 10칸으로 잡힌다.
+# 높은 값에서는 흐린 가장자리가 날아가지만 덩어리는 또렷해진다.
+# 시트마다 그 경계가 달라(큰 폰트 152, 작은 폰트 128) 고정값을 두면 조용히 어긋난다.
+# 그래서 **격자가 제대로 나오는 가장 낮은 값**을 찾는다.
 FONT_ALPHA_STEPS = range(8, 208, 8)
 
 # 칸을 두르는 테두리 선을 찾을 기준.
@@ -715,6 +722,10 @@ FONT_BORDER_FILL = 0.8
 FONT_BORDER_MAX = 8
 # 지울 때 양옆으로 더 지우는 폭. 선의 안티에일리어싱 가장자리가 남으면 다시 상자가 커진다.
 FONT_BORDER_PAD = 3
+# 테두리로 인정할 칸 경계로부터의 거리(칸 폭 대비).
+# 이걸 안 보면 획이 우연히 이어진 자리를 테두리로 알고 글자 한복판을 지운다 —
+# 실제로 큰 폰트의 한 글자가 그렇게 갈렸다.
+FONT_BORDER_NEAR = 0.15
 
 # 디센더 깊이 (x-하이트 대비). 꼬리가 이만큼 베이스라인 아래로 내려간다.
 FONT_DESCENDER = 0.32
@@ -724,10 +735,10 @@ FONT_SIDE_BEARING = 3
 # 글자를 세로 어디에 놓을지. 기호는 저마다 자리가 달라 규칙으로 못 잡는다.
 #
 #   기본   바닥이 베이스라인에 앉는다
-#   DROP   베이스라인 아래로 꼬리가 내려간다
+#   DROP   베이스라인 아래로 꼬리가 내려간다 (글자 쪽은 시트마다 다르다)
 #   MID    x-하이트 한가운데에 걸린다
 #   HANG   대문자 높이에 매달린다
-FONT_DROP = "gjpqy/(),"
+FONT_DROP = "/(),"
 FONT_MID = "-+>"
 FONT_HANG = "'"
 
@@ -836,15 +847,21 @@ def strip_cell_borders(rgba: np.ndarray, alpha: int) -> None:
     두 시트 모두 **칸마다 반투명한 상자**가 그려져 있다. 안 지우면 글자 상자가
     칸 전체가 되어 자간이 글자 폭과 무관해진다 — 실제로 `i` 가 `m` 보다 넓게 잡혔다.
 
-    선은 시트를 가로지르므로 "거의 다 채워진 줄"로 찾는다. 다만 글자 획이 우연히
-    세로로 이어져 같은 조건에 걸리기도 해서, **두께로 거른다** — 테두리는 2~4px 다.
+    선은 시트를 가로지르므로 "거의 다 채워진 줄"로 찾되, 둘로 거른다.
+    **두께** — 테두리는 2~4px 다. 그리고 **자리** — 테두리는 칸 경계에 있다.
+    글자 획이 우연히 이어져 같은 조건에 걸리는데, 그건 칸 한복판이라 걸러진다.
     """
     solid = rgba[..., 3] > alpha
     height, width = solid.shape
     for axis, length, limit in ((0, height, width), (1, width, height)):
+        pitch = limit / FONT_GRID_SIZE
+        near = pitch * FONT_BORDER_NEAR
         fill = solid.sum(axis=axis) / length
         for lo, hi in runs_of(fill > FONT_BORDER_FILL):
             if hi - lo > FONT_BORDER_MAX:
+                continue
+            centre = (lo + hi) / 2
+            if abs(centre - round(centre / pitch) * pitch) > near:
                 continue
             a, b = max(0, lo - FONT_BORDER_PAD), min(limit, hi + FONT_BORDER_PAD)
             if axis == 0:
@@ -853,26 +870,27 @@ def strip_cell_borders(rgba: np.ndarray, alpha: int) -> None:
                 rgba[a:b, :, 3] = 0
 
 
-def pick_font_alpha(source: np.ndarray) -> int | None:
+def pick_font_alpha(mask_source: np.ndarray) -> int | None:
     """
-    격자가 제대로 드러나는 **가장 낮은** 알파 하한.
+    격자가 드러나는 **가장 낮은** 알파 하한. 테두리를 이미 지운 그림을 받는다.
 
-    줄이 7개, 그리고 줄마다 칸이 7개로 갈리는지를 본다. 줄만 보면 안 된다 —
-    큰 폰트는 40~80 사이에서도 줄은 7개지만 획이 조각나 칸이 20개 넘게 잡힌다.
+    조건은 줄이 7개, 그리고 줄마다 칸이 **7개를 넘지 않는 것**이다.
+    모자란 건 괜찮다 — 붙은 글자는 `row_layout` 이 등간격으로 갈라 준다.
+    넘치는 건 못 고친다. 획이 조각난 것이라 어느 조각이 어느 글자인지 알 수 없다.
+
+    줄만 봐서는 안 된다. 큰 폰트는 40~80 사이에서도 줄은 7개지만 칸이 20개를 넘는다.
     """
     for alpha in FONT_ALPHA_STEPS:
-        rgba = source.copy()
-        strip_cell_borders(rgba, alpha)
-        mask = rgba[..., 3] > alpha
+        mask = mask_source > alpha
         rows = runs_of(mask.any(axis=1))
         if len(rows) != FONT_GRID_SIZE:
             continue
-        if all(len(runs_of(mask[y0:y1].any(axis=0))) == FONT_GRID_SIZE for y0, y1 in rows):
+        if all(len(runs_of(mask[y0:y1].any(axis=0))) <= FONT_GRID_SIZE for y0, y1 in rows):
             return alpha
     return None
 
 
-def prepare_font(src: Path, relative: str) -> tuple[int, int] | None:
+def prepare_font(src: Path, relative: str, drops: str) -> tuple[int, int] | None:
     """
     작은 폰트를 **베이스라인을 맞춰** 균등 격자로 다시 짠다.
 
@@ -887,16 +905,17 @@ def prepare_font(src: Path, relative: str) -> tuple[int, int] | None:
     결과는 모든 칸이 같은 크기이고 베이스라인이 한 줄로 서는 시트다 —
     거기서부터는 균등 분할이 정확하다.
     """
-    source = np.array(Image.open(src).convert("RGBA"))
-    alpha = pick_font_alpha(source)
-    if alpha is None:
-        print(f"  [건너뜀] {src.name} 어떤 임계값으로도 {FONT_GRID_SIZE}x{FONT_GRID_SIZE} 가 안 나온다")
+    rgba = np.array(Image.open(src).convert("RGBA"))
+    # 테두리는 알파 48~89 다. 격자용 하한(150 언저리)으로는 보이지도 않으므로 낮게 잡고 지운다.
+    strip_cell_borders(rgba, FONT_ALPHA)
+    image = Image.fromarray(rgba, mode="RGBA")
+
+    grid_alpha = pick_font_alpha(rgba[..., 3])
+    if grid_alpha is None:
+        print(f"  [건너뜀] {src.name} 어떤 임계값으로도 {FONT_GRID_SIZE}줄이 안 나온다")
         return None
 
-    rgba = source
-    strip_cell_borders(rgba, alpha)
-    image = Image.fromarray(rgba, mode="RGBA")
-    mask = rgba[..., 3] > alpha
+    mask = rgba[..., 3] > grid_alpha
     height, width = mask.shape
 
     # 칸을 균등하게 나눠 자를 수 없다. 그림이 명목 격자에서 밀려 있어
@@ -905,11 +924,10 @@ def prepare_font(src: Path, relative: str) -> tuple[int, int] | None:
 
     boxes: list[tuple[int, int, int, int] | None] = []
     for r, (y0, y1) in enumerate(bands):
-        row = mask[y0:y1]
-        # 마지막 줄은 글자가 모자란다. 7칸으로 나누라고 하면 멀쩡한 기호를 반으로 자른다.
         count = min(FONT_GRID_SIZE, len(FONT_SHEET_CHARS) - r * FONT_GRID_SIZE)
         if count <= 0:
             break
+        row = mask[y0:y1]
         cells, _ = row_layout(row, count)
         for x0, x1 in cells:
             piece = row[:, x0:x1]
@@ -932,7 +950,8 @@ def prepare_font(src: Path, relative: str) -> tuple[int, int] | None:
     x_height = int(np.median([boxes[i][3] - boxes[i][1] for i in plain]))
     depth = max(1, round(x_height * FONT_DESCENDER))
 
-    drop, mid, hang = index_of(FONT_DROP), index_of(FONT_MID), index_of(FONT_HANG)
+    drop = index_of(FONT_DROP + drops)
+    mid, hang = index_of(FONT_MID), index_of(FONT_HANG)
 
     # 대문자 높이는 어센더 글자에서 얻는다. 매달리는 기호가 이 높이에 맞춰진다.
     tall = [i for i in index_of("bdfhklt") if boxes[i]]
