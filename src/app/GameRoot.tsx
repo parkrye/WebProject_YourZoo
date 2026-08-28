@@ -1,7 +1,9 @@
 import { DayFade } from './DayFade'
+import { useState } from 'react'
 import { Stage } from './Stage'
 import { NamingScreen } from '@/ui/screens/NamingScreen'
 import { TitleScreen } from '@/ui/screens/TitleScreen'
+import { AuthScreen, type AuthMode } from '@/ui/screens/AuthScreen'
 import { ZooScreen } from '@/ui/screens/ZooScreen'
 import { OptionsModal } from '@/ui/modals/OptionsModal'
 import { StatusModal } from '@/ui/modals/StatusModal'
@@ -15,10 +17,20 @@ import { useGameStore } from '@/store/gameStore'
 export function GameRoot() {
   const screen = useGameStore((s) => s.screen)
   const modal = useGameStore((s) => s.modal)
+  const setScreen = useGameStore((s) => s.setScreen)
+  const [authMode, setAuthMode] = useState<AuthMode>('LOGIN')
 
   return (
     <Stage>
-      {screen === 'TITLE' && <TitleScreen />}
+      {screen === 'TITLE' && (
+        <TitleScreen
+          onAuth={(mode) => {
+            setAuthMode(mode)
+            setScreen('AUTH')
+          }}
+        />
+      )}
+      {screen === 'AUTH' && <AuthScreen mode={authMode} onBack={() => setScreen('TITLE')} />}
       {screen === 'NAMING' && <NamingScreen />}
       {/*
         두 화면을 각각 다른 JSX 자리에 두면 상세보기를 오갈 때 React 가 ZooScreen 을

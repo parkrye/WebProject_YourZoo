@@ -30,11 +30,24 @@ import { ensureBitmap, forgetBitmap, getBitmap, preloadRemote, registerFromBlob 
 import { deleteImage, putImage } from './imageDb'
 import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
 import { publishZoo, type ZooDoc } from '@/net/zooApi'
+import {
+  fetchCloudSave, logIn, pushCloudSave, signUp, type Account,
+} from '@/net/authApi'
 import { getImage } from './imageDb'
 
-export type ScreenId = 'TITLE' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
+export type ScreenId = 'TITLE' | 'AUTH' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
 export type ModalId =
   | 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'ARRIVAL' | null
+
+/**
+ * 서버 동기화 상태.
+ *
+ * `OFF`     비회원. 올릴 곳이 없다
+ * `PENDING` 계정은 있는데 아직 한 번도 올리지 못했다
+ * `SYNCED`  마지막 시도가 성공했다
+ * `FAILED`  서버에 못 닿았다. 로컬 세이브는 멀쩡하다
+ */
+export type SyncState = 'OFF' | 'PENDING' | 'SYNCED' | 'FAILED'
 
 /** 하루가 시작될 때 창고에 도착한 것들. */
 export interface Arrivals {
@@ -62,6 +75,8 @@ interface GameState {
   /** 플레이어가 지은 동물원 이름. A-Z / 0-9 / 공백만 가능. */
   /** 이 동물원 주인의 식별자. 새 게임에서 발급하고 바뀌지 않는다. */
   userId: string
+  /** 로그인한 계정. 비회원이면 null. 세이브에는 넣지 않는다 — 따로 보관한다. */
+  account: Account | null
   zooName: string
   /** 그림판이 열려 있는가. 시계를 멈출지 판단하는 데 쓴다. */
   isDrawing: boolean
@@ -94,6 +109,8 @@ interface GameState {
   visitEnclosure: BiomeId
   /** 오늘 아침 창고에 도착한 것들. 알림을 닫으면 비운다. 세이브에는 넣지 않는다. */
   arrivals: Arrivals | null
+  /** 서버 동기화 상태. 계정이 없으면 늘 `OFF`. */
+  sync: SyncState
 
   setScreen(screen: ScreenId): void
   setDrawing(drawing: boolean): void
@@ -149,8 +166,14 @@ interface GameState {
   unlockEnclosure(id: BiomeId): boolean
   isUnlocked(id: BiomeId): boolean
 
-  /** 타이틀에서 새 게임을 고르면 이름 짓기 화면으로 간다. */
+  /** 비회원으로 시작한다. 무작위 아이디를 발급하고 이름 짓기로 간다. */
   startNewGame(): void
+  /** 회원가입. 성공하면 아이디를 그 계정으로 두고 이름 짓기로 간다. */
+  signUpAndStart(userId: string, password: string): Promise<string | null>
+  /** 로그인. 서버에 세이브가 있으면 그걸로 이어하고, 없으면 이름 짓기로 간다. */
+  logInAndStart(userId: string, password: string): Promise<string | null>
+  /** 로그아웃하고 타이틀로 돌아간다. */
+  logOut(): void
   /** 이름을 확정하고 게임에 진입한다. */
   confirmZooName(name: string): void
   continueGame(): boolean
@@ -161,6 +184,7 @@ const initial = {
   screen: 'TITLE' as ScreenId,
   modal: null as ModalId,
   userId: '',
+  account: null as Account | null,
   zooName: '',
   isDrawing: false,
   tutorial: 'DONE' as TutorialStep,
@@ -182,6 +206,7 @@ const initial = {
   visiting: null as ZooDoc | null,
   visitEnclosure: 'FIELD' as BiomeId,
   arrivals: null as Arrivals | null,
+  sync: 'OFF' as SyncState,
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -326,6 +351,8 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     // 하루가 끝날 때 한 번만 올린다. 구경하는 사람이 보는 건 '어제 자정의 동물원'이다.
     void publishCurrentZoo()
+    // 정산 직후는 반드시 올린다. 오토세이브의 간격 제한을 건너뛴다.
+    void pushCurrentSave(true)
   },
 
   endDayFade: () => set({ dayFade: 'NONE' }),
@@ -621,12 +648,65 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startNewGame: () => {
     clearSave()
+    clearAccount()
     set({
       ...initial,
       userId: createUserId(),
       draft: emptyDraft(randomTraits(createRng(7))),
       screen: 'NAMING',
     })
+  },
+
+  signUpAndStart: async (userId, password) => {
+    const result = await signUp(userId.trim().toUpperCase(), password)
+    if (!result.account) return result.error ?? 'SIGN UP FAILED'
+
+    clearSave()
+    writeAccount(result.account)
+    // 가입 직후에는 이어할 것이 없다. 아이디만 계정 것으로 두고 새로 시작한다.
+    set({
+      ...initial,
+      userId: result.account.userId,
+      account: result.account,
+      // 계정만 생겼을 뿐 아직 올린 것은 없다. 여기서 SYNCED 라고 하면 거짓말이 된다.
+      sync: 'PENDING',
+      draft: emptyDraft(randomTraits(createRng(7))),
+      screen: 'NAMING',
+    })
+    return null
+  },
+
+  logInAndStart: async (userId, password) => {
+    const result = await logIn(userId.trim().toUpperCase(), password)
+    if (!result.account) return result.error ?? 'LOGIN FAILED'
+
+    writeAccount(result.account)
+    const cloud = result.hasSave ? await fetchCloudSave(result.account) : null
+
+    if (!cloud) {
+      // 계정은 있는데 동물원이 아직 없다. 이름부터 짓는다.
+      clearSave()
+      set({
+        ...initial,
+        userId: result.account.userId,
+        account: result.account,
+        draft: emptyDraft(randomTraits(createRng(7))),
+        screen: 'NAMING',
+      })
+      return null
+    }
+
+    // 다른 기기에서 그린 그림은 이 기기에 없다. 들어가기 전에 받아 둔다.
+    await preloadRemote(imageIdsOf(cloud))
+    writeSave(cloud)
+    set({ account: result.account, sync: 'SYNCED' })
+    get().continueGame()
+    return null
+  },
+
+  logOut: () => {
+    clearAccount()
+    set({ account: null, sync: 'OFF', screen: 'TITLE', modal: null })
   },
 
   confirmZooName: (name) => {
@@ -644,6 +724,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       modal: null,
       dayFade: 'NONE',
       pendingDay: null,
+      // 새로고침해도 로그인 상태는 남아 있어야 한다.
+      account: get().account ?? readAccount(),
       // 구버전 세이브에는 아이디가 없다. 이어할 때 조용히 하나 발급한다.
       userId: isUserId(save.userId) ? save.userId : createUserId(),
       zooName: save.zooName ?? '',
@@ -737,7 +819,13 @@ function saveKey(state: GameState): string {
  * 타이틀 화면에서는 쓰지 않는다 — 새 게임 초기 상태로 기존 세이브를 덮으면 안 된다.
  */
 export function startAutosave(): () => void {
-  const flush = (): void => {
+  /**
+   * 로컬에 쓰고, 계정이 있으면 서버에도 올린다.
+   *
+   * `urgent` 는 탭을 닫거나 숨길 때다. 그때는 간격 제한을 무시한다 —
+   * 다음 기회가 없을지도 모르는 자리에서 아끼면 그대로 잃는다.
+   */
+  const flush = (urgent = false): void => {
     const state = useGameStore.getState()
     // 타이틀과 이름 짓기 중에는 저장하지 않는다. 기존 세이브를 덮으면 안 된다.
     if (state.screen === 'TITLE' || state.screen === 'NAMING') return
@@ -745,6 +833,8 @@ export function startAutosave(): () => void {
     // 이때 저장하면 다시 켰을 때 같은 날을 한 번 더 정산한다.
     if (state.dayFade === 'OUT') return
     writeSave(state.snapshot())
+    // 계정이 있으면 서버에도 올린다. 하루 정산까지 기다리면 짧게 놀고 닫은 진행이 날아간다.
+    void pushCurrentSave(urgent)
   }
 
   let lastKey = saveKey(useGameStore.getState())
@@ -758,17 +848,18 @@ export function startAutosave(): () => void {
   const timer = window.setInterval(flush, AUTOSAVE_INTERVAL_MS)
 
   const onVisibility = (): void => {
-    if (document.visibilityState === 'hidden') flush()
+    if (document.visibilityState === 'hidden') flush(true)
   }
+  const onPageHide = (): void => flush(true)
 
   document.addEventListener('visibilitychange', onVisibility)
-  window.addEventListener('pagehide', flush)
+  window.addEventListener('pagehide', onPageHide)
 
   return () => {
     window.clearInterval(timer)
     unsubscribe()
     document.removeEventListener('visibilitychange', onVisibility)
-    window.removeEventListener('pagehide', flush)
+    window.removeEventListener('pagehide', onPageHide)
   }
 }
 
@@ -813,6 +904,7 @@ async function publishCurrentZoo(): Promise<void> {
       props,
     },
     images,
+    s.account?.token,
   )
 }
 
@@ -825,4 +917,92 @@ async function collectImage(into: Record<string, string>, id: string): Promise<v
     reader.onload = () => resolve(String(reader.result))
     reader.readAsDataURL(blob)
   })
+}
+
+// ─────────────────────────────────────────────────────────────
+// 계정 보관
+// ─────────────────────────────────────────────────────────────
+
+/** 세이브와 따로 둔다. 세이브를 지워도 로그인 상태는 남아야 한다. */
+const ACCOUNT_KEY = 'yourzoo.account'
+
+export function readAccount(): Account | null {
+  try {
+    const raw = localStorage.getItem(ACCOUNT_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<Account>
+    if (typeof parsed.userId !== 'string' || typeof parsed.token !== 'string') return null
+    return { userId: parsed.userId, token: parsed.token }
+  } catch {
+    return null
+  }
+}
+
+function writeAccount(account: Account): void {
+  try {
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account))
+  } catch {
+    // 저장 못 해도 이번 세션은 로그인 상태다. 새로고침하면 풀릴 뿐이다.
+  }
+}
+
+function clearAccount(): void {
+  try {
+    localStorage.removeItem(ACCOUNT_KEY)
+  } catch {
+    // 지울 수 없으면 그냥 둔다.
+  }
+}
+
+/** 세이브가 참조하는 모든 그림. 배치된 것뿐 아니라 창고와 배송 중인 것까지. */
+function imageIdsOf(save: SaveV2): string[] {
+  const ids = new Set<string>()
+  for (const animal of save.animals) {
+    ids.add(animal.imageId)
+    if (animal.spriteSheet) ids.add(animal.spriteSheet.imageId)
+  }
+  for (const prop of save.props ?? []) {
+    if (prop.imageId) ids.add(prop.imageId)
+  }
+  return [...ids]
+}
+
+/**
+ * 마지막으로 올린 시각. 세이브가 바뀔 때마다 그림까지 실어 보낼 수는 없다.
+ *
+ * 처음에는 음의 무한대다. 0 으로 두면 페이지를 연 지 20초가 되기 전의 첫 저장이
+ * 간격 제한에 걸려 통째로 건너뛰어진다 — 들어가자마자 닫으면 아무것도 안 올라간다.
+ */
+let lastPushAt = Number.NEGATIVE_INFINITY
+/** 올리는 최소 간격. 이보다 잦으면 건너뛴다. */
+const PUSH_INTERVAL_MS = 20_000
+
+/**
+ * 계정 세이브를 서버에 올린다.
+ *
+ * 공개용 동물원 문서(`publishCurrentZoo`)와 다르다 — 저쪽은 남에게 보여 줄 것만 담고,
+ * 이쪽은 **이어하기에 필요한 전부**를 담는다. 소지금도 창고도 배송 중인 것도 들어간다.
+ *
+ * 그림을 base64 로 실어 보내므로 한 번이 무겁다. 평소에는 간격을 두고,
+ * 하루 정산처럼 놓치면 안 되는 시점에는 `force` 로 건너뛴다.
+ */
+async function pushCurrentSave(force = false): Promise<void> {
+  const s = useGameStore.getState()
+  if (!s.account) return
+
+  const now = performance.now()
+  if (!force && now - lastPushAt < PUSH_INTERVAL_MS) return
+  lastPushAt = now
+
+  try {
+    const save = s.snapshot()
+    const images: Record<string, string> = {}
+    for (const id of imageIdsOf(save)) await collectImage(images, id)
+
+    const pushed = await pushCloudSave(s.account, save, images)
+    useGameStore.setState({ sync: pushed ? 'SYNCED' : 'FAILED' })
+  } catch {
+    // 그림을 못 읽었거나 서버가 없다. 로컬 세이브는 멀쩡하므로 놀이는 이어진다.
+    useGameStore.setState({ sync: 'FAILED' })
+  }
 }
