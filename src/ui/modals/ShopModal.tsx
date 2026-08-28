@@ -32,12 +32,9 @@ type Pending =
  *
  * 캐시 상품의 결제는 흉내만 낸다. 확인을 거치면 그냥 지급한다.
  */
-/**
- * 천 단위를 띄어 적는다. `78900` 은 자릿수를 세어야 읽히는데,
- * 비트맵 폰트에 A-Z 와 0-9 밖에 없어 쉼표를 쓸 수 없다. 공백은 여백으로 그려진다.
- */
+/** 천 단위를 끊어 적는다. `78900` 은 자릿수를 세어야 읽힌다. */
 function groupThousands(value: number): string {
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
 export function ShopModal() {

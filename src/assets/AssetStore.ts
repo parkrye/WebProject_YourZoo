@@ -53,11 +53,12 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
   // 모든 에셋은 scripts/prepare-assets.py 가 이미 알파를 정리해 두었다.
   // 런타임에서 배경을 손대지 않는다.
   const fontSheet = pick(FONT_SRC)
-  const fontAtlas = new Atlas(fontSheet, FONT_GRID, { detect: true })
+  // 전처리가 베이스라인을 맞춰 짜 두었다. 가로 폭만 글자에 맞춘다.
+  const fontAtlas = new Atlas(fontSheet, FONT_GRID, { columns: true })
   // 작은 폰트는 검출하지 않는다. 여백은 전처리에서 이미 잘렸고,
   // 칸마다 다시 재면 디센더가 베이스라인을 흔든다.
   const smallSheet = pick(FONT_SMALL_SRC)
-  const smallAtlas = new Atlas(smallSheet, FONT_SMALL_GRID)
+  const smallAtlas = new Atlas(smallSheet, FONT_SMALL_GRID, { columns: true })
 
   cached = {
     sky: {

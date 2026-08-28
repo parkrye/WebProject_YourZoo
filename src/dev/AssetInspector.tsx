@@ -29,12 +29,12 @@ export function AssetInspector() {
         font.draw(ctx, 'DAY 12 GOLD 1200 FAME 340', 20, 260, { size: 34 })
         font.draw(ctx, 'CENTERED TEXT', fc.width / 2, 320, { size: 40, align: 'center' })
         // 새로 들어온 기호들. 우회하던 자리가 이제 제대로 나오는지 본다.
-        font.draw(ctx, "-/+?.%:!'()>", 20, 380, { size: 56 })
-        font.draw(ctx, 'NET -120  0 / 3  10 + 1  65%  READY?', 20, 460, { size: 30 })
+        font.draw(ctx, "-/+?.%:!',()>", 20, 380, { size: 56 })
+        font.draw(ctx, 'NET -1,200  0 / 3  10 + 1  65%  READY?', 20, 460, { size: 30 })
         const { fontSmall } = getAssets()
         fontSmall.draw(ctx, "abcdefghijklmnopqrstuvwxyz", 20, 530, { size: 30 })
-        fontSmall.draw(ctx, "0123456789 -/+?.%:!'()>", 20, 570, { size: 30 })
-        fontSmall.draw(ctx, 'net -120  0 / 3  10 + 1  65%  ready?', 20, 610, { size: 30 })
+        fontSmall.draw(ctx, "0123456789 -/+?.%:!',()>", 20, 570, { size: 30 })
+        fontSmall.draw(ctx, 'net -1,200  0 / 3  10 + 1  65%  ready?', 20, 610, { size: 30 })
       }
     }
 

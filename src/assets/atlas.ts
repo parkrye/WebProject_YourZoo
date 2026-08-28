@@ -1,4 +1,4 @@
-import { detectFrames, uniformFrames } from './gridDetect'
+import { detectColumnsInGrid, detectFrames, uniformFrames } from './gridDetect'
 import type { GridSpec } from './manifest'
 
 export interface Frame {
@@ -15,6 +15,11 @@ export interface AtlasOptions {
    * 배경이 불투명한 원본에는 쓸 수 없다 — 컷아웃 이후에만 의미가 있다.
    */
   detect?: boolean
+  /**
+   * 가로 폭만 글자에 맞추고 세로는 칸을 그대로 쓴다. 폰트 시트용이다.
+   * 이유는 `detectColumnsInGrid` 에 적어 두었다.
+   */
+  columns?: boolean
 }
 
 /** 그리드 시트를 인덱스로 슬라이싱한다. */
@@ -34,7 +39,11 @@ export class Atlas {
     readonly grid: GridSpec,
     options: AtlasOptions = {},
   ) {
-    this.frames = options.detect ? detectFrames(image, grid) : uniformFrames(grid)
+    this.frames = options.columns
+      ? detectColumnsInGrid(image, grid)
+      : options.detect
+        ? detectFrames(image, grid)
+        : uniformFrames(grid)
     this.count = this.frames.length
     this.maxFrameHeight = this.frames.reduce((max, f) => Math.max(max, f.sh), 1)
   }

@@ -130,6 +130,64 @@ function colSums(data: Uint8ClampedArray, w: number, y0: number, y1: number): Ui
  * 남으면 **간격이 가장 좁은 이웃끼리 합친다**. 붙어 있는 글자 사이는 그림자만 겹치므로
  * 그 지점이 항상 밴드 내부의 최소값이 된다.
  */
+/**
+ * 균등 격자 위에서 **가로 폭만** 실제 글자에 맞춘다. 세로는 칸을 그대로 쓴다.
+ *
+ * 폰트 시트에 쓴다. 렌더러는 글자를 칸 아래변에 맞춰 그리므로,
+ * 세로까지 좁히면 베이스라인이 무너진다 — 디센더와 x-하이트 글자가 모두
+ * 제 바닥을 같은 줄에 대게 되어 글자가 오르내린다.
+ * 그렇다고 칸 폭을 그대로 두면 `i` 와 `m` 이 같은 자리를 차지해 글자가 성글게 흩어진다.
+ *
+ * 전처리가 이미 베이스라인을 맞춰 균등 격자로 짜 두었기에 이걸로 충분하다.
+ */
+export function detectColumnsInGrid(source: CanvasImageSource, grid: GridSpec): Frame[] {
+  const { sheetW, sheetH, cols, rows } = grid
+
+  const canvas = document.createElement('canvas')
+  canvas.width = sheetW
+  canvas.height = sheetH
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return uniformFrames(grid)
+
+  ctx.drawImage(source, 0, 0)
+  const data = ctx.getImageData(0, 0, sheetW, sheetH).data
+
+  const cellW = sheetW / cols
+  const cellH = sheetH / rows
+  const frames: Frame[] = []
+
+  for (let r = 0; r < rows; r++) {
+    const top = Math.round(cellH * r)
+    const bottom = Math.round(cellH * (r + 1))
+    for (let c = 0; c < cols; c++) {
+      const left = Math.round(cellW * c)
+      const right = Math.round(cellW * (c + 1))
+
+      let first = -1
+      let last = -1
+      for (let x = left; x < right; x++) {
+        let inked = false
+        for (let y = top; y < bottom; y++) {
+          if ((data[(y * sheetW + x) * 4 + 3] as number) > 0) {
+            inked = true
+            break
+          }
+        }
+        if (!inked) continue
+        if (first < 0) first = x
+        last = x
+      }
+
+      frames.push(first < 0
+        ? { sx: left, sy: top, sw: 1, sh: bottom - top }
+        : { sx: first, sy: top, sw: last - first + 1, sh: bottom - top })
+    }
+  }
+
+  return frames
+}
+
+
 function findBands(sums: Uint32Array, expected: number, pitch: number): Band[] | null {
   const bands = splitBands(sums, 1)
   if (bands.length === 0) return null
