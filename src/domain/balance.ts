@@ -29,9 +29,24 @@ export interface CashProduct {
   readonly bonus: number
 }
 
+/**
+ * 값은 **캐시 하나를 쓰는 데 드는 비용**에서 거꾸로 잡았다.
+ * 상세 요청은 외부 SDK 를 부르고, 한 번에 600원쯤 든다. 그 아래로 팔면 팔수록 손해다.
+ *
+ * 그래서 묶음 할인의 폭이 좁다. 단품 800원과 원가 600원 사이가 25% 뿐이라,
+ * 큰 묶음에 큰 할인을 넣으면 마진이 금세 사라진다.
+ *
+ * 큰 묶음의 덤이 100 개에 +20 인 것은 그래서다. 작은 묶음과 같은 비율(+10)로 두면
+ * 개당 718원 대 717원이 되어 **두 상품의 단가가 사실상 같아진다** —
+ * 78,900원을 내고 개당 1원 아끼는 상품은 아무도 사지 않는다.
+ */
 export const CASH_PRODUCTS: readonly CashProduct[] = [
-  { id: 'SINGLE', krw: 500, cash: 1, bonus: 0 },
-  { id: 'BUNDLE', krw: 5000, cash: 10, bonus: 1 },
+  // 개당 800원
+  { id: 'SINGLE', krw: 800, cash: 1, bonus: 0 },
+  // 개당 718원 (-10%)
+  { id: 'BUNDLE', krw: 7900, cash: 10, bonus: 1 },
+  // 개당 658원 (-18%). 원가 600원까지 58원 남는다.
+  { id: 'STACK', krw: 78900, cash: 100, bonus: 20 },
 ]
 
 export const productTotal = (product: CashProduct): number => product.cash + product.bonus

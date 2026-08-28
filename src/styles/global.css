@@ -1407,6 +1407,14 @@ html, body, #root {
 
 .tray-hint { margin-left: 8px; opacity: 0.6; }
 
+/* 캐시 카드의 덤 줄. 덤이 없어도 높이를 지켜 가격 줄을 맞춘다. */
+.shop-item-bonus {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+}
+
 /* 템플릿 카드의 그림 자리. 그림이 없어도 높이를 지켜 이름 줄을 맞춘다. */
 .wizard-card-icon {
   display: flex;
