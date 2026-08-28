@@ -1867,10 +1867,19 @@ html, body, #root {
   width: 100%;
   height: 100%;
   fill: none;
-  stroke: rgba(138, 90, 43, 0.3);
-  stroke-width: 0.006;
-  stroke-dasharray: 0.022 0.018;
   pointer-events: none;
+}
+
+/*
+  슬롯마다 가로세로 비율이 달라, 좌표계 단위로 굵기를 주면 선이 눌려 들쭉날쭉해진다.
+  non-scaling-stroke 로 픽셀 굵기를 고정해야 어느 부위에서나 같게 보인다.
+*/
+.rig-guide > * {
+  fill: none;
+  stroke: rgba(138, 90, 43, 0.55);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
 }
 
 .rig-slot {

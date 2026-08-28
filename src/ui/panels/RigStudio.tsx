@@ -11,8 +11,6 @@ interface RigStudioProps {
   spec: RigSpec
   parts: Record<string, ExportedDrawing>
   onChange: (partId: string, drawing: ExportedDrawing) => void
-  /** 템플릿 실루엣. 어느 부위를 그리는 중인지 알려 주는 밑그림이다. */
-  guide: readonly GuideShape[]
 }
 
 /**
@@ -24,7 +22,7 @@ interface RigStudioProps {
  * 그릴 때는 그 부위의 상자만 크게 띄운다 — 다리를 그리는데 몸 전체 캔버스를 주면
  * 어디에 그려야 할지 몰라 가운데에 그리게 되고, 그러면 관절이 엉뚱한 데서 돈다.
  */
-export function RigStudio({ spec, parts, onChange, guide }: RigStudioProps) {
+export function RigStudio({ spec, parts, onChange }: RigStudioProps) {
   const [editing, setEditing] = useState<RigPart | null>(null)
 
   const ordered = useMemo(() => [...spec.parts].sort((a, b) => a.z - b.z), [spec])
@@ -39,8 +37,12 @@ export function RigStudio({ spec, parts, onChange, guide }: RigStudioProps) {
 
       <div className="rig-body">
         {/* 부위가 어디 붙는지 보여 주는 지도. 고르는 자리이기도 하다. */}
+        {/*
+          지도에는 파츠 밑그림만 깐다. 템플릿 실루엣까지 함께 그리면 같은 자리에
+          두 겹이 겹쳐 무엇이 어느 부위인지 오히려 안 보인다 —
+          파츠 밑그림을 다 모으면 그게 곧 그 실루엣이다.
+        */}
         <div className="rig-map">
-          {guide.length > 0 && <RigGuide guide={guide} />}
           {ordered.map((part) => (
             <button
               key={part.id}
@@ -54,7 +56,14 @@ export function RigStudio({ spec, parts, onChange, guide }: RigStudioProps) {
               }}
               onClick={() => setEditing(part)}
             >
-              <PartArt drawing={parts[part.id] ?? null} />
+              {/*
+                아직 안 그린 자리에는 밑그림을 띄운다. 빈 상자만 늘어놓으면
+                어느 것이 다리이고 어느 것이 꼬리인지 이름을 읽어야 안다.
+                슬롯은 파츠 상자 비율이라, 같은 좌표가 여기서는 완성됐을 때의 모습이 된다.
+              */}
+              {parts[part.id]
+                ? <PartArt drawing={parts[part.id] ?? null} />
+                : <RigGuide guide={part.guide} />}
               {/* 회전축을 점으로 찍는다. 여기를 중심으로 돈다는 걸 보여 준다. */}
               <span
                 className="rig-pivot"
@@ -82,7 +91,7 @@ export function RigStudio({ spec, parts, onChange, guide }: RigStudioProps) {
       {editing && (
         <DrawModal
           title={`DRAW ${editing.label}`}
-          guide={[]}
+          guide={editing.guide}
           {...(parts[editing.id] && { initial: parts[editing.id]!.blob })}
           onClose={() => setEditing(null)}
           onDone={(result) => {
@@ -112,17 +121,17 @@ function PartArt({ drawing }: { drawing: ExportedDrawing | null }) {
 function RigGuide({ guide }: { guide: readonly GuideShape[] }) {
   return (
     <svg className="rig-guide" viewBox="0 0 1 1" preserveAspectRatio="none" aria-hidden>
-      {guide.map((shape, i) =>
-        shape.kind === 'ELLIPSE' ? (
-          <ellipse key={i} cx={shape.cx} cy={shape.cy} rx={shape.rx} ry={shape.ry} />
-        ) : (
-          <polyline
-            key={i}
-            points={shape.points.map(([x, y]) => `${x},${y}`).join(' ')}
-            {...(shape.closed ? { className: 'is-closed' } : {})}
-          />
-        ),
-      )}
+      {guide.map((shape, i) => {
+        if (shape.kind === 'ELLIPSE') {
+          return <ellipse key={i} cx={shape.cx} cy={shape.cy} rx={shape.rx} ry={shape.ry} />
+        }
+        const points = shape.points.map(([x, y]) => `${x},${y}`).join(' ')
+        // 닫힌 도형은 polygon 이어야 한다. polyline 으로 그리면 마지막 변이 빠져
+        // 다리와 몸통이 한쪽이 터진 채로 보인다.
+        return shape.closed
+          ? <polygon key={i} points={points} />
+          : <polyline key={i} points={points} />
+      })}
     </svg>
   )
 }

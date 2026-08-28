@@ -275,7 +275,6 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
           <RigStudio
             spec={rig}
             parts={rigParts}
-            guide={guide}
             onChange={(partId, drawing) =>
               setRigParts((prev) => ({ ...prev, [partId]: drawing }))
             }
