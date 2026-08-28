@@ -149,6 +149,8 @@ export class EnclosureSim {
   private nearestVisitorDistance(x: number, y: number): number {
     let best = Number.POSITIVE_INFINITY
     for (const visitor of this.visitors) {
+      // 아직 화면 밖에서 걸어오는 손님이 동물을 겁줄 수는 없다.
+      if (!visitor.isOnScreen) continue
       const d = Math.hypot(visitor.x - x, visitor.headY - y)
       if (d < best) best = d
     }

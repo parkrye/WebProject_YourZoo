@@ -2,9 +2,9 @@ import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
-  ANIMAL_CREATE_COST, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
+  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, MAX_ANIMALS_PER_ENCLOSURE,
   SHEET_COST, START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST,
-  type CashProduct,
+  productTotal, type CashProduct,
 } from '@/domain/balance'
 import { MOTION_PROFILES } from '@/domain/motion'
 import { templateOf } from '@/domain/templates'
@@ -109,6 +109,8 @@ interface GameState {
   buyCash(product: CashProduct): void
   /** 캐시를 써서 8x3 스프라이트 시트를 만든다. 성공하면 true. */
   animateAnimal(id: string): Promise<boolean>
+  /** 동물 이름을 바꾼다. 빈 이름은 무시한다. */
+  renameAnimal(id: string, name: string): void
   /** 의뢰를 이행한다. 동물을 넘기고 보상을 받는다. */
   fulfillOrder(orderId: string, animalId: string): boolean
   canPlaceIn(enclosureId: BiomeId): boolean
@@ -389,7 +391,14 @@ export const useGameStore = create<GameState>((set, get) => ({
     return true
   },
 
-  buyCash: (product) => set((s) => ({ cash: s.cash + product.cash })),
+  buyCash: (product) => set((s) => ({ cash: s.cash + productTotal(product) })),
+
+  renameAnimal: (id, name) => {
+    const trimmed = name.trim().slice(0, ANIMAL_NAME_MAX_LENGTH)
+    // 이름을 지워 빈 칸으로 두면 카드 머리가 비어 무엇을 보는 중인지 알 수 없다.
+    if (trimmed === '') return
+    set((s) => ({ animals: s.animals.map((a) => (a.id === id ? { ...a, name: trimmed } : a)) }))
+  },
 
   /**
    * 캐시를 써서 그림을 스프라이트 시트로 굽는다.

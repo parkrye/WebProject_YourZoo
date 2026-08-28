@@ -1211,3 +1211,10 @@ html, body, #root {
   align-items: center;
   gap: 12px;
 }
+
+/* 카드 머리글의 오른쪽 버튼 묶음. 이름 고치기와 닫기가 나란히 선다. */
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}

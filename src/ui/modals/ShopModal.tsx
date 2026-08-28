@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { GUI } from '@/assets/manifest'
-import { CASH_PRODUCTS, type CashProduct } from '@/domain/balance'
+import { CASH_PRODUCTS, productTotal, type CashProduct } from '@/domain/balance'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { ConfirmPopup } from '@/ui/components/ConfirmPopup'
 import { IconGlyph } from '@/ui/components/IconGlyph'
@@ -38,8 +38,15 @@ export function ShopModal() {
                 onClick={() => setPicked(product)}
               >
                 <IconGlyph icon={GUI.PALETTE} size={54} />
-                <BitmapLabel text={`${product.cash} CASH`} size={30} />
+                {/* 덤은 합치지 않고 `10 + 1` 로 적는다. 11 이라고만 쓰면 이득이 안 보인다. */}
+                <BitmapLabel
+                  text={product.bonus > 0 ? `${product.cash} + ${product.bonus}` : `${product.cash} CASH`}
+                  size={30}
+                />
                 <BitmapLabel text={`${product.krw} KRW`} size={22} />
+                {product.bonus > 0 && (
+                  <BitmapLabel text={`TOTAL ${productTotal(product)}`} size={16} />
+                )}
               </button>
             ))}
           </div>
@@ -54,7 +61,12 @@ export function ShopModal() {
       {picked && (
         <ConfirmPopup
           title="CONFIRM"
-          lines={[`BUY ${picked.cash} CASH`, `FOR ${picked.krw} KRW ?`]}
+          lines={[
+            picked.bonus > 0
+              ? `BUY ${picked.cash} PLUS ${picked.bonus} CASH`
+              : `BUY ${picked.cash} CASH`,
+            `FOR ${picked.krw} KRW ?`,
+          ]}
           onCancel={() => setPicked(null)}
           onConfirm={() => {
             buyCash(picked)

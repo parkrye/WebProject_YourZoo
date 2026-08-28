@@ -6,10 +6,12 @@ import { VISITOR_STAY_SEC } from '@/domain/balance'
 
 const X_MIN = 0.04
 const X_MAX = 0.96
-/** 퇴장할 때 향하는 화면 바깥 지점. 여기에 닿으면 목록에서 지운다. */
+/** 입장·퇴장 때 오가는 화면 바깥 지점. 퇴장은 여기에 닿으면 목록에서 지운다. */
 const EXIT_X = { left: -0.14, right: 1.14 } as const
 /** 퇴장 걸음은 평소보다 조금 빠르다. 미적거리면 인원이 줄어든 게 보이지 않는다. */
 const EXIT_SPEED = 0.11
+/** 입장 걸음도 빠르다. 화면 밖에서 관람로까지 어슬렁거리면 언제 들어오나 싶다. */
+const ENTER_SPEED = 0.1
 
 /**
  * 손님 1명.
@@ -45,14 +47,23 @@ export class VisitorAgent {
     this.heightScale = randRange(rng, HEIGHT_SCALE.min, HEIGHT_SCALE.max)
     this.depth = rng()
     this.stayTimer = randRange(rng, VISITOR_STAY_SEC.min, VISITOR_STAY_SEC.max)
-    this.x = randRange(rng, X_MIN, X_MAX)
+    // 관람로 한복판에 툭 나타나면 어디서 왔는지 알 수 없다. 화면 밖에서 걸어 들어온다.
+    const fromLeft = rng() < 0.5
+    this.x = fromLeft ? EXIT_X.left : EXIT_X.right
+    this.entryTarget = fromLeft
+      ? randRange(rng, X_MIN, 0.55)
+      : randRange(rng, 0.45, X_MAX)
     this.walkSpeed = randRange(rng, 0.008, 0.022)
-    this.vx = rng() < 0.5 ? -this.walkSpeed : this.walkSpeed
+    this.vx = fromLeft ? ENTER_SPEED : -ENTER_SPEED
     this.idleTimer = randRange(rng, 1, 6)
     this.bobPhase = rng() * Math.PI * 2
     this.bobSpeed = randRange(rng, 3.4, 4.8)
   }
 
+  /** 아직 관람로까지 걸어 들어오는 중인가. */
+  private entering = true
+  /** 걸어 들어와 멈춰 설 자리. */
+  private readonly entryTarget: number
   /** 퇴장 중이면 화면 밖으로 걸어 나간다. */
   private leaving = false
   /** 남은 체류 시간. 다 되면 스스로 돌아간다. */
@@ -81,10 +92,16 @@ export class VisitorAgent {
     return this.vx === 0
   }
 
+  /** 화면 안에 들어와 있는가. 밖에서 걸어오는 동안에는 그리지 않아도 된다. */
+  get isOnScreen(): boolean {
+    return this.x > EXIT_X.left && this.x < EXIT_X.right
+  }
+
   /** 가까운 쪽 화면 밖으로 걸어 나가기 시작한다. */
   leave(): void {
     if (this.leaving) return
     this.leaving = true
+    this.entering = false
     this.vx = this.x < 0.5 ? -EXIT_SPEED : EXIT_SPEED
   }
 
@@ -109,6 +126,18 @@ export class VisitorAgent {
 
   update(dt: number): void {
     this.bobPhase += dt * this.bobSpeed
+
+    // 들어오는 동안에는 체류 시간이 줄지 않는다. 관람로에 서야 관람이 시작된다.
+    if (this.entering) {
+      this.x += this.vx * dt
+      const arrived = this.vx > 0 ? this.x >= this.entryTarget : this.x <= this.entryTarget
+      if (!arrived) return
+      this.x = this.entryTarget
+      this.entering = false
+      this.vx = 0
+      this.idleTimer = 0.4
+      return
+    }
 
     // 볼 만큼 봤으면 스스로 돌아간다.
     if (!this.leaving) {

@@ -17,18 +17,24 @@ export const START_REPUTATION = 0
  * 캐시 상품.
  *
  * 실제 결제는 하지 않는다 — 확인 팝업을 거치면 그냥 지급한다.
- * 큰 상품은 11개로 **1개를 덤으로** 준다. 묶음이 이득이라는 인상은 이 1개가 만든다.
+ * 덤은 총량에 합치지 않고 `10 + 1` 로 따로 적는다. 11 이라고만 쓰면
+ * 묶음이 이득이라는 게 안 보인다. 이득은 숫자가 아니라 `+` 가 보여 준다.
  */
 export interface CashProduct {
   readonly id: string
   readonly krw: number
+  /** 값을 치르고 받는 몫 */
   readonly cash: number
+  /** 덤으로 얹어 주는 몫 */
+  readonly bonus: number
 }
 
 export const CASH_PRODUCTS: readonly CashProduct[] = [
-  { id: 'SINGLE', krw: 500, cash: 1 },
-  { id: 'BUNDLE', krw: 5000, cash: 11 },
+  { id: 'SINGLE', krw: 500, cash: 1, bonus: 0 },
+  { id: 'BUNDLE', krw: 5000, cash: 10, bonus: 1 },
 ]
+
+export const productTotal = (product: CashProduct): number => product.cash + product.bonus
 
 /** 동물 한 마리의 8x3 스프라이트 시트를 만드는 데 드는 캐시. */
 export const SHEET_COST = 1

@@ -47,6 +47,26 @@ LAYOUT: dict[str, tuple[str, int | None]] = {
     "sprite_human_visitor.png": ("sprite/human-visitor.png", 10),
 }
 
+# 상점에서 파는 동물 스프라이트. `sprite_animal_{층}_{이름}.png` 규칙으로 들어온다.
+#
+# 배경은 순수 검정이고 알파 채널이 아예 없다(RGB 모드).
+# 임계값 24 부터는 까마귀의 검은 깃털로 플러드필이 새어 들어간다
+# (지워진 비율이 85.5% -> 89.2% 로 튄다). 확실히 아래인 16 으로 잡는다.
+ANIMAL_PREFIX = "sprite_animal_"
+ANIMAL_THRESHOLD = 16
+ANIMAL_COLS = 8
+ANIMAL_ROWS = 3
+
+# 파일명의 층 -> 게임의 서식지
+ANIMAL_HABITAT = {"upper": "SKY", "middle": "LAND", "lower": "WATER"}
+
+# 잘라낸 프레임의 최대 높이(px). 화면에서 동물은 100px 안팎이라
+# 원본 341px 을 그대로 두면 쓰지도 않을 해상도로 번들만 부푼다.
+ANIMAL_MAX_FRAME_H = 220
+
+# WebP 품질. 90 아래로는 털결에 뭉개짐이 눈에 띈다.
+ANIMAL_WEBP_QUALITY = 90
+
 OUT_ROOT = Path("src/assets/images")
 AUDIO_OUT = Path("src/assets/audio")
 
@@ -110,6 +130,125 @@ def cut_black_background(image: Image.Image, threshold: int) -> Image.Image:
     return Image.fromarray(np.dstack([rgb, alpha]), mode="RGBA")
 
 
+def content_bands(mask: np.ndarray, axis: int) -> list[tuple[int, int]]:
+    """내용이 있는 구간을 잇달아 찾는다. 프레임 행 경계를 실측할 때 쓴다."""
+    projection = mask.any(axis=axis)
+    bands: list[tuple[int, int]] = []
+    start: int | None = None
+    for i, filled in enumerate(projection):
+        if filled and start is None:
+            start = i
+        elif not filled and start is not None:
+            bands.append((start, i))
+            start = None
+    if start is not None:
+        bands.append((start, len(projection)))
+    return bands
+
+
+def row_bounds(mask: np.ndarray) -> list[tuple[int, int]]:
+    """
+    프레임 행의 경계.
+
+    세로는 **균등 분할이 안 된다.** 1024 / 3 이 딱 떨어지지 않는 데다,
+    시그니처 동작이 위로 크게 뻗어 앞 행의 몫을 넘어오는 시트가 있다
+    (말은 세 번째 행이 672 에서 시작하는데 균등 경계는 683 이다).
+    그래서 실제 내용 밴드를 찾고 **밴드 사이 빈 구간의 한가운데**를 경계로 삼는다.
+
+    가로는 반대로 프레임이 서로 닿아 있어 밴드가 붙어 버린다. 거기는 균등 분할이 맞다.
+    """
+    bands = content_bands(mask, axis=1)
+    if len(bands) != ANIMAL_ROWS:
+        # 검출이 어긋나면 균등 분할로 되돌린다. 결과가 조금 어긋날지언정 멈추지는 않는다.
+        h = mask.shape[0]
+        return [(round(h * i / ANIMAL_ROWS), round(h * (i + 1) / ANIMAL_ROWS)) for i in range(ANIMAL_ROWS)]
+
+    edges = [0]
+    for (_, prev_end), (next_start, _) in zip(bands, bands[1:]):
+        edges.append((prev_end + next_start) // 2)
+    edges.append(mask.shape[0])
+    return list(zip(edges, edges[1:]))
+
+
+def prepare_animal(src: Path) -> dict[str, object] | None:
+    """
+    동물 시트 하나를 게임이 쓰는 규격으로 정리한다.
+
+    셀마다 그림 위치가 제각각이라 그대로 쓰면 프레임이 넘어갈 때 덜컹거린다.
+    **24칸 전체의 내용을 감싸는 상자 하나**를 구해 모든 칸을 같은 상자로 잘라낸다 —
+    칸마다 따로 맞추면 움직임(위아래로 뛰는 동작)까지 같이 지워진다.
+
+    `fit` 과 `baseline` 은 **IDLE 행만 보고** 잰다. 상자는 시그니처 점프까지 감싸느라
+    크기 때문에, 상자를 기준으로 삼으면 서 있는 동물이 공중에 뜬 것처럼 그려진다.
+    """
+    stem = src.stem[len(ANIMAL_PREFIX):]
+    layer, _, name = stem.partition("_")
+    habitat = ANIMAL_HABITAT.get(layer)
+    if habitat is None or not name:
+        print(f"  [건너뜀] {src.name} 이름 규칙에 맞지 않음")
+        return None
+
+    cut = cut_black_background(Image.open(src), ANIMAL_THRESHOLD)
+    mask = np.array(cut.getchannel("A")) > 0
+    h, w = mask.shape
+
+    rows = row_bounds(mask)
+    cols = [(round(w * i / ANIMAL_COLS), round(w * (i + 1) / ANIMAL_COLS)) for i in range(ANIMAL_COLS)]
+
+    # 칸 안에서의 내용 상자를 전부 겹쳐 하나로 만든다.
+    box = None
+    idle_box = None
+    for r, (y0, y1) in enumerate(rows):
+        for x0, x1 in cols:
+            cell = mask[y0:y1, x0:x1]
+            if not cell.any():
+                continue
+            ys, xs = np.where(cell)
+            local = (int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1)
+            box = local if box is None else union(box, local)
+            if r == 0:
+                idle_box = local if idle_box is None else union(idle_box, local)
+
+    if box is None:
+        print(f"  [건너뜀] {src.name} 내용이 없음")
+        return None
+    if idle_box is None:
+        idle_box = box
+
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    scale = min(1.0, ANIMAL_MAX_FRAME_H / bh)
+    fw, fh = max(1, round(bw * scale)), max(1, round(bh * scale))
+
+    sheet = Image.new("RGBA", (fw * ANIMAL_COLS, fh * ANIMAL_ROWS), (0, 0, 0, 0))
+    for r, (y0, y1) in enumerate(rows):
+        for c, (x0, _) in enumerate(cols):
+            crop = cut.crop((x0 + box[0], y0 + box[1], x0 + box[2], y0 + box[3]))
+            if scale < 1.0:
+                crop = crop.resize((fw, fh), Image.LANCZOS)
+            sheet.paste(crop, (c * fw, r * fh))
+
+    # PNG 로 두면 한 장에 600KB, 22종이면 13MB 다. 사진 같은 렌더라 PNG 가 거의 못 줄인다.
+    # WebP 는 알파를 유지하면서 10분의 1 아래로 떨어진다.
+    relative = f"animal/{habitat.lower()}-{name}.webp"
+    out = OUT_ROOT / relative
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(out, format="WEBP", quality=ANIMAL_WEBP_QUALITY, method=6)
+
+    return {
+        "id": name.upper(),
+        "habitat": habitat,
+        "file": relative,
+        # 서 있는 자세를 기준으로 잰다. 상자는 점프까지 감싸느라 크다.
+        "fit": round((idle_box[3] - idle_box[1]) / bh, 4),
+        "baseline": round((idle_box[3] - box[1]) / bh, 4),
+        "kb": round(out.stat().st_size / 1024),
+    }
+
+
+def union(a: tuple[int, int, int, int], b: tuple[int, int, int, int]) -> tuple[int, int, int, int]:
+    return (min(a[0], b[0]), min(a[1], b[1]), max(a[2], b[2]), max(a[3], b[3]))
+
+
 def alpha_zero_ratio(image: Image.Image) -> float:
     if image.mode != "RGBA":
         return 0.0
@@ -144,8 +283,61 @@ def main() -> int:
         mark = f"컷아웃 <{threshold}" if threshold else "그대로"
         print(f"  {name:26s} {before:5s} -> {relative:24s} [{mark}] alpha0={alpha_zero_ratio(image):.1f}%")
 
+    animals = []
+    for src in sorted(source.glob(f"{ANIMAL_PREFIX}*.png")):
+        entry = prepare_animal(src)
+        if entry:
+            animals.append(entry)
+            print(f"  {src.name:34s} -> {entry['file']:26s} "
+                  f"[fit {entry['fit']} base {entry['baseline']}] {entry['kb']}KB")
+    if animals:
+        write_animal_manifest(animals)
+        print(f"  동물 시트 {len(animals)}종 -> {ANIMAL_MANIFEST}")
+
     print(f"\n완료. 출력: {OUT_ROOT}")
     return 0
+
+
+ANIMAL_MANIFEST = Path("src/assets/animalSheets.ts")
+
+
+def write_animal_manifest(animals: list[dict[str, object]]) -> None:
+    """
+    시트 목록을 TS 로 뽑는다.
+
+    Vite 는 정적 import 여야 해시 URL 과 캐시를 관리한다.
+    손으로 22줄을 적어 두면 파일이 하나 늘 때마다 어긋나므로 여기서 생성한다.
+    """
+    lines = [
+        "/* 이 파일은 scripts/prepare-assets.py 가 생성한다. 직접 고치지 말 것. */",
+        "import type { Habitat } from './manifest'",
+        "",
+    ]
+    for i, a in enumerate(animals):
+        lines.append(f"import sheet{i} from './images/{a['file']}'")
+
+    lines += [
+        "",
+        "export interface AnimalSheetAsset {",
+        "  readonly id: string",
+        "  readonly habitat: Habitat",
+        "  readonly src: string",
+        "  /** 프레임 높이 대비 서 있는 자세의 높이 */",
+        "  readonly fit: number",
+        "  /** 프레임 안에서 발이 놓이는 y (0..1) */",
+        "  readonly baseline: number",
+        "}",
+        "",
+        "export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [",
+    ]
+    for i, a in enumerate(animals):
+        lines.append(
+            f"  {{ id: '{a['id']}', habitat: '{a['habitat']}', src: sheet{i}, "
+            f"fit: {a['fit']}, baseline: {a['baseline']} }},"
+        )
+    lines += ["]", ""]
+
+    ANIMAL_MANIFEST.write_text(chr(10).join(lines), encoding="utf-8")
 
 
 if __name__ == "__main__":

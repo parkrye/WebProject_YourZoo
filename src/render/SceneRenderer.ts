@@ -338,6 +338,8 @@ export class SceneRenderer {
     this.visitorOrder.sort(byVisitorDepth)
 
     for (const v of this.visitorOrder) {
+      // 아직 화면 밖에서 걸어오는 중이면 그릴 게 없다.
+      if (!v.isOnScreen) continue
       // 검출된 프레임은 손님마다 크기가 다르다. 그대로 같은 높이로 그리면
       // **작게 그려진 아이가 어른만큼 커진다.** 원본에서의 상대 크기를 그대로 살린다.
       // 실측: 행별 밴드 높이 235 / 224 / 168(아이) / 188.

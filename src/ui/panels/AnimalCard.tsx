@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { GUI } from '@/assets/manifest'
-import { ANIMAL_SELL_REFUND, SHEET_COST } from '@/domain/balance'
+import { ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, SHEET_COST } from '@/domain/balance'
 import type { Animal } from '@/domain/animal'
 import { TRAIT_KEYS, TRAIT_LABELS } from '@/domain/traits'
 import { AnimalThumb } from '@/ui/components/AnimalThumb'
+import { BitmapInput } from '@/ui/components/BitmapInput'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
 import { ConfirmPopup } from '@/ui/components/ConfirmPopup'
@@ -33,6 +34,14 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
   const [baking, setBaking] = useState(false)
   const cash = useGameStore((s) => s.cash)
   const animateAnimal = useGameStore((s) => s.animateAnimal)
+  const renameAnimal = useGameStore((s) => s.renameAnimal)
+  const [renaming, setRenaming] = useState(false)
+  const [draftName, setDraftName] = useState(animal.name)
+
+  const commitName = (): void => {
+    renameAnimal(animal.id, draftName)
+    setRenaming(false)
+  }
 
   const animated = animal.spriteSheet !== null
   const canAnimate = !readOnly && !animated && cash >= SHEET_COST
@@ -41,8 +50,38 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
     <>
       <div className="popup animal-card" style={{ width: CARD_WIDTH, height: CARD_HEIGHT }}>
       <header className="popup-header">
-        <BitmapLabel text={animal.name} size={24} />
-        <IconButton icon={GUI.CLOSE} size={40} title="CLOSE" onClick={onClose} />
+        {/* 이름은 머리글 자리에서 바로 고친다. 이름 하나 바꾸자고 팝업을 또 띄울 일은 아니다. */}
+        {renaming ? (
+          <>
+            <BitmapInput
+              value={draftName}
+              maxLength={ANIMAL_NAME_MAX_LENGTH}
+              size={22}
+              width={190}
+              placeholder="NAME"
+              onChange={setDraftName}
+            />
+            <IconButton icon={GUI.CONFIRM} size={40} title="OK" onClick={commitName} />
+          </>
+        ) : (
+          <>
+            <BitmapLabel text={animal.name} size={24} />
+            <div className="card-header-actions">
+              {!readOnly && (
+                <IconButton
+                  icon={GUI.PENCIL}
+                  size={36}
+                  title="RENAME"
+                  onClick={() => {
+                    setDraftName(animal.name)
+                    setRenaming(true)
+                  }}
+                />
+              )}
+              <IconButton icon={GUI.CLOSE} size={40} title="CLOSE" onClick={onClose} />
+            </div>
+          </>
+        )}
       </header>
 
       <div className="popup-content animal-card-body">
