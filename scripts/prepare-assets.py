@@ -91,8 +91,8 @@ MOTION_COLS = 8
 # 층 이름이 파일에 없어서 여기서 정한다. `{층}_{이름}-{모션}.png` 로 오면 이 표를 안 본다.
 MOTION_HABITAT = {
     "bear": "LAND", "orangutan": "LAND",
-    "parrot": "SKY",
-    "shark": "WATER",
+    "parrot": "SKY", "peacock": "SKY",
+    "beluga": "WATER", "shark": "WATER",
 }
 
 # 잘라낸 프레임의 최대 높이(px). 화면에서 동물은 100px 안팎이라

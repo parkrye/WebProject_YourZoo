@@ -3,9 +3,11 @@ import type { Habitat } from './manifest'
 import type { AnimalMotion } from '@/domain/animal'
 
 import sheet0 from './images/animal/land-bear.webp'
-import sheet1 from './images/animal/land-orangutan.webp'
-import sheet2 from './images/animal/sky-parrot.webp'
-import sheet3 from './images/animal/water-shark.webp'
+import sheet1 from './images/animal/water-beluga.webp'
+import sheet2 from './images/animal/land-orangutan.webp'
+import sheet3 from './images/animal/sky-parrot.webp'
+import sheet4 from './images/animal/sky-peacock.webp'
+import sheet5 from './images/animal/water-shark.webp'
 
 export interface AnimalSheetAsset {
   readonly id: string
@@ -29,7 +31,9 @@ export interface AnimalSheetAsset {
 
 export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [
   { id: 'BEAR', habitat: 'LAND', src: sheet0, fit: 1.0, baseline: 1.0, frameW: 256, frameH: 219, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
-  { id: 'ORANGUTAN', habitat: 'LAND', src: sheet1, fit: 1.0, baseline: 1.0, frameW: 174, frameH: 220, cols: 8, rows: 1, frames: [8], motions: ['IDLE'] },
-  { id: 'PARROT', habitat: 'SKY', src: sheet2, fit: 0.8664, baseline: 0.9357, frameW: 243, frameH: 220, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
-  { id: 'SHARK', habitat: 'WATER', src: sheet3, fit: 0.9161, baseline: 0.9161, frameW: 240, frameH: 155, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+  { id: 'BELUGA', habitat: 'WATER', src: sheet1, fit: 0.9826, baseline: 0.9999, frameW: 223, frameH: 115, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+  { id: 'ORANGUTAN', habitat: 'LAND', src: sheet2, fit: 1.0, baseline: 1.0, frameW: 227, frameH: 220, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+  { id: 'PARROT', habitat: 'SKY', src: sheet3, fit: 0.8664, baseline: 0.9357, frameW: 243, frameH: 220, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+  { id: 'PEACOCK', habitat: 'SKY', src: sheet4, fit: 0.9615, baseline: 0.972, frameW: 252, frameH: 208, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
+  { id: 'SHARK', habitat: 'WATER', src: sheet5, fit: 0.9161, baseline: 0.9161, frameW: 240, frameH: 155, cols: 8, rows: 2, frames: [8, 8], motions: ['IDLE', 'MOVE'] },
 ]
