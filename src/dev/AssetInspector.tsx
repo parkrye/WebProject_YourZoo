@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { getAssets } from '@/assets/AssetStore'
-import { FONT_CHARS, GUI_GRID } from '@/assets/manifest'
+import { FONT_CHARS, GUI_GRID, GUI_SHEET2_BASE } from '@/assets/manifest'
+import { IconGlyph } from '@/ui/components/IconGlyph'
 
 /**
  * 개발용 검증 페이지. `?dev=assets` 로 진입한다.
@@ -33,7 +34,7 @@ export function AssetInspector() {
     void fontSheet
   }, [])
 
-  const { gui, fontSheet, visitor } = getAssets()
+  const { gui, gui2, fontSheet, visitor } = getAssets()
 
   return (
     <div style={PAGE}>
@@ -47,6 +48,18 @@ export function AssetInspector() {
       <div style={GRID}>
         {Array.from({ length: gui.count }, (_, i) => (
           <IconCell key={i} index={i} />
+        ))}
+      </div>
+
+      {/* 두 번째 시트는 화면에서 쓰는 길(CSS 배경)로 그린다. 캔버스로만 보면
+          IconGlyph 가 엉뚱한 시트를 집어도 여기서는 멀쩡해 보인다. */}
+      <h2 style={H2}>3-2. GUI ICONS 2 — {gui2.count} cells, 마지막 두 칸은 비어 있다</h2>
+      <div style={GRID}>
+        {Array.from({ length: gui2.count }, (_, i) => (
+          <div key={i} style={CELL}>
+            <IconGlyph icon={(GUI_SHEET2_BASE + i) as never} size={72} />
+            <span style={CELL_LABEL}>{GUI_SHEET2_BASE + i}</span>
+          </div>
         ))}
       </div>
 

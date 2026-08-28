@@ -65,6 +65,20 @@ SINGLE_SLACK = 1.45
 # 본체 대비 이 비율보다 작은 덩어리는 옆 그림에서 스친 조각으로 본다.
 DUST_RATIO = 0.03
 
+# 두 번째 GUI 시트. 칸 사이에 격자선이 그려져 있고 줄 높이도 균등하지 않아
+# 원본을 그대로 나눌 수 없다. 선을 지우고 균등 격자로 다시 짠다.
+GUI2_SRC = "gui2.png"
+GUI2_OUT = "sprite/icon-gui2.png"
+GUI2_COLS = 6
+GUI2_ROWS = 4
+# 이 아래 알파는 잡티로 본다. 배경 전체에 1~4 짜리가 30만 픽셀 깔려 있다.
+GUI2_ALPHA = 16
+# 이 비율 이상 채워진 열/행은 그림이 아니라 칸을 가르는 선이다.
+GUI2_LINE_FILL = 0.9
+# 선을 지울 때 양옆으로 더 지우는 폭(px). 선의 안티에일리어싱 가장자리는
+# 이 기준에 걸리지 않아, 그대로 두면 칸 바닥에 얇은 띠로 남는다.
+GUI2_LINE_PAD = 4
+
 # 파일명의 층 -> 게임의 서식지
 ANIMAL_HABITAT = {"upper": "SKY", "middle": "LAND", "lower": "WATER"}
 
@@ -471,6 +485,12 @@ def main() -> int:
         mark = f"컷아웃 <{threshold}" if threshold else "그대로"
         print(f"  {name:26s} {before:5s} -> {relative:24s} [{mark}] alpha0={alpha_zero_ratio(image):.1f}%")
 
+    gui2 = source / GUI2_SRC
+    if gui2.exists():
+        size = prepare_gui2(gui2)
+        if size:
+            print(f"  {GUI2_SRC:26s} -> {GUI2_OUT:24s} [격자 {size[0]}x{size[1]}]")
+
     small = source / SMALL_FONT_SRC
     if small.exists():
         size = prepare_small_font(small)
@@ -507,6 +527,103 @@ SMALL_FONT_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
 SMALL_FONT_DESCENDER = 0.32
 # 글자 좌우 여백(px). 붙여 놓으면 글자끼리 닿는다.
 SMALL_FONT_SIDE_BEARING = 3
+
+
+def _lines(solid: np.ndarray, axis: int, fill: float) -> list[tuple[int, int]]:
+    """
+    칸을 가르는 선들의 범위. 가장자리에 닿은 것은 시트 테두리이므로 뺀다.
+
+    선의 안티에일리어싱 가장자리는 `fill` 기준에 걸리지 않는다.
+    그대로 두면 칸 바닥에 얇은 띠로 남아 아이콘 상자가 칸 전체로 커진다.
+    그래서 찾은 범위를 양옆으로 조금씩 넓혀 잡는다.
+    """
+    length = solid.shape[1 - axis]
+    limit = solid.shape[axis]
+    out = []
+    for lo, hi in runs_of(solid.sum(axis=1 - axis) >= length * fill):
+        if lo <= 2 or hi >= limit - 2:
+            continue
+        out.append((max(0, lo - GUI2_LINE_PAD), min(limit, hi + GUI2_LINE_PAD)))
+    return out
+
+
+def prepare_gui2(src: Path) -> tuple[int, int] | None:
+    """
+    두 번째 GUI 시트를 균등 격자로 다시 짠다.
+
+    이 원본은 그대로 나눌 수 없다. 두 가지가 걸린다.
+
+    하나는 **칸을 가르는 격자선이 그림으로 들어가 있다는 것.** 4px 짜리 선이라
+    그냥 자르면 아이콘마다 테두리가 붙는다.
+
+    또 하나는 **줄 높이가 균등하지 않다는 것.** 가로선이 256, 512, 745 에 있다.
+    6x4 로 균등 분할하면 세 번째 줄부터 어긋나 아이콘 위아래가 잘린다.
+
+    그래서 선을 찾아 지우고, 그 선을 칸 경계로 삼아 아이콘을 꺼낸 뒤,
+    칸마다 꽉 차게 넣어 균등 격자로 다시 쌓는다.
+    꽉 채우는 이유는 첫 번째 시트가 알파 검출로 같은 결과를 내기 때문이다 —
+    두 시트의 아이콘이 같은 크기로 보여야 한다.
+    """
+    rgba = np.array(Image.open(src).convert("RGBA"))
+    # 배경에 깔린 옅은 알파를 먼저 턴다. 이게 남으면 아이콘 상자가 칸 전체가 된다.
+    rgba[..., 3][rgba[..., 3] < GUI2_ALPHA] = 0
+    solid = rgba[..., 3] > 0
+    height, width = solid.shape
+
+    xs = _lines(solid, 1, GUI2_LINE_FILL)
+    ys = _lines(solid, 0, GUI2_LINE_FILL)
+    if len(xs) != GUI2_COLS - 1 or len(ys) != GUI2_ROWS - 1:
+        print(f"  [건너뜀] {src.name} 격자선 {len(xs)}x{len(ys)} 개, 기대는 "
+              f"{GUI2_COLS - 1}x{GUI2_ROWS - 1}")
+        return None
+
+    # 선 자체를 지운다. 아이콘은 칸 안쪽에 여백을 두고 그려져 있어 닿지 않는다.
+    for lo, hi in xs:
+        rgba[:, lo:hi, 3] = 0
+    for lo, hi in ys:
+        rgba[lo:hi, :, 3] = 0
+
+    # 칸은 선과 선 사이다.
+    cols = list(zip([0, *[hi for _, hi in xs]], [*[lo for lo, _ in xs], width]))
+    rows = list(zip([0, *[hi for _, hi in ys]], [*[lo for lo, _ in ys], height]))
+
+    boxes: dict[int, tuple[int, int, int, int]] = {}
+    for r, (y0, y1) in enumerate(rows):
+        for c, (x0, x1) in enumerate(cols):
+            piece = rgba[y0:y1, x0:x1, 3] > 0
+            if not piece.any():
+                continue  # 마지막 줄 두 칸은 비어 있다. 그대로 비워 둔다.
+            ay, ax = np.where(piece)
+            boxes[r * GUI2_COLS + c] = (x0 + int(ax.min()), y0 + int(ay.min()),
+                                        x0 + int(ax.max()) + 1, y0 + int(ay.max()) + 1)
+
+    if not boxes:
+        print(f"  [건너뜀] {src.name} 내용이 없음")
+        return None
+
+    cell = max(max(b[2] - b[0], b[3] - b[1]) for b in boxes.values())
+    sheet = Image.new("RGBA", (cell * GUI2_COLS, cell * GUI2_ROWS), (0, 0, 0, 0))
+    source_image = Image.fromarray(rgba, mode="RGBA")
+
+    for index, (x0, y0, x1, y1) in boxes.items():
+        icon = source_image.crop((x0, y0, x1, y1))
+        scale = min(cell / icon.width, cell / icon.height)
+        size = (max(1, round(icon.width * scale)), max(1, round(icon.height * scale)))
+        if size != icon.size:
+            icon = icon.resize(size, Image.LANCZOS)
+        r, c = divmod(index, GUI2_COLS)
+        sheet.paste(icon, (c * cell + (cell - size[0]) // 2,
+                           r * cell + (cell - size[1]) // 2))
+
+    # 리샘플링이 아이콘 둘레에 옅은 잔향을 남긴다. 그대로 두면 상자를 재거나
+    # 알파로 칸을 검출할 때 아이콘이 칸 전체를 차지한 것처럼 보인다.
+    final = np.array(sheet)
+    final[..., 3][final[..., 3] < GUI2_ALPHA] = 0
+
+    out = OUT_ROOT / GUI2_OUT
+    out.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(final, mode="RGBA").save(out, optimize=True)
+    return sheet.size
 
 
 def prepare_small_font(src: Path) -> tuple[int, int] | None:

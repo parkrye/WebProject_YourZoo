@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import { CLOSE_HOUR, OPEN_HOUR } from '@/domain/clock'
+import { guiSheet } from '@/assets/guiSheet'
+import { CLOCK_FACE_CENTRE, CLOCK_HAND_PIVOT, CLOCK_HAND_REACH, GUI } from '@/assets/manifest'
 import { DAY_DURATION_SEC } from '@/domain/balance'
 
 interface ClockDialProps {
@@ -16,9 +17,6 @@ interface ClockDialProps {
  *
  * 운영 시간(09~22시)만 도므로 12시간 시계가 아니라 **한 바퀴가 곧 하루**다.
  * 문 여는 시각이 12시 방향, 거기서 시계 방향으로 한 바퀴 돌면 문을 닫는다.
- *
- * 지금은 캔버스로 그린다. GUI 시트에 시계 문자판이 들어오면
- * 이 컴포넌트의 배경만 그 스프라이트로 바꾸면 된다 — 바늘은 그대로 얹는다.
  */
 export function ClockDial({ elapsed, size = 46 }: ClockDialProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -35,47 +33,30 @@ export function ClockDial({ elapsed, size = 46 }: ClockDialProps) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, size, size)
 
-    const r = size / 2
-    const face = r * 0.86
+    const face = guiSheet(GUI.CLOCK_FACE)
+    const hand = guiSheet(GUI.CLOCK_HAND)
+    face.atlas.drawContained(ctx, face.index, 0, 0, size, size)
 
-    // 문자판
-    ctx.beginPath()
-    ctx.arc(r, r, face, 0, Math.PI * 2)
-    ctx.fillStyle = '#f4e6c4'
-    ctx.fill()
-    ctx.lineWidth = Math.max(2, size * 0.055)
-    ctx.strokeStyle = '#8a5a2b'
-    ctx.stroke()
+    /*
+      바늘은 **아래쪽 구슬을 축으로** 돈다. 칸 한가운데로 돌리면 축이 문자판 중심에서
+      벗어나 바늘이 원을 그리며 떠다닌다.
 
-    // 눈금. 운영 시간을 시간마다 하나씩 찍는다.
-    const hours = CLOSE_HOUR - OPEN_HOUR
-    ctx.strokeStyle = 'rgba(138, 90, 43, 0.55)'
-    ctx.lineWidth = Math.max(1, size * 0.03)
-    for (let i = 0; i < hours; i++) {
-      const angle = (i / hours) * Math.PI * 2 - Math.PI / 2
-      const inner = face * (i % 3 === 0 ? 0.7 : 0.82)
-      ctx.beginPath()
-      ctx.moveTo(r + Math.cos(angle) * inner, r + Math.sin(angle) * inner)
-      ctx.lineTo(r + Math.cos(angle) * face * 0.94, r + Math.sin(angle) * face * 0.94)
-      ctx.stroke()
-    }
+      두 아이콘은 각자 칸을 꽉 채우도록 그려져 있다. 그대로 같은 크기로 겹치면
+      바늘이 문자판보다 커서 밖으로 뻗는다. 바늘 끝이 문자판 안에 들어오도록 줄인다.
+    */
+    const frame = hand.atlas.frame(hand.index)
+    const handSize = (size * CLOCK_HAND_REACH) / CLOCK_HAND_PIVOT.y
 
-    // 바늘. 하루가 한 바퀴다.
     const progress = Math.min(1, Math.max(0, elapsed / DAY_DURATION_SEC))
-    const angle = progress * Math.PI * 2 - Math.PI / 2
-
-    ctx.strokeStyle = '#7a2f22'
-    ctx.lineWidth = Math.max(2, size * 0.075)
-    ctx.lineCap = 'round'
-    ctx.beginPath()
-    ctx.moveTo(r, r)
-    ctx.lineTo(r + Math.cos(angle) * face * 0.66, r + Math.sin(angle) * face * 0.66)
-    ctx.stroke()
-
-    ctx.beginPath()
-    ctx.arc(r, r, Math.max(1.5, size * 0.055), 0, Math.PI * 2)
-    ctx.fillStyle = '#7a2f22'
-    ctx.fill()
+    ctx.save()
+    ctx.translate(size * CLOCK_FACE_CENTRE.x, size * CLOCK_FACE_CENTRE.y)
+    ctx.rotate(progress * Math.PI * 2)
+    ctx.drawImage(
+      hand.atlas.image,
+      frame.sx, frame.sy, frame.sw, frame.sh,
+      -handSize * CLOCK_HAND_PIVOT.x, -handSize * CLOCK_HAND_PIVOT.y, handSize, handSize,
+    )
+    ctx.restore()
   }, [elapsed, size])
 
   return <canvas ref={canvasRef} className="clock-dial" style={{ width: size, height: size }} />

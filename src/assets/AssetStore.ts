@@ -1,7 +1,7 @@
 import { Atlas } from './atlas'
 import { loadImages, type ProgressFn } from './loader'
 import {
-  AREA_SRC, FENCE_SRC, FONT_GRID, FONT_SRC, GUI_GRID, GUI_SRC,
+  AREA_SRC, FENCE_SRC, FONT_GRID, FONT_SRC, GUI_GRID, GUI_SRC, GUI2_GRID, GUI2_SRC,
   FONT_SMALL_GRID, FONT_SMALL_SRC,
   PROP_GRID, PROP_SRC, SKY_SRC, VISITOR_GRID, VISITOR_SRC,
   type BiomeId, type SkyPhase,
@@ -16,6 +16,8 @@ export interface Assets {
   readonly visitor: Atlas
   readonly gui: Atlas
   readonly guiSrc: string
+  readonly gui2: Atlas
+  readonly gui2Src: string
   readonly font: BitmapFont
   /** 작은 글씨용. 큰 폰트를 작게 줄이면 획이 뭉개진다. */
   readonly fontSmall: BitmapFont
@@ -38,7 +40,7 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
     ...Object.values(AREA_SRC),
     ...Object.values(PROP_SRC),
     FONT_SMALL_SRC,
-    FENCE_SRC, VISITOR_SRC, GUI_SRC, FONT_SRC,
+    FENCE_SRC, VISITOR_SRC, GUI_SRC, GUI2_SRC, FONT_SRC,
   ]
 
   const images = await loadImages(srcs, onProgress)
@@ -79,6 +81,9 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
     // GUI 아이콘은 명목 셀 경계를 넘나든다 → 알파 검출로 실제 박스를 쓴다.
     gui: new Atlas(pick(GUI_SRC), GUI_GRID, { detect: true }),
     guiSrc: GUI_SRC,
+    // 두 번째 시트는 전처리가 이미 균등 격자로 짜 두었다. 검출할 게 없다.
+    gui2: new Atlas(pick(GUI2_SRC), GUI2_GRID, {}),
+    gui2Src: GUI2_SRC,
     font: new BitmapFont(fontSheet, fontAtlas),
     fontSmall: new BitmapFont(smallSheet, smallAtlas),
     fontSheet,

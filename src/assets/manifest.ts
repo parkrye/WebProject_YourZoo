@@ -16,6 +16,7 @@ import fence from './images/bg/fence.png'
 import iconFont from './images/sprite/icon-font.png'
 import iconFontSmall from './images/sprite/icon-font-small.png'
 import iconGui from './images/sprite/icon-gui.png'
+import iconGui2 from './images/sprite/icon-gui2.png'
 import propField from './images/sprite/prop-field.png'
 import propDesert from './images/sprite/prop-desert.png'
 import propIce from './images/sprite/prop-ice.png'
@@ -50,6 +51,7 @@ export const PROP_SRC: Record<BiomeId, string> = {
 export const FENCE_SRC = fence
 export const VISITOR_SRC = humanVisitor
 export const GUI_SRC = iconGui
+export const GUI2_SRC = iconGui2
 export const FONT_SRC = iconFont
 export const FONT_SMALL_SRC = iconFontSmall
 
@@ -66,6 +68,14 @@ export interface GridSpec {
 }
 
 export const GUI_GRID: GridSpec = { cols: 6, rows: 6, sheetW: 1254, sheetH: 1254 }
+/**
+ * 두 번째 GUI 시트. 전처리에서 **균등 격자로 다시 짰다.**
+ *
+ * 원본은 칸 사이에 격자선이 그려져 있고 줄 높이도 균등하지 않았다(가로선이 256, 512, 745).
+ * 게다가 마지막 줄 두 칸이 비어 있어, 알파 검출에 맡기면 칸 수를 맞추려고
+ * 나무와 트로피를 반으로 쪼갠다. 그래서 전처리가 아이콘을 칸에 꽉 채워 다시 쌓는다.
+ */
+export const GUI2_GRID: GridSpec = { cols: 6, rows: 4, sheetW: 1506, sheetH: 1004 }
 export const FONT_GRID: GridSpec = { cols: 6, rows: 6, sheetW: 1024, sheetH: 1536 }
 /**
  * 작은 폰트. 전처리에서 **공통 여백만 잘라** 균등 격자로 다시 짰다.
@@ -99,7 +109,35 @@ export const GUI = {
   PENCIL_YELLOW: 24, PENCIL_RED: 25, PENCIL_BLUE: 26,
   PENCIL_GREEN: 27, PENCIL_BROWN: 28, PENCIL_BLACK: 29,
   BINOCULARS: 30, INFO: 31, HELP: 32, CLOSE: 33, CONFIRM: 34, EYE_OFF: 35,
+
+  // ── 두 번째 시트 (6x4) ──────────────────────────────────────
+  // 번호를 이어 붙여 **아이콘 공간을 하나로 유지한다.** 호출부는 어느 시트인지
+  // 알 필요가 없다 — `GUI.TREE` 나 `GUI.COIN` 이나 쓰는 법이 같다.
+  COIN_STACK: 36, COIN_LARGE: 37, CLOCK_FACE: 38, CLOCK_HAND: 39, HEART: 40, STAR: 41,
+  LOCK: 42, LOCK_OPEN: 43, SHOP: 44, CRATE: 45, TRUCK: 46, PAINT: 47,
+  PAW: 48, BARREL: 49, CONE: 50, SIGNPOST: 51, PLANKS: 52, BUSH: 53,
+  TREE: 54, TROPHY: 55, FILM: 56, PEOPLE: 57,
 } as const
+
+/** 이 번호부터는 두 번째 시트다. */
+export const GUI_SHEET2_BASE = 36
+
+/*
+  시계 아이콘의 실측값. 모두 **칸 크기 대비** 비율이다.
+
+  두 아이콘은 각자 칸을 꽉 채우도록 그려져 있어, 그냥 겹쳐 놓으면 바늘이
+  문자판보다 커서 밖으로 뻗는다. 문자판의 원이 어디인지, 바늘의 축이 어디인지를
+  재어 두고 그때그때 맞춘다.
+*/
+
+/** 문자판 원의 중심. 위쪽 고리 때문에 칸 한가운데가 아니다. */
+export const CLOCK_FACE_CENTRE = { x: 0.498, y: 0.49 } as const
+
+/** 바늘의 회전축(아래쪽 구슬). 칸 한가운데로 돌리면 바늘이 원을 그리며 떠다닌다. */
+export const CLOCK_HAND_PIVOT = { x: 0.498, y: 0.809 } as const
+
+/** 축에서 바늘 끝까지가 문자판 반지름(0.458)의 어디까지 닿을지. */
+export const CLOCK_HAND_REACH = 0.36
 
 export type GuiIcon = (typeof GUI)[keyof typeof GUI]
 

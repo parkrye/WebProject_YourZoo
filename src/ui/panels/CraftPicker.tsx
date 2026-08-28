@@ -48,7 +48,7 @@ export function CraftPicker<T extends string>({
               >
                 <div className="craft-card-head">
                   <BitmapLabel text={spec.label} size={22} />
-                  {spec.locked && <IconGlyph icon={GUI.HELP} size={20} />}
+                  {spec.locked && <IconGlyph icon={GUI.LOCK} size={20} />}
                 </div>
 
                 <BitmapLabel text={spec.hint} size={13} />
