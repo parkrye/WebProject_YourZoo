@@ -4,14 +4,21 @@ import { placedIn, type Animal } from './animal'
 import {
   ANIMAL_UPKEEP_PER_DAY, DAY_DURATION_SEC, MAX_VISITORS_PER_ENCLOSURE, OVERCROWD_PENALTY,
   OVERCROWD_THRESHOLD, PHASE_END, REPUTATION_PER_APPEAL, REPUTATION_PER_VISITOR,
+  MIN_VISITORS_WITH_ANIMALS,
   STORED_UPKEEP_PER_DAY, TICKET_PRICE, VIEW_INCOME_PER_APPEAL, VISITOR_PHASE_MULTIPLIER,
 } from './balance'
 
-/** 명성과 시간대로부터 해당 우리의 동시 관람객 수를 구한다. */
+/**
+ * 명성과 시간대로부터 해당 우리의 동시 관람객 수를 구한다.
+ *
+ * 동물이 한 마리라도 있으면 **최소 한 명은 온다.** 밤에는 배율이 0.15 라
+ * 반올림하면 0 이 되는데, 그러면 그 시간대에는 수입이 통째로 끊긴다 —
+ * 하루의 3분의 1 을 아무 일도 일어나지 않는 시간으로 두면 볼 이유가 없어진다.
+ */
 export function visitorCount(reputation: number, phase: SkyPhase, hasAnimals: boolean): number {
   if (!hasAnimals) return 0
   const scaled = baseVisitors(reputation) * VISITOR_PHASE_MULTIPLIER[phase]
-  return clamp(Math.round(scaled), 0, MAX_VISITORS_PER_ENCLOSURE)
+  return clamp(Math.round(scaled), MIN_VISITORS_WITH_ANIMALS, MAX_VISITORS_PER_ENCLOSURE)
 }
 
 function baseVisitors(reputation: number): number {

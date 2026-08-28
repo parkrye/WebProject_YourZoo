@@ -89,6 +89,14 @@ export const OVERCROWD_PENALTY = 2
 
 export const MAX_ANIMALS_PER_ENCLOSURE = 12
 export const MAX_VISITORS_PER_ENCLOSURE = 14
+/**
+ * 동물이 있는 우리의 최소 동시 관람객.
+ *
+ * 밤 배율이 0.15 라 명성이 낮으면 반올림해서 0 이 되고, 그러면 그 시간대에는
+ * 수입이 통째로 끊긴다. 하루의 3분의 1 을 아무 일도 없는 시간으로 두면
+ * 화면을 볼 이유가 없어진다. 한 명은 늘 있게 해서 기본 수입을 만든다.
+ */
+export const MIN_VISITORS_WITH_ANIMALS = 1
 
 /**
  * 한 손님이 머무는 시간(초).

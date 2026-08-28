@@ -7,7 +7,7 @@ import {
 import { audio } from '@/audio/AudioManager'
 import { startTicker } from '@/core/ticker'
 import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST } from '@/domain/balance'
-import { clockLabel, phaseOf } from '@/domain/clock'
+import { phaseOf } from '@/domain/clock'
 import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
 import { SceneRenderer, type EnclosureTransition } from '@/render/SceneRenderer'
 import {
@@ -19,6 +19,7 @@ import { canPlaceProp, storedProps, type OwnedProp } from '@/domain/prop'
 import { AnimalItemThumb, PropItemThumb } from '@/ui/components/ItemThumb'
 import { BarButton } from '@/ui/components/BarButton'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
+import { ClockDial } from '@/ui/components/ClockDial'
 import { IconButton } from '@/ui/components/IconButton'
 import { IconGlyph } from '@/ui/components/IconGlyph'
 import { AnimalCard } from '@/ui/panels/AnimalCard'
@@ -386,7 +387,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     placeAnimal(state.item.animal.id, enclosure)
   }
 
-  const time = clockLabel(elapsed)
   const here = animals.filter((a) => a.status === 'PLACED' && a.enclosureId === enclosure).length
   const canPan = detail && tool === 'PAN'
 
@@ -445,7 +445,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                 ) : (
                   <>
                     <BitmapLabel text={`DAY ${day}`} size={34} />
-                    <BitmapLabel text={`${time.hh} ${time.mm}`} size={34} />
+                    {/* 숫자는 읽어서 해석해야 하지만 바늘은 한눈에 지금이 어디쯤인지 보여 준다. */}
+                    <ClockDial elapsed={elapsed} size={46} />
                   </>
                 )}
               </div>
