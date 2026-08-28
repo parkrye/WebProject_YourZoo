@@ -38,29 +38,31 @@ export interface AnimalSheetAsset {
   /** 격자 크기. 시트마다 다르다 — 닭과 까마귀와 공작은 7칸이다. */
   readonly cols: number
   readonly rows: number
+  /** 줄마다의 실제 프레임 수. 한 시트 안에서도 다르다 — 말은 8/7/8 이다. */
+  readonly frames: readonly number[]
 }
 
 export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [
-  { id: 'ALIGATOR', habitat: 'WATER', src: sheet0, fit: 0.8182, baseline: 1.0, frameW: 248, frameH: 88, cols: 8, rows: 3 },
-  { id: 'BELUGA', habitat: 'WATER', src: sheet1, fit: 0.5329, baseline: 1.0, frameW: 216, frameH: 152, cols: 8, rows: 3 },
-  { id: 'MARLIN', habitat: 'WATER', src: sheet2, fit: 0.6287, baseline: 1.0, frameW: 256, frameH: 167, cols: 8, rows: 3 },
-  { id: 'PENGUIN', habitat: 'WATER', src: sheet3, fit: 0.7317, baseline: 1.0, frameW: 213, frameH: 123, cols: 8, rows: 3 },
-  { id: 'PIRANHA', habitat: 'WATER', src: sheet4, fit: 0.7606, baseline: 1.0, frameW: 219, frameH: 142, cols: 8, rows: 3 },
-  { id: 'SHARK', habitat: 'WATER', src: sheet5, fit: 0.7241, baseline: 1.0, frameW: 240, frameH: 145, cols: 8, rows: 3 },
-  { id: 'TURTLE', habitat: 'WATER', src: sheet6, fit: 0.6352, baseline: 1.0, frameW: 224, frameH: 159, cols: 8, rows: 3 },
-  { id: 'BEAR', habitat: 'LAND', src: sheet7, fit: 0.678, baseline: 1.0, frameW: 218, frameH: 205, cols: 8, rows: 3 },
-  { id: 'HORSE', habitat: 'LAND', src: sheet8, fit: 0.8102, baseline: 1.0, frameW: 321, frameH: 216, cols: 8, rows: 3 },
-  { id: 'MONKEY', habitat: 'LAND', src: sheet9, fit: 0.9756, baseline: 1.0, frameW: 281, frameH: 164, cols: 8, rows: 3 },
-  { id: 'ORANGUTAN', habitat: 'LAND', src: sheet10, fit: 0.6944, baseline: 1.0, frameW: 237, frameH: 216, cols: 8, rows: 3 },
-  { id: 'POLARBEAR', habitat: 'LAND', src: sheet11, fit: 0.6452, baseline: 1.0, frameW: 213, frameH: 186, cols: 8, rows: 3 },
-  { id: 'RABBIT', habitat: 'LAND', src: sheet12, fit: 0.9839, baseline: 1.0, frameW: 305, frameH: 186, cols: 8, rows: 3 },
-  { id: 'TIGGER', habitat: 'LAND', src: sheet13, fit: 0.7308, baseline: 1.0, frameW: 280, frameH: 156, cols: 8, rows: 3 },
-  { id: 'BUTTERFLY', habitat: 'SKY', src: sheet14, fit: 1.0, baseline: 1.0, frameW: 179, frameH: 163, cols: 8, rows: 3 },
-  { id: 'CHICKEN', habitat: 'SKY', src: sheet15, fit: 1.0, baseline: 1.0, frameW: 233, frameH: 185, cols: 7, rows: 3 },
-  { id: 'CROW', habitat: 'SKY', src: sheet16, fit: 1.0, baseline: 1.0, frameW: 252, frameH: 194, cols: 7, rows: 3 },
-  { id: 'DRAGONFLY', habitat: 'SKY', src: sheet17, fit: 1.0, baseline: 1.0, frameW: 213, frameH: 136, cols: 8, rows: 3 },
-  { id: 'PARROT', habitat: 'SKY', src: sheet18, fit: 0.855, baseline: 1.0, frameW: 239, frameH: 200, cols: 8, rows: 3 },
-  { id: 'PEACOCK', habitat: 'SKY', src: sheet19, fit: 0.9412, baseline: 1.0, frameW: 275, frameH: 187, cols: 7, rows: 3 },
-  { id: 'PIGEON', habitat: 'SKY', src: sheet20, fit: 0.9935, baseline: 1.0, frameW: 182, frameH: 153, cols: 8, rows: 3 },
-  { id: 'SPAROW', habitat: 'SKY', src: sheet21, fit: 0.9209, baseline: 1.0, frameW: 231, frameH: 177, cols: 8, rows: 3 },
+  { id: 'ALIGATOR', habitat: 'WATER', src: sheet0, fit: 0.8182, baseline: 1.0, frameW: 233, frameH: 88, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'BELUGA', habitat: 'WATER', src: sheet1, fit: 0.5329, baseline: 1.0, frameW: 216, frameH: 152, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'MARLIN', habitat: 'WATER', src: sheet2, fit: 0.6287, baseline: 1.0, frameW: 226, frameH: 167, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'PENGUIN', habitat: 'WATER', src: sheet3, fit: 0.7317, baseline: 1.0, frameW: 213, frameH: 123, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'PIRANHA', habitat: 'WATER', src: sheet4, fit: 0.7606, baseline: 1.0, frameW: 212, frameH: 142, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'SHARK', habitat: 'WATER', src: sheet5, fit: 0.7241, baseline: 1.0, frameW: 217, frameH: 145, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'TURTLE', habitat: 'WATER', src: sheet6, fit: 0.6352, baseline: 1.0, frameW: 224, frameH: 159, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'BEAR', habitat: 'LAND', src: sheet7, fit: 0.678, baseline: 1.0, frameW: 218, frameH: 205, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'HORSE', habitat: 'LAND', src: sheet8, fit: 0.8102, baseline: 1.0, frameW: 223, frameH: 216, cols: 8, rows: 3, frames: [8, 7, 8] },
+  { id: 'MONKEY', habitat: 'LAND', src: sheet9, fit: 0.9756, baseline: 1.0, frameW: 253, frameH: 164, cols: 8, rows: 3, frames: [8, 7, 8] },
+  { id: 'ORANGUTAN', habitat: 'LAND', src: sheet10, fit: 0.6944, baseline: 1.0, frameW: 270, frameH: 216, cols: 8, rows: 3, frames: [8, 7, 8] },
+  { id: 'POLARBEAR', habitat: 'LAND', src: sheet11, fit: 0.6452, baseline: 1.0, frameW: 213, frameH: 186, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'RABBIT', habitat: 'LAND', src: sheet12, fit: 0.9839, baseline: 1.0, frameW: 202, frameH: 186, cols: 8, rows: 3, frames: [8, 7, 8] },
+  { id: 'TIGGER', habitat: 'LAND', src: sheet13, fit: 0.7308, baseline: 1.0, frameW: 267, frameH: 156, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'BUTTERFLY', habitat: 'SKY', src: sheet14, fit: 1.0, baseline: 1.0, frameW: 179, frameH: 163, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'CHICKEN', habitat: 'SKY', src: sheet15, fit: 1.0, baseline: 1.0, frameW: 233, frameH: 185, cols: 7, rows: 3, frames: [7, 7, 7] },
+  { id: 'CROW', habitat: 'SKY', src: sheet16, fit: 1.0, baseline: 1.0, frameW: 252, frameH: 194, cols: 7, rows: 3, frames: [7, 7, 7] },
+  { id: 'DRAGONFLY', habitat: 'SKY', src: sheet17, fit: 1.0, baseline: 1.0, frameW: 213, frameH: 136, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'PARROT', habitat: 'SKY', src: sheet18, fit: 0.855, baseline: 1.0, frameW: 231, frameH: 200, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'PEACOCK', habitat: 'SKY', src: sheet19, fit: 0.9412, baseline: 1.0, frameW: 275, frameH: 187, cols: 7, rows: 3, frames: [7, 7, 7] },
+  { id: 'PIGEON', habitat: 'SKY', src: sheet20, fit: 0.9935, baseline: 1.0, frameW: 182, frameH: 153, cols: 8, rows: 3, frames: [8, 8, 8] },
+  { id: 'SPAROW', habitat: 'SKY', src: sheet21, fit: 0.9209, baseline: 1.0, frameW: 231, frameH: 177, cols: 8, rows: 3, frames: [8, 8, 8] },
 ]

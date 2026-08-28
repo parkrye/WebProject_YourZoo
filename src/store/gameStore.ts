@@ -504,6 +504,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         imageId: sheetImageId(item.catalogId),
         cols: item.sheet.cols,
         rows: item.sheet.rows,
+        frames: item.sheet.frames,
         // 한 줄이 1초에 한 바퀴 돈다. 칸이 7개면 조금 느리게 돈다.
         fps: item.sheet.cols,
         motions: ['IDLE', 'MOVE', 'SIGNATURE'],

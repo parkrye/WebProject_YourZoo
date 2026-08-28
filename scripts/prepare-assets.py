@@ -57,8 +57,13 @@ ANIMAL_PREFIX = "sprite_animal_"
 ANIMAL_THRESHOLD = 16
 # 작은 틈을 메울 때의 기준(px). 몸에서 떨어져 나온 다리를 몸에 붙이는 데 쓴다.
 GAP_CLOSE = 12
-# 한 줄에 이보다 많은 칸이 나오면 조각난 것으로 본다.
-MAX_FRAMES = 10
+# 한 줄의 칸 수로 그럴듯한 범위. 벗어나면 붙었거나 조각난 줄로 본다.
+FRAMES_MIN = 4
+FRAMES_MAX = 12
+# 한 마리로 볼 폭의 상한(기준폭 대비). 달리는 자세는 서 있는 자세보다 넓다 — 말은 164 대 212 다.
+SINGLE_SLACK = 1.45
+# 본체 대비 이 비율보다 작은 덩어리는 옆 그림에서 스친 조각으로 본다.
+DUST_RATIO = 0.03
 # 붙어 버린 칸을 가를 때 기대 위치에서 옮길 수 있는 폭(칸 폭 대비).
 SEAM_REACH = 0.25
 
@@ -174,77 +179,121 @@ def close_gaps(spans: list[tuple[int, int]], min_gap: int) -> list[tuple[int, in
     return [(lo, hi) for lo, hi in out]
 
 
-def frame_count(mask: np.ndarray, rows: list[tuple[int, int]]) -> int:
-    """
-    이 시트가 한 줄에 **몇 칸**인지.
-
-    8칸으로 정해 두면 안 된다 — 닭과 까마귀는 7칸, 공작도 7칸이다.
-    그렇다고 빈 구간을 세기만 해도 안 된다. 옆 프레임과 붙으면 수가 줄고,
-    다리가 몸에서 떨어지면 늘어난다 (말의 필살기 줄은 구간이 16개다).
-
-    그래서 **원본 그대로** 세어 보고, **작은 틈을 메우고도** 세어 본다.
-    전자는 붙은 경우에 약하고 후자는 조각난 경우에 약하니, 둘 중 큰 쪽을 쓴다.
-    말이 안 되게 큰 수(조각난 줄)는 버린다.
-    """
-    counts = [1]
-    for min_gap in (0, GAP_CLOSE):
-        for y0, y1 in rows:
-            spans = runs_of(mask[y0:y1].any(axis=0))
-            if min_gap:
-                spans = close_gaps(spans, min_gap)
-            if 1 <= len(spans) <= MAX_FRAMES:
-                counts.append(len(spans))
-    return max(counts)
-
-
-def row_cells(band: np.ndarray, count: int) -> list[tuple[int, int]]:
-    """
-    한 줄을 정확히 `count` 칸으로 나눈다. 각 칸은 그 프레임의 가로 범위다.
-
-    **격자로 자르지 않는다.** 그림이 칸 간격에 딱 맞게 그려져 있지 않아
-    격자로 자르면 꼬리와 주둥이가 날아간다. 대신 실제로 비어 있는 자리에서 나눈다.
-
-    구간이 남으면 가장 좁은 틈부터 메워 수를 맞추고,
-    모자라면 붙어 버린 구간을 **세로 잉크가 가장 얇은 열**에서 가른다.
-    """
+def _spans(band: np.ndarray, min_gap: int = 0) -> list[tuple[int, int]]:
     spans = runs_of(band.any(axis=0))
-    if not spans:
-        return [(0, band.shape[1])]
+    return close_gaps(spans, min_gap) if min_gap else spans
 
-    # 많으면 좁은 틈부터 메운다. 몸에서 떨어진 다리가 제 몸으로 돌아간다.
-    while len(spans) > count:
-        gaps = [(spans[i + 1][0] - spans[i][1], i) for i in range(len(spans) - 1)]
-        _, i = min(gaps)
-        spans[i : i + 2] = [(spans[i][0], spans[i + 1][1])]
 
-    # 모자라면 넓은 구간을 가른다. 몇 칸이 붙었는지는 폭으로 가늠한다.
+def single_width(mask: np.ndarray, rows: list[tuple[int, int]]) -> float:
+    """
+    이 시트에서 **한 마리가 차지하는 폭**.
+
+    기준 줄은 구간이 그럴듯한 개수(4~12)로 나뉜 줄 중 가장 많이 나뉜 줄이다.
+    가장 많이 나뉜 줄을 무작정 고르면 안 된다 — 다리가 몸에서 떨어진 줄은
+    구간이 16~17개까지 늘어나고, 그 중앙값은 다리 한 짝의 폭이다
+    (실제로 기준폭이 17px 로 잡혀 한 줄이 72칸이 된 적이 있다).
+    """
+    best: list[tuple[int, int]] = []
+    for y0, y1 in rows:
+        for spans in (_spans(mask[y0:y1]), _spans(mask[y0:y1], GAP_CLOSE)):
+            if FRAMES_MIN <= len(spans) <= FRAMES_MAX and len(spans) > len(best):
+                best = spans
+    if not best:
+        best = max((_spans(mask[y0:y1]) for y0, y1 in rows), key=len, default=[(0, mask.shape[1])])
+    return float(np.median([hi - lo for lo, hi in best])) or 1.0
+
+
+def row_frames(mask: np.ndarray, rows: list[tuple[int, int]], single: float) -> list[int]:
+    """
+    **줄마다** 프레임이 몇 개인지.
+
+    한 시트 안에서도 줄마다 다르다 — 말은 서 있는 줄이 8칸인데 걷는 줄은 **7칸**이다.
+    시트 하나에 한 숫자를 쓰면 그 줄의 말 한 마리가 두 칸으로 쪼개진다.
+
+    구간 하나가 한 마리인지 여러 마리가 붙은 것인지는 폭으로 가른다.
+    달리는 자세는 서 있는 자세보다 넓으므로 여유를 둔다 — 말은 164 대 212 다.
+    """
+    # 모든 구간이 한 마리 폭인 줄은 믿을 만하다. 그런 줄의 최대 개수를 상한으로 삼는다.
+    cap = 0
+    for y0, y1 in rows:
+        for spans in (_spans(mask[y0:y1]), _spans(mask[y0:y1], GAP_CLOSE)):
+            if not (FRAMES_MIN <= len(spans) <= FRAMES_MAX):
+                continue
+            if all(hi - lo <= single * SINGLE_SLACK for lo, hi in spans):
+                cap = max(cap, len(spans))
+
+    counts = []
+    for y0, y1 in rows:
+        total = 0
+        for lo, hi in _spans(mask[y0:y1], GAP_CLOSE):
+            width = hi - lo
+            total += 1 if width <= single * SINGLE_SLACK else max(1, round(width / single))
+        counts.append(min(total, cap) if cap else total)
+    return counts
+
+
+def row_cells(band: np.ndarray, count: int, width: int) -> list[tuple[int, int]]:
+    """
+    한 줄을 정확히 `count` 칸으로 나눈다.
+
+    경계는 **격자 자리에서 출발해 실제로 비어 있는 열로 옮긴다.**
+
+    격자 그대로 자르면 그림이 칸 간격보다 넓은 곳에서 꼬리와 주둥이가 날아간다.
+    반대로 빈 구간만 보고 나누면 **한 마리 안을 가른다** —
+    두 프레임이 붙어 있으면 그 사이보다 한 마리 안(목·허리)이 더 얇을 수 있기 때문이다.
+
+    프레임은 고르게 놓여 있으니 격자가 "어디쯤"을, 빈 열이 "정확히 어디"를 알려 준다.
+    """
+    pitch = width / count
     profile = band.sum(axis=0)
-    while len(spans) < count:
-        typical = np.median([hi - lo for lo, hi in spans])
-        widest = max(range(len(spans)), key=lambda i: spans[i][1] - spans[i][0])
-        lo, hi = spans[widest]
-        parts = max(2, min(count - len(spans) + 1, round((hi - lo) / max(1.0, typical))))
-        seam = _thinnest(profile, lo, hi, parts)
-        spans[widest : widest + 1] = [(lo, seam), (seam, hi)]
+    reach = max(1, int(pitch * SEAM_REACH))
 
-    return spans
+    edges = [0]
+    for i in range(1, count):
+        nominal = pitch * i
+        lo = max(1, int(nominal - reach))
+        hi = min(width - 1, int(nominal + reach))
+        if hi <= lo:
+            edges.append(int(nominal))
+            continue
+
+        window = profile[lo:hi]
+        empty = np.where(window == 0)[0]
+        if empty.size:
+            # 빈 열 중 격자 자리에 가장 가까운 것. 두 그림 사이가 여기다.
+            pick = int(empty[np.argmin(np.abs(empty + lo - nominal))])
+        else:
+            # 겹쳐 그려져 빈 열이 없다. 가장 얇은 자리로 옮긴다.
+            pick = int(np.argmin(window))
+        edges.append(lo + pick)
+
+    edges.append(width)
+    return list(zip(edges, edges[1:]))
 
 
-def _thinnest(profile: np.ndarray, lo: int, hi: int, parts: int) -> int:
+def drop_dust(piece: np.ndarray) -> np.ndarray:
     """
-    `lo..hi` 를 `parts` 로 나눌 때 첫 경계 자리.
+    칸 안의 아주 작은 조각을 턴다.
 
-    기대 위치 언저리에서 세로 잉크가 가장 얇은 열을 고른다.
-    두 그림이 만나는 자리는 어디든 몸통 한복판보다 얇다.
-    찾는 범위를 묶어 두지 않으면 목이나 허리 같은 **한 마리 안의 얇은 곳**을 자른다.
+    겹쳐 그려져 빈 열이 없는 자리에서는 가장 얇은 열로 가르는데, 그게 부리나
+    날개 끝을 스칠 때가 있다. 그러면 옆 그림의 부리 조각이 이 칸에 남는다.
+    본체의 몇 %도 안 되는 덩어리는 이 동물의 일부가 아니다 —
+    몸에서 떨어져 나온 다리는 이보다 훨씬 크다.
     """
-    step = (hi - lo) / parts
-    nominal = int(round(lo + step))
-    reach = max(1, int(step * SEAM_REACH))
-    a, b = max(lo + 1, nominal - reach), min(hi - 1, nominal + reach)
-    if b <= a:
-        return nominal
-    return a + int(np.argmin(profile[a:b]))
+    alpha = piece[..., 3] > 0
+    if not alpha.any():
+        return piece
+
+    labels, count = ndimage.label(alpha)
+    if count <= 1:
+        return piece
+
+    sizes = ndimage.sum(alpha, labels, range(1, count + 1))
+    floor = max(sizes) * DUST_RATIO
+    for i, size in enumerate(sizes, start=1):
+        if size < floor:
+            piece[labels == i] = 0
+    return piece
 
 
 def prepare_animal(src: Path) -> dict[str, object] | None:
@@ -253,10 +302,10 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
 
     순서는 셋이다.
       1. 검은 배경을 지운다
-      2. 줄을 찾고, 줄마다 **칸의 실제 범위**를 찾는다 (7칸이든 8칸이든 상관없다)
+      2. 줄을 찾고, **줄마다** 칸의 실제 범위를 찾는다 (7칸이든 8칸이든 상관없다)
       3. 칸마다 잘라 균등 격자로 다시 짠다
 
-    자를 때 기준점은 가로가 **칸의 격자 자리**, 세로가 **그 줄의 발끝**이다.
+    자를 때 기준점은 가로가 **그 줄 격자의 칸 자리**, 세로가 **그 줄의 발끝**이다.
     둘 다 프레임이 바뀌어도 움직이지 않는 자리라 상대 위치가 그대로 보존된다 —
     칸마다 내용을 가운데로 맞추면 다리를 뻗은 프레임과 모은 프레임의 폭이 달라
     몸통이 좌우로 튄다.
@@ -271,17 +320,19 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
     cut = cut_black_background(Image.open(src), ANIMAL_THRESHOLD)
     rgba = np.array(cut)
     mask = rgba[..., 3] > 0
-    height, width = mask.shape
+    _, width = mask.shape
 
     rows = runs_of(mask.any(axis=1))
     if not rows:
         print(f"  [건너뜀] {src.name} 내용이 없음")
         return None
 
-    cols = frame_count(mask, rows)
-    cells = [row_cells(mask[y0:y1], cols) for y0, y1 in rows]
+    single = single_width(mask, rows)
+    frames = row_frames(mask, rows, single)
+    cells = [row_cells(mask[y0:y1], frames[r], width) for r, (y0, y1) in enumerate(rows)]
+    cols = max(frames)
 
-    # 칸마다 잉크 상자. 옆 칸의 그림은 애초에 범위 밖이라 들어오지 않는다.
+    # 칸마다 잉크 상자. 옆 칸의 그림은 범위 밖이라 들어오지 않는다.
     boxes: list[list[tuple[int, int, int, int] | None]] = []
     for r, (y0, y1) in enumerate(rows):
         band = mask[y0:y1]
@@ -296,11 +347,11 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
                               x0 + int(xs.max()) + 1, int(ys.max()) + 1))
         boxes.append(row_boxes)
 
-    pitch = width / cols
     bottoms = [max((b[3] for b in row if b), default=0) for row in boxes]
 
     lefts, rights, tops = [], [], []
     for r, row in enumerate(boxes):
+        pitch = width / frames[r]
         for c, box in enumerate(row):
             if not box:
                 continue
@@ -323,6 +374,7 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
     sheet = Image.new("RGBA", (fw * cols, fh * len(rows)), (0, 0, 0, 0))
     for r, (y0, y1) in enumerate(rows):
         band = rgba[y0:y1]
+        pitch = width / frames[r]
         for c, (x0, x1) in enumerate(cells[r]):
             left = round(pitch * (c + 0.5) + box_left)
             top = bottoms[r] + box_top
@@ -333,6 +385,7 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
             if sy1 > sy0 and sx1 > sx0:
                 piece[sy0 - top : sy1 - top, sx0 - left : sx1 - left] = band[sy0:sy1, sx0:sx1]
 
+            piece = drop_dust(piece)
             crop = Image.fromarray(piece, mode="RGBA")
             if scale < 1.0:
                 crop = crop.resize((fw, fh), Image.LANCZOS)
@@ -351,6 +404,7 @@ def prepare_animal(src: Path) -> dict[str, object] | None:
         "file": relative,
         "cols": cols,
         "rows": len(rows),
+        "frames": frames,
         "fit": round(-idle_top / bh, 4),
         "baseline": 1.0,
         "frameW": fw,
@@ -540,6 +594,8 @@ def write_animal_manifest(animals: list[dict[str, object]]) -> None:
         "  /** 격자 크기. 시트마다 다르다 — 닭과 까마귀와 공작은 7칸이다. */",
         "  readonly cols: number",
         "  readonly rows: number",
+        "  /** 줄마다의 실제 프레임 수. 한 시트 안에서도 다르다 — 말은 8/7/8 이다. */",
+        "  readonly frames: readonly number[]",
         "}",
         "",
         "export const ANIMAL_SHEETS: readonly AnimalSheetAsset[] = [",
@@ -549,7 +605,7 @@ def write_animal_manifest(animals: list[dict[str, object]]) -> None:
             f"  {{ id: '{a['id']}', habitat: '{a['habitat']}', src: sheet{i}, "
             f"fit: {a['fit']}, baseline: {a['baseline']}, "
             f"frameW: {a['frameW']}, frameH: {a['frameH']}, "
-            f"cols: {a['cols']}, rows: {a['rows']} }},"
+            f"cols: {a['cols']}, rows: {a['rows']}, frames: {list(a['frames'])} }},"
         )
     lines += ["]", ""]
 

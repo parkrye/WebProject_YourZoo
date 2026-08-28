@@ -29,6 +29,13 @@ export interface SheetMeta {
   fit?: number
   /** 프레임 안에서 발이 놓이는 y (0..1). 기본 1(프레임 아래변). */
   baseline?: number
+  /**
+   * 줄마다의 실제 프레임 수. 없으면 모든 줄이 `cols` 만큼이라고 본다.
+   *
+   * 한 시트 안에서도 줄마다 다르다 — 말은 서 있는 줄이 8칸인데 걷는 줄은 7칸이다.
+   * 이걸 모르면 걷다가 빈 칸에서 동물이 한 번씩 사라진다.
+   */
+  frames?: readonly number[]
 }
 
 /**

@@ -24,7 +24,9 @@ export class SheetRenderer implements AnimalRenderer {
 
   draw(ctx: CanvasRenderingContext2D, state: AnimalRenderState, view: ViewBox): void {
     const row = Math.max(0, this.meta.motions.indexOf(state.motion))
-    const frame = Math.floor(state.motionTime * this.meta.fps) % this.meta.cols
+    // 줄마다 프레임 수가 다를 수 있다. 모르면 빈 칸에서 동물이 한 번씩 사라진다.
+    const count = this.meta.frames?.[row] ?? this.meta.cols
+    const frame = Math.floor(state.motionTime * this.meta.fps) % Math.max(1, count)
 
     // `scale` 은 **동물의 높이**지 프레임의 높이가 아니다.
     // 여백이 있는 시트는 프레임을 그만큼 크게 그려야 동물이 제 크기로 나온다.
