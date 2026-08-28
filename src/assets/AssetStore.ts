@@ -2,6 +2,7 @@ import { Atlas } from './atlas'
 import { loadImages, type ProgressFn } from './loader'
 import {
   AREA_SRC, FENCE_SRC, FONT_GRID, FONT_SRC, GUI_GRID, GUI_SRC,
+  FONT_SMALL_GRID, FONT_SMALL_SRC,
   PROP_GRID, PROP_SRC, SKY_SRC, VISITOR_GRID, VISITOR_SRC,
   type BiomeId, type SkyPhase,
 } from './manifest'
@@ -16,6 +17,8 @@ export interface Assets {
   readonly gui: Atlas
   readonly guiSrc: string
   readonly font: BitmapFont
+  /** 작은 글씨용. 큰 폰트를 작게 줄이면 획이 뭉개진다. */
+  readonly fontSmall: BitmapFont
   /** 폰트 시트. 디버그 페이지에서 눈으로 검증할 때 쓴다. */
   readonly fontSheet: HTMLImageElement
 }
@@ -34,6 +37,7 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
     ...Object.values(SKY_SRC),
     ...Object.values(AREA_SRC),
     ...Object.values(PROP_SRC),
+    FONT_SMALL_SRC,
     FENCE_SRC, VISITOR_SRC, GUI_SRC, FONT_SRC,
   ]
 
@@ -48,6 +52,10 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
   // 런타임에서 배경을 손대지 않는다.
   const fontSheet = pick(FONT_SRC)
   const fontAtlas = new Atlas(fontSheet, FONT_GRID, { detect: true })
+  // 작은 폰트는 검출하지 않는다. 여백은 전처리에서 이미 잘렸고,
+  // 칸마다 다시 재면 디센더가 베이스라인을 흔든다.
+  const smallSheet = pick(FONT_SMALL_SRC)
+  const smallAtlas = new Atlas(smallSheet, FONT_SMALL_GRID)
 
   cached = {
     sky: {
@@ -72,6 +80,7 @@ export async function loadAssets(onProgress?: ProgressFn): Promise<Assets> {
     gui: new Atlas(pick(GUI_SRC), GUI_GRID, { detect: true }),
     guiSrc: GUI_SRC,
     font: new BitmapFont(fontSheet, fontAtlas),
+    fontSmall: new BitmapFont(smallSheet, smallAtlas),
     fontSheet,
   }
 

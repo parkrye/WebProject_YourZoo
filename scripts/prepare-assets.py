@@ -369,6 +369,12 @@ def main() -> int:
         mark = f"컷아웃 <{threshold}" if threshold else "그대로"
         print(f"  {name:26s} {before:5s} -> {relative:24s} [{mark}] alpha0={alpha_zero_ratio(image):.1f}%")
 
+    small = source / SMALL_FONT_SRC
+    if small.exists():
+        size = prepare_small_font(small)
+        if size:
+            print(f"  {SMALL_FONT_SRC:26s} -> {SMALL_FONT_OUT:24s} [격자 {size[0]}x{size[1]}]")
+
     animals = []
     for src in sorted(source.glob(f"{ANIMAL_PREFIX}*.png")):
         entry = prepare_animal(src)
@@ -382,6 +388,98 @@ def main() -> int:
 
     print(f"\n완료. 출력: {OUT_ROOT}")
     return 0
+
+
+# 작은 폰트. 6x6 격자에 a-z, 0-9 가 순서대로 들어 있다.
+SMALL_FONT_SRC = "smallfont.png"
+SMALL_FONT_OUT = "sprite/icon-font-small.png"
+SMALL_FONT_GRID = 6
+# 잉크로 칠 알파 하한.
+#
+# 0 으로 두면 칸 전체에 퍼진 알파 1~5 짜리 잔여까지 잉크로 세어
+# 상자가 칸 전체가 되고 여백이 하나도 안 잘린다. 8 을 넘기면 글자 모양만 남는다.
+SMALL_FONT_ALPHA = 8
+# 칸 순서. 원본 시트에 이 순서로 들어 있다.
+SMALL_FONT_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+# 디센더 깊이 (x-하이트 대비). 꼬리가 이만큼 베이스라인 아래로 내려간다.
+SMALL_FONT_DESCENDER = 0.32
+# 글자 좌우 여백(px). 붙여 놓으면 글자끼리 닿는다.
+SMALL_FONT_SIDE_BEARING = 3
+
+
+def prepare_small_font(src: Path) -> tuple[int, int] | None:
+    """
+    작은 폰트를 **베이스라인을 맞춰** 균등 격자로 다시 짠다.
+
+    원본은 칸마다 글자 위치가 제각각이다 — `a` 는 바닥에 가깝고 `0` 은 한참 위에 있다.
+    그대로 균등 분할하면 글자가 줄 위에서 오르내리고,
+    그렇다고 칸마다 잉크 바닥을 맞추면 **디센더(g j p q y)의 꼬리가 베이스라인에 붙는다.**
+
+    그래서 글자마다 잉크 상자를 재고, 디센더인지 아닌지에 따라 놓는 높이를 달리한다.
+    결과는 모든 칸이 같은 크기이고 베이스라인이 한 줄로 서는 시트다 —
+    거기서부터는 균등 분할이 정확하다.
+    """
+    image = Image.open(src).convert("RGBA")
+    mask = np.array(image.getchannel("A")) > SMALL_FONT_ALPHA
+    h, w = mask.shape
+    cw, ch = w // SMALL_FONT_GRID, h // SMALL_FONT_GRID
+
+    # 글자마다 잉크 상자를 잰다. 순서는 a-z, 0-9.
+    boxes: list[tuple[int, int, int, int] | None] = []
+    for r in range(SMALL_FONT_GRID):
+        for c in range(SMALL_FONT_GRID):
+            cell = mask[r * ch : (r + 1) * ch, c * cw : (c + 1) * cw]
+            if not cell.any():
+                boxes.append(None)
+                continue
+            ys, xs = np.where(cell)
+            boxes.append((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+
+    if all(b is None for b in boxes):
+        print(f"  [건너뜀] {src.name} 내용이 없음")
+        return None
+
+    # 위로도 아래로도 삐치지 않는 글자들. 이들의 높이가 곧 x-하이트다.
+    plain = [SMALL_FONT_CHARS.index(ch) for ch in "acemnorsuvwxz"]
+    x_height = int(np.median([boxes[i][3] - boxes[i][1] for i in plain if boxes[i]]))
+    depth = max(1, round(x_height * SMALL_FONT_DESCENDER))
+
+    descenders = {SMALL_FONT_CHARS.index(ch) for ch in "gjpqy"}
+
+    ascents = []
+    for i, box in enumerate(boxes):
+        if not box:
+            continue
+        height = box[3] - box[1]
+        ascents.append(height - depth if i in descenders else height)
+
+    ascent = max(ascents)
+    cell_h = ascent + depth
+    cell_w = max((b[2] - b[0]) for b in boxes if b) + SMALL_FONT_SIDE_BEARING * 2
+
+    sheet = Image.new(
+        "RGBA",
+        (cell_w * SMALL_FONT_GRID, cell_h * SMALL_FONT_GRID),
+        (0, 0, 0, 0),
+    )
+    for i, box in enumerate(boxes):
+        if not box:
+            continue
+        r, c = divmod(i, SMALL_FONT_GRID)
+        glyph = image.crop(
+            (c * cw + box[0], r * ch + box[1], c * cw + box[2], r * ch + box[3])
+        )
+        height = box[3] - box[1]
+        own_ascent = height - depth if i in descenders else height
+        x = c * cell_w + (cell_w - glyph.width) // 2
+        # 베이스라인은 ascent 자리다. 디센더는 그 아래로 depth 만큼 더 내려간다.
+        y = r * cell_h + (ascent - own_ascent)
+        sheet.paste(glyph, (x, y))
+
+    out = OUT_ROOT / SMALL_FONT_OUT
+    out.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(out, optimize=True)
+    return sheet.size
 
 
 ANIMAL_MANIFEST = Path("src/assets/animalSheets.ts")

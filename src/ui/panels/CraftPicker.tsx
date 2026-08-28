@@ -47,8 +47,8 @@ export function CraftPicker<T extends string>({
                 onClick={() => onPick(id)}
               >
                 <div className="craft-card-head">
-                  <BitmapLabel text={spec.label} size={24} />
-                  {spec.locked && <IconGlyph icon={GUI.HELP} size={22} />}
+                  <BitmapLabel text={spec.label} size={22} />
+                  {spec.locked && <IconGlyph icon={GUI.HELP} size={20} />}
                 </div>
 
                 <BitmapLabel text={spec.hint} size={13} />
@@ -64,14 +64,10 @@ export function CraftPicker<T extends string>({
                   />
                 </div>
 
-                {spec.locked && (
+                {/* 잠김·부족 안내는 카드 아래에 붙인다. 제목 위에 겹쳐 두면 이름을 가린다. */}
+                {(spec.locked || !affordable) && (
                   <div className="craft-locked">
-                    <BitmapLabel text="NOT OPEN YET" size={14} />
-                  </div>
-                )}
-                {!spec.locked && !affordable && (
-                  <div className="craft-locked">
-                    <BitmapLabel text="NOT ENOUGH" size={14} />
+                    <BitmapLabel text={spec.locked ? 'NOT OPEN YET' : 'NOT ENOUGH'} size={13} />
                   </div>
                 )}
               </button>

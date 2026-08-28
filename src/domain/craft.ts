@@ -32,14 +32,14 @@ export const PROP_DETAIL_FRAMES = 8
 export const ANIMAL_CRAFTS: Record<AnimalCraft, CraftSpec> = {
   SIMPLE: {
     label: 'SIMPLE',
-    hint: 'BLANK CANVAS  DEFAULT MOTION',
+    hint: 'BLANK CANVAS',
     coins: 40,
     cash: 0,
     frames: 1,
   },
   TEMPLATE: {
     label: 'TEMPLATE',
-    hint: 'DRAW OVER A SHAPE  MATCHING MOTION',
+    hint: 'DRAW OVER A SHAPE',
     coins: 90,
     cash: 0,
     frames: 1,
@@ -52,23 +52,23 @@ export const ANIMAL_CRAFTS: Record<AnimalCraft, CraftSpec> = {
    */
   RIG: {
     label: 'RIGGED',
-    hint: 'DRAW EACH BODY PART  JOINTS DO THE REST',
+    hint: 'PARTS  JOINTS MOVE THEM',
     coins: 150,
     cash: 0,
     frames: 5,
   },
   FRAMES: {
     label: 'FRAME BY FRAME',
-    hint: 'DRAW ALL 24 FRAMES YOURSELF',
+    hint: 'EVERY POSE BY HAND',
     coins: 240,
     cash: 0,
     frames: DETAIL_COLS * DETAIL_ROWS,
   },
   COMMISSION: {
     label: 'COMMISSION',
-    hint: 'ONE DRAWING  WE ANIMATE IT  COMING SOON',
+    hint: 'WE ANIMATE IT FOR YOU',
     coins: 0,
-    cash: 3,
+    cash: 1,
     frames: 1,
     // 외부 SDK 가 아직 없다. 자리는 보여 주되 누를 수는 없다 —
     // 있다는 걸 알아야 나중에 열렸을 때 찾는다.
@@ -79,7 +79,7 @@ export const ANIMAL_CRAFTS: Record<AnimalCraft, CraftSpec> = {
 export const PROP_CRAFTS: Record<PropCraft, CraftSpec> = {
   SIMPLE: {
     label: 'SIMPLE',
-    hint: 'ONE DRAWING  STANDS STILL',
+    hint: 'STANDS STILL',
     coins: 15,
     cash: 0,
     frames: 1,
@@ -93,7 +93,7 @@ export const PROP_CRAFTS: Record<PropCraft, CraftSpec> = {
   },
   DETAILED: {
     label: 'DETAILED',
-    hint: 'DRAW 8 FRAMES  IT ANIMATES',
+    hint: '8 FRAMES  IT MOVES',
     coins: 90,
     cash: 0,
     frames: PROP_DETAIL_FRAMES,

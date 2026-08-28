@@ -14,6 +14,7 @@ import areaDesert from './images/bg/area-desert.png'
 import areaIce from './images/bg/area-ice.png'
 import fence from './images/bg/fence.png'
 import iconFont from './images/sprite/icon-font.png'
+import iconFontSmall from './images/sprite/icon-font-small.png'
 import iconGui from './images/sprite/icon-gui.png'
 import propField from './images/sprite/prop-field.png'
 import propDesert from './images/sprite/prop-desert.png'
@@ -50,6 +51,7 @@ export const FENCE_SRC = fence
 export const VISITOR_SRC = humanVisitor
 export const GUI_SRC = iconGui
 export const FONT_SRC = iconFont
+export const FONT_SMALL_SRC = iconFontSmall
 
 // ─────────────────────────────────────────────────────────────
 // 그리드 스펙
@@ -65,6 +67,13 @@ export interface GridSpec {
 
 export const GUI_GRID: GridSpec = { cols: 6, rows: 6, sheetW: 1254, sheetH: 1254 }
 export const FONT_GRID: GridSpec = { cols: 6, rows: 6, sheetW: 1024, sheetH: 1536 }
+/**
+ * 작은 폰트. 전처리에서 **공통 여백만 잘라** 균등 격자로 다시 짰다.
+ *
+ * 큰 폰트와 달리 칸별 검출을 쓰지 않는다 — 이 폰트에는 디센더(g j p q y)가 있어서
+ * 칸마다 아래를 맞추면 g 의 꼬리가 a 의 바닥에 붙어 글자가 들쭉날쭉해진다.
+ */
+export const FONT_SMALL_GRID: GridSpec = { cols: 6, rows: 6, sheetW: 732, sheetH: 984 }
 export const VISITOR_GRID: GridSpec = { cols: 8, rows: 4, sheetW: 1774, sheetH: 887 }
 
 /** 프롭 시트는 바이옴마다 원본 크기가 다르다. */
