@@ -352,6 +352,19 @@ export class SceneRenderer {
       void ensureBitmap(prop.imageId)
       return null
     }
+
+    // 여러 칸을 그린 프롭은 띠에서 지금 칸만 잘라 쓴다.
+    if (prop.strip) {
+      const { frames, fps } = prop.strip
+      const fw = bitmap.width / frames
+      const index = Math.floor(this.time * fps) % frames
+      return {
+        aspect: fw / bitmap.height,
+        draw: (ctx, x, y, w, h) =>
+          ctx.drawImage(bitmap, index * fw, 0, fw, bitmap.height, x, y, w, h),
+      }
+    }
+
     return {
       aspect: bitmap.width / bitmap.height,
       draw: (ctx, x, y, w, h) => ctx.drawImage(bitmap, x, y, w, h),

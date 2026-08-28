@@ -30,6 +30,12 @@ export interface OwnedProp {
   /** 그린 프롭의 IndexedDB 키. 상점 프롭은 null. */
   readonly imageId: string | null
   /**
+   * 여러 칸을 그려 만든 프롭. `imageId` 가 가로로 이어붙인 띠를 가리킨다.
+   *
+   * 프롭에는 걷기도 필살기도 없다. 한 줄이 그대로 반복될 뿐이다.
+   */
+  readonly strip: { readonly frames: number; readonly fps: number } | null
+  /**
    * 놓았을 때의 거동. **놓을 수 있는 자리를 제한하지는 않는다.**
    *
    * `LAND`  가만히 있는다

@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { GUI, type Habitat } from '@/assets/manifest'
-import { PROP_CREATE_COST, PROP_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
+import { PROP_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
+import { PROP_CRAFTS, PROP_CRAFT_ORDER, PROP_DETAIL_FRAMES, type PropCraft } from '@/domain/craft'
 import { createPropId, type OwnedProp } from '@/domain/prop'
 import { PROP_TEMPLATES, PROP_TEMPLATE_ORDER, type PropTemplateId } from '@/domain/propTemplates'
 import type { ExportedDrawing } from '@/draw/export'
+import { composeStrip } from '@/render/animal/composeSheet'
 import { registerFromBlob } from '@/sim/imageCache'
 import { putImage } from '@/store/imageDb'
 import { useGameStore } from '@/store/gameStore'
 import { BitmapInput } from '@/ui/components/BitmapInput'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
-import { IconButton } from '@/ui/components/IconButton'
-import { IconGlyph } from '@/ui/components/IconGlyph'
+import { CraftPicker } from '@/ui/panels/CraftPicker'
+import { FrameStudio } from '@/ui/panels/FrameStudio'
 import { DrawModal } from '@/ui/modals/DrawModal'
+import { IconGlyph } from '@/ui/components/IconGlyph'
+import { WizardFrame } from '@/ui/panels/WizardFrame'
 
 /** 거동과 그 설명. 프롭은 스스로 움직이지 않고 이 셋 중 하나로만 반응한다. */
 const MOTIONS: readonly { id: Habitat; label: string; hint: string }[] = [
@@ -20,67 +24,86 @@ const MOTIONS: readonly { id: Habitat; label: string; hint: string }[] = [
   { id: 'SKY', label: 'SWAY', hint: 'SWINGS SIDE TO SIDE' },
 ]
 
+type Step = 'CRAFT' | 'TEMPLATE' | 'DRAW' | 'DETAILS'
+
 interface NewPropFormProps {
   onDone: () => void
 }
 
 /**
- * 프롭 제작 탭.
+ * 프롭 제작.
  *
- * 동물 요청서에서 습성을 걷어낸 형태다 — 프롭은 스스로 움직이지 않으니
- * 정할 게 이름과 밑그림, 그리고 **어떻게 흔들릴지** 셋뿐이다.
- *
- * 거동은 놓을 자리를 제한하지 않는다. 물 위에 나무를, 하늘에 등을 매달 수 있다.
+ * 방식을 먼저 고르고 그다음 한 가지씩 묻는다. 예전에는 그림·이름·거동을
+ * 한 화면에 늘어놓았는데, 여기에 방식과 템플릿까지 더하니 무엇부터 손대야 할지
+ * 알 수 없는 화면이 됐다. **한 걸음에 하나씩** 묻는다.
  */
 export function NewPropForm({ onDone }: NewPropFormProps) {
   const orderProp = useGameStore((s) => s.orderProp)
   const gold = useGameStore((s) => s.gold)
   const day = useGameStore((s) => s.clock.day)
 
-  const [name, setName] = useState('')
-  const [templateId, setTemplateId] = useState<PropTemplateId>('FREE')
+  const [step, setStep] = useState<Step>('CRAFT')
+  const [craft, setCraft] = useState<PropCraft>('SIMPLE')
+  const [templateId, setTemplateId] = useState<PropTemplateId>('ROCK')
   const [layer, setLayer] = useState<Habitat>('LAND')
-  const [drawing, setDrawing] = useState<ExportedDrawing | null>(null)
+  const [name, setName] = useState('')
+  const [single, setSingle] = useState<ExportedDrawing | null>(null)
+  const [frames, setFrames] = useState<(ExportedDrawing | null)[]>(
+    () => Array(PROP_DETAIL_FRAMES).fill(null),
+  )
   const [drawOpen, setDrawOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
-  // Blob 은 <img> 에 바로 못 넣는다. 객체 URL 로 감싸고 바뀌면 이전 것을 놓아 준다.
-  const previewUrl = useMemo(() => (drawing ? URL.createObjectURL(drawing.blob) : null), [drawing])
+  const spec = PROP_CRAFTS[craft]
+  const guide = craft === 'TEMPLATE' ? PROP_TEMPLATES[templateId].guide : []
+  const detailed = craft === 'DETAILED'
+
+  const drawn = detailed ? frames.some(Boolean) : single !== null
+  const affordable = gold >= spec.coins
+
+  const previewUrl = useMemo(() => (single ? URL.createObjectURL(single.blob) : null), [single])
   useEffect(() => {
     if (!previewUrl) return
     return () => URL.revokeObjectURL(previewUrl)
   }, [previewUrl])
 
-  const affordable = gold >= PROP_CREATE_COST
-  const ready = name.trim().length > 0 && drawing !== null && affordable && !busy
-
-  /** 템플릿을 고르면 어울리는 거동도 함께 맞춘다. 뗏목을 땅에 고정해 두는 실수를 줄인다. */
-  const selectTemplate = (id: PropTemplateId): void => {
-    setTemplateId(id)
-    setLayer(PROP_TEMPLATES[id].layer)
+  const startCraft = (id: PropCraft): void => {
+    setCraft(id)
+    setStep(id === 'TEMPLATE' ? 'TEMPLATE' : 'DRAW')
   }
 
   const submit = async (): Promise<void> => {
-    if (!ready || !drawing) return
+    if (!drawn || !affordable || busy) return
     setBusy(true)
 
     const imageId = createPropId()
-    // 방금 그린 그림이라 Blob 이 손에 있다. 미리 디코드해 두면 배치 즉시 렌더된다.
-    await registerFromBlob(imageId, drawing.blob)
+    let strip: OwnedProp['strip'] = null
+    let blob: Blob
+
+    if (detailed) {
+      const made = await composeStrip(frames.map((f) => f?.blob ?? null))
+      blob = made.blob
+      strip = { frames: made.frames, fps: made.fps }
+    } else {
+      blob = single!.blob
+    }
+
+    await registerFromBlob(imageId, blob)
     try {
-      await putImage(imageId, drawing.blob)
+      await putImage(imageId, blob)
     } catch {
       // IndexedDB 를 못 쓰는 환경에서도 이번 세션은 이어가게 둔다.
     }
 
     const prop: OwnedProp = {
       id: createPropId(),
-      name: name.trim(),
+      name: name.trim() || templateId,
       status: 'SHIPPING',
       enclosureId: null,
       sheetBiome: null,
       sprite: null,
       imageId,
+      strip,
       layer,
       x: 0,
       y: 0,
@@ -90,107 +113,134 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
     }
 
     setBusy(false)
-    if (orderProp(prop)) onDone()
+    if (orderProp(prop, spec.coins)) onDone()
+  }
+
+  if (step === 'CRAFT') {
+    return (
+      <CraftPicker
+        title="HOW WILL YOU MAKE IT"
+        order={PROP_CRAFT_ORDER}
+        specs={PROP_CRAFTS}
+        gold={gold}
+        onPick={(id) => startCraft(id)}
+      />
+    )
+  }
+
+  if (step === 'TEMPLATE') {
+    return (
+      <WizardFrame
+        title="PICK A SHAPE"
+        onBack={() => setStep('CRAFT')}
+        onNext={() => setStep('DRAW')}
+        nextLabel="DRAW"
+      >
+        <div className="wizard-grid">
+          {PROP_TEMPLATE_ORDER.filter((id) => id !== 'FREE').map((id) => (
+            <button
+              key={id}
+              type="button"
+              className={templateId === id ? 'wizard-card is-active' : 'wizard-card'}
+              onClick={() => {
+                setTemplateId(id)
+                setLayer(PROP_TEMPLATES[id].layer)
+              }}
+            >
+              <BitmapLabel text={PROP_TEMPLATES[id].label} size={22} align="center" />
+              <BitmapLabel text={PROP_TEMPLATES[id].layer} size={13} align="center" />
+            </button>
+          ))}
+        </div>
+      </WizardFrame>
+    )
+  }
+
+  if (step === 'DRAW') {
+    return (
+      <WizardFrame
+        title={detailed ? `DRAW ${PROP_DETAIL_FRAMES} FRAMES` : 'DRAW IT'}
+        onBack={() => setStep(craft === 'TEMPLATE' ? 'TEMPLATE' : 'CRAFT')}
+        onNext={() => setStep('DETAILS')}
+        nextLabel="NEXT"
+        nextReady={drawn}
+      >
+        {detailed ? (
+          <FrameStudio
+            rows={[{ label: '', count: PROP_DETAIL_FRAMES }]}
+            frames={frames}
+            guide={guide}
+            onChange={(i, drawing) =>
+              setFrames((prev) => prev.map((f, n) => (n === i ? drawing : f)))
+            }
+          />
+        ) : (
+          <div className="wizard-draw">
+            <div className="drawing-slot" onClick={() => setDrawOpen(true)}>
+              {previewUrl ? (
+                <img src={previewUrl} alt="prop" className="drawing-preview" />
+              ) : (
+                <BitmapLabel text="TAP TO DRAW" size={22} align="center" />
+              )}
+            </div>
+            <button type="button" className="labeled-button" onClick={() => setDrawOpen(true)}>
+              <IconGlyph icon={GUI.PENCIL} size={40} />
+              <BitmapLabel text={single ? 'REDRAW' : 'DRAW'} size={20} />
+            </button>
+          </div>
+        )}
+
+        {drawOpen && (
+          <DrawModal
+            title="DRAW PROP"
+            guide={guide}
+            {...(single && { initial: single.blob })}
+            onClose={() => setDrawOpen(false)}
+            onDone={(result) => {
+              setSingle(result)
+              setDrawOpen(false)
+            }}
+          />
+        )}
+      </WizardFrame>
+    )
   }
 
   return (
-    <div className="request-body">
-      <div className="request-layout">
-        <section className="request-col">
-          <FieldLabel text="NAME" />
-          <BitmapInput
-            value={name}
-            onChange={setName}
-            maxLength={PROP_NAME_MAX_LENGTH}
-            placeholder="ENTER NAME"
-            width={330}
-          />
+    <WizardFrame
+      title="NAME AND MOTION"
+      onBack={() => setStep('DRAW')}
+      onSubmit={() => void submit()}
+      submitReady={drawn && affordable && !busy}
+      cost={spec.coins}
+      note={`ARRIVES IN ${SHIPPING_DAYS.DRAWN} DAYS`}
+      warning={affordable ? null : 'NOT ENOUGH COINS'}
+    >
+      <div className="wizard-fields">
+        <BitmapLabel text="NAME" size={18} />
+        <BitmapInput
+          value={name}
+          maxLength={PROP_NAME_MAX_LENGTH}
+          placeholder="PROP NAME"
+          onChange={setName}
+        />
 
-          <FieldLabel text="DRAWING" />
-          <div className="drawing-slot" onClick={() => setDrawOpen(true)}>
-            {previewUrl ? (
-              <img src={previewUrl} alt="prop" className="drawing-preview" />
-            ) : (
-              <BitmapLabel text="TAP TO DRAW" size={22} align="center" />
-            )}
-          </div>
-          <button type="button" className="labeled-button" onClick={() => setDrawOpen(true)}>
-            <IconGlyph icon={GUI.PENCIL} size={44} />
-            <BitmapLabel text={drawing ? 'REDRAW' : 'DRAW'} size={22} />
-          </button>
-
-          <FieldLabel text={`ARRIVES IN ${SHIPPING_DAYS.DRAWN} DAYS`} />
-        </section>
-
-        <section className="request-col request-col-wide">
-          <FieldLabel text="TEMPLATE" />
-          <div className="chip-grid">
-            {PROP_TEMPLATE_ORDER.map((id) => (
-              <button
-                key={id}
-                type="button"
-                className={templateId === id ? 'chip is-active' : 'chip'}
-                onClick={() => selectTemplate(id)}
-              >
-                <BitmapLabel text={PROP_TEMPLATES[id].label} size={18} />
-              </button>
-            ))}
-          </div>
-
-          <FieldLabel text="MOTION" />
-          <div className="motion-row">
-            {MOTIONS.map((m) => (
-              <button
-                key={m.id}
-                type="button"
-                className={layer === m.id ? 'motion-card is-active' : 'motion-card'}
-                onClick={() => setLayer(m.id)}
-              >
-                <BitmapLabel text={m.label} size={22} align="center" />
-                <BitmapLabel text={m.hint} size={13} align="center" />
-              </button>
-            ))}
-          </div>
-
-          <FieldLabel text="PLACE ANYWHERE" />
-          <BitmapLabel text="MOTION DOES NOT LIMIT WHERE IT GOES" size={15} />
-        </section>
-      </div>
-
-      <footer className="request-footer">
-        <div className="shop-price">
-          <IconGlyph icon={GUI.COIN} size={28} />
-          <BitmapLabel text={`${PROP_CREATE_COST}`} size={26} />
+        <BitmapLabel text="MOTION" size={18} />
+        <div className="motion-row">
+          {MOTIONS.map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              className={layer === m.id ? 'motion-card is-active' : 'motion-card'}
+              onClick={() => setLayer(m.id)}
+            >
+              <BitmapLabel text={m.label} size={22} align="center" />
+              <BitmapLabel text={m.hint} size={13} align="center" />
+            </button>
+          ))}
         </div>
-        {!affordable && <BitmapLabel text="NOT ENOUGH COINS" size={18} />}
-        <IconButton
-          icon={GUI.SUBMIT}
-          size={72}
-          title="SUBMIT"
-          disabled={!ready}
-          onClick={() => void submit()}
-        />
-      </footer>
-
-      {drawOpen && (
-        <DrawModal
-          title="DRAW PROP"
-          guide={PROP_TEMPLATES[templateId].guide}
-          onClose={() => setDrawOpen(false)}
-          onDone={(result) => {
-            setDrawing(result)
-            setDrawOpen(false)
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-function FieldLabel({ text }: { text: string }) {
-  return (
-    <div className="field-label">
-      <BitmapLabel text={text} size={22} />
-    </div>
+        <BitmapLabel text="MOTION DOES NOT LIMIT WHERE IT GOES" size={14} />
+      </div>
+    </WizardFrame>
   )
 }

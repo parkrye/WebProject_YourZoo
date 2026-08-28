@@ -80,6 +80,23 @@ export class DrawHistory {
     return true
   }
 
+  /**
+   * 이미 그린 그림 위에서 시작한다. 되돌리기 밑바닥이 이 그림이 된다.
+   *
+   * 커맨드로 넣지 않고 baseline 에 두는 이유는, 되돌리기를 계속 눌러도
+   * **처음 그림까지만** 돌아가고 빈 캔버스가 되지는 않게 하기 위해서다.
+   */
+  setBaseline(image: CanvasImageSource): void {
+    const canvas = document.createElement('canvas')
+    canvas.width = this.width
+    canvas.height = this.height
+    canvas.getContext('2d')?.drawImage(image, 0, 0, this.width, this.height)
+
+    this.commands.length = 0
+    this.redoStack.length = 0
+    this.baseline = canvas
+  }
+
   reset(): void {
     this.commands.length = 0
     this.redoStack.length = 0

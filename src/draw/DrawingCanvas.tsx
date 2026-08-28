@@ -31,6 +31,15 @@ interface DrawingCanvasProps {
   guide: readonly GuideShape[]
   /** 방향 안내를 띄울지. 밑그림이 없을 때만 쓴다. */
   showFacingHint: boolean
+  /**
+   * 앞 칸을 옅게 깔아 준다 (어니언 스킨).
+   *
+   * 걷기처럼 조금씩 달라지는 동작을 맨 캔버스에서 이어 그리는 건 사실상 불가능하다.
+   * 캔버스 **뒤** 레이어라 내보낸 PNG 에는 섞이지 않는다.
+   */
+  onionUrl?: string | undefined
+  /** 이미 그린 칸을 다시 열 때의 시작 그림. */
+  initial?: Blob | undefined
   /** 화면 표시 크기(px). 논리 해상도와 무관하게 자유롭게 잡는다. */
   displaySize: number
   /** undo/redo 버튼 활성화 상태를 부모에 알린다. */
@@ -38,7 +47,7 @@ interface DrawingCanvasProps {
 }
 
 export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>(function DrawingCanvas(
-  { tool, color, guide, showFacingHint, displaySize, onHistoryChange },
+  { tool, color, guide, showFacingHint, onionUrl, initial, displaySize, onHistoryChange },
   ref,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -56,6 +65,22 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
   }
 
   useEffect(notify, [])
+
+  // 다시 여는 칸은 그린 그림 위에서 시작한다. 빈 캔버스가 뜨면 지운 줄 안다.
+  useEffect(() => {
+    if (!initial) return
+    let cancelled = false
+    void createImageBitmap(initial).then((bitmap) => {
+      const ctx = context()
+      if (cancelled || !ctx) return
+      historyRef.current.setBaseline(bitmap)
+      historyRef.current.replay(ctx)
+      notify()
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [initial])
 
   useImperativeHandle(ref, () => ({
     undo: () => {
@@ -165,6 +190,7 @@ export const DrawingCanvas = forwardRef<DrawingCanvasHandle, DrawingCanvasProps>
           <span className="drawing-guide-text">FACING RIGHT</span>
         </div>
       )}
+      {onionUrl && <img src={onionUrl} alt="" className="drawing-onion" aria-hidden />}
       <TemplateGuide guide={guide} size={displaySize} />
       <canvas
         ref={canvasRef}

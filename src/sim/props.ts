@@ -10,6 +10,8 @@ export interface PlacedProp {
   readonly sheetBiome: BiomeId | null
   /** 그린 프롭의 IndexedDB 키. 상점 프롭은 null. */
   readonly imageId: string | null
+  /** 여러 칸을 그린 프롭이면 그 규격. */
+  readonly strip: { readonly frames: number; readonly fps: number } | null
   readonly x: number
   readonly y: number
   /** 화면 높이 대비 정규화 높이 */
@@ -40,6 +42,7 @@ export function toPlacedProps(owned: readonly OwnedProp[]): PlacedProp[] {
       sprite: prop.sprite,
       sheetBiome: prop.sheetBiome,
       imageId: prop.imageId,
+      strip: prop.strip ?? null,
       x: prop.x,
       y: prop.y,
       height,

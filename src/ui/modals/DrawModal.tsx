@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { GUI, PALETTE_COLORS, type GuiIcon } from '@/assets/manifest'
 import { DrawingCanvas, type DrawingCanvasHandle } from '@/draw/DrawingCanvas'
 import type { ExportedDrawing } from '@/draw/export'
@@ -19,6 +19,10 @@ interface DrawModalProps {
   guide: readonly GuideShape[]
   /** 창 제목. 동물인지 프롭인지 알려 준다. */
   title?: string
+  /** 앞 칸. 옅게 깔아 이어 그리게 한다. */
+  onion?: Blob
+  /** 이미 그린 칸을 다시 열 때의 시작 그림. */
+  initial?: Blob
   onDone: (drawing: ExportedDrawing) => void
   onClose: () => void
 }
@@ -32,7 +36,13 @@ const FIRST_COLOR = PALETTE_COLORS[0].hex
  * 도구가 하나 늘 때마다 아래쪽이 화면 밖으로 밀렸고, 어떤 버튼이 무슨 갈래인지도 읽히지 않았다.
  * 그리기 / 색 / 편집 세 묶음으로 나누고 완료는 따로 떼어 둔다.
  */
-export function DrawModal({ guide, title = 'DRAW ANIMAL', onDone, onClose }: DrawModalProps) {
+export function DrawModal({ guide, title = 'DRAW ANIMAL', onion, initial, onDone, onClose }: DrawModalProps) {
+  // Blob 은 <img> 에 바로 못 넣는다. 객체 URL 로 감싸고 바뀌면 이전 것을 놓아 준다.
+  const onionUrl = useMemo(() => (onion ? URL.createObjectURL(onion) : undefined), [onion])
+  useEffect(() => {
+    if (!onionUrl) return
+    return () => URL.revokeObjectURL(onionUrl)
+  }, [onionUrl])
   const boardRef = useRef<DrawingCanvasHandle>(null)
   const [tool, setTool] = useState<DrawTool>('PENCIL')
   const [color, setColor] = useState<string>(FIRST_COLOR)
@@ -118,7 +128,9 @@ export function DrawModal({ guide, title = 'DRAW ANIMAL', onDone, onClose }: Dra
             tool={tool}
             color={color}
             guide={guide}
-            showFacingHint={guide.length === 0}
+            showFacingHint={guide.length === 0 && !onionUrl}
+            onionUrl={onionUrl}
+            initial={initial}
             displaySize={CANVAS_DISPLAY}
             onHistoryChange={setHistory}
           />

@@ -132,7 +132,8 @@ interface GameState {
   moveEnclosure(direction: -1 | 1): void
   setOption<K extends keyof OptionsState>(key: K, value: OptionsState[K]): void
   /** 요청서 제출. 비용을 차감하고 배송 대기 상태로 넣는다. */
-  orderAnimal(animal: Animal): boolean
+  /** 요청서 제출. 값은 만드는 방식이 정한다. */
+  orderAnimal(animal: Animal, cost?: number): boolean
   canOrderAnimal(): boolean
   patchDraft(patch: Partial<RequestDraft>): void
   clearDraft(): void
@@ -152,8 +153,8 @@ interface GameState {
   buyShopAnimal(item: ShopAnimal): boolean
   /** 상점에서 프롭을 산다. 코인을 내고 배송을 건다. */
   buyShopProp(item: ShopProp): boolean
-  /** 직접 그린 프롭을 주문한다. */
-  orderProp(prop: OwnedProp): boolean
+  /** 직접 그린 프롭을 주문한다. 값은 만드는 방식이 정한다. */
+  orderProp(prop: OwnedProp, cost?: number): boolean
   /** 창고에서 우리로. 자리를 함께 정한다. */
   placeProp(id: string, enclosureId: BiomeId, x: number, y: number): boolean
   /** 우리에서 창고로. */
@@ -401,9 +402,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     return placedIn(animals, enclosureId).length < MAX_ANIMALS_PER_ENCLOSURE
   },
 
-  orderAnimal: (animal) => {
+  orderAnimal: (animal, cost = ANIMAL_CREATE_COST) => {
     const state = get()
-    if (!state.canOrderAnimal()) return false
+    if (state.gold < cost) return false
 
     // 튜토리얼 첫 동물은 배송을 건너뛴다. 하루를 기다리게 하면 흐름이 끊긴다.
     const placed = skipsShipping(state.tutorial)
@@ -411,7 +412,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       : animal
 
     set((s) => ({
-      gold: s.gold - ANIMAL_CREATE_COST,
+      gold: s.gold - cost,
       animals: [...s.animals, placed],
       tutorial: s.tutorial === 'DRAW' ? 'INSPECT' : s.tutorial,
       draft: emptyDraft(randomTraits(createRng(Date.now() & 0xffff))),
@@ -531,6 +532,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       sheetBiome: item.biome,
       sprite: item.sprite,
       imageId: null,
+      strip: null,
       layer: item.layer,
       x: 0,
       y: 0,
@@ -542,10 +544,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     return true
   },
 
-  orderProp: (prop) => {
+  orderProp: (prop, cost = PROP_CREATE_COST) => {
     const { gold } = get()
-    if (gold < PROP_CREATE_COST) return false
-    set((s) => ({ gold: s.gold - PROP_CREATE_COST, props: [...s.props, prop] }))
+    if (gold < cost) return false
+    set((s) => ({ gold: s.gold - cost, props: [...s.props, prop] }))
     return true
   },
 
