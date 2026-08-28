@@ -28,6 +28,13 @@ export function AssetInspector() {
         font.draw(ctx, '0123456789', 20, 180, { size: 56 })
         font.draw(ctx, 'DAY 12 GOLD 1200 FAME 340', 20, 260, { size: 34 })
         font.draw(ctx, 'CENTERED TEXT', fc.width / 2, 320, { size: 40, align: 'center' })
+        // 새로 들어온 기호들. 우회하던 자리가 이제 제대로 나오는지 본다.
+        font.draw(ctx, "-/+?.%:!'()>", 20, 380, { size: 56 })
+        font.draw(ctx, 'NET -120  0 / 3  10 + 1  65%  READY?', 20, 460, { size: 30 })
+        const { fontSmall } = getAssets()
+        fontSmall.draw(ctx, "abcdefghijklmnopqrstuvwxyz", 20, 530, { size: 30 })
+        fontSmall.draw(ctx, "0123456789 -/+?.%:!'()>", 20, 570, { size: 30 })
+        fontSmall.draw(ctx, 'net -120  0 / 3  10 + 1  65%  ready?', 20, 610, { size: 30 })
       }
     }
 
@@ -39,7 +46,7 @@ export function AssetInspector() {
   return (
     <div style={PAGE}>
       <h2 style={H2}>1. FONT — 글자 외곽선이 온전한지, 배경이 투명한지 (R1)</h2>
-      <canvas ref={fontRef} width={1000} height={380} style={CANVAS} />
+      <canvas ref={fontRef} width={1000} height={660} style={CANVAS} />
 
       <h2 style={H2}>2. FONT SHEET (원본)</h2>
       <img src={fontSheet.src} alt="font sheet" style={{ ...CANVAS, width: 320 }} />

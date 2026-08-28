@@ -4,6 +4,7 @@ import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
 import { UNLOCK_COST } from '@/domain/balance'
 import { useState } from 'react'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
+import { signed } from '@/ui/signed'
 import { IconGlyph } from '@/ui/components/IconGlyph'
 import { IconButton } from '@/ui/components/IconButton'
 import { Popup } from '@/ui/components/Popup'
@@ -51,7 +52,7 @@ export function StatusModal() {
                 <BitmapLabel text={`VIEWING ${r.viewIncome}`} size={18} />
                 <BitmapLabel text={`UPKEEP ${r.upkeep}`} size={18} />
                 <div className={r.net < 0 ? 'report-net is-minus' : 'report-net is-plus'}>
-                  <BitmapLabel text={`NET ${Math.abs(r.net)}`} size={22} />
+                  <BitmapLabel text={`NET ${signed(r.net)}`} size={22} />
                 </div>
               </div>
             </div>
@@ -112,24 +113,24 @@ export function StatusModal() {
           </div>
           <div className="report-row is-plus">
             <BitmapLabel text="TICKETS" size={24} />
-            <BitmapLabel text={`${forecast.ticketIncome}`} size={24} align="right" />
+            <BitmapLabel text={signed(forecast.ticketIncome, 'plus')} size={24} align="right" />
           </div>
           <div className="report-row is-plus">
             <BitmapLabel text="VIEWING" size={24} />
-            <BitmapLabel text={`${forecast.viewIncome}`} size={24} align="right" />
+            <BitmapLabel text={signed(forecast.viewIncome, 'plus')} size={24} align="right" />
           </div>
           <div className="report-row is-minus">
             <BitmapLabel text="UPKEEP" size={24} />
-            <BitmapLabel text={`${forecast.upkeep}`} size={24} align="right" />
+            <BitmapLabel text={signed(forecast.upkeep, 'minus')} size={24} align="right" />
           </div>
           <div className="report-divider" />
           <div className={forecast.net < 0 ? 'report-row is-minus' : 'report-row is-plus'}>
             <BitmapLabel text="NET" size={30} />
-            <BitmapLabel text={`${Math.abs(forecast.net)}`} size={30} align="right" />
+            <BitmapLabel text={signed(forecast.net)} size={30} align="right" />
           </div>
           <div className="field-label">
             <BitmapLabel
-              text={`DAY RATE ${Math.round(averageVisitorMultiplier() * 100)}`}
+              text={`DAY RATE ${Math.round(averageVisitorMultiplier() * 100)}%`}
               size={20}
             />
           </div>

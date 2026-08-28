@@ -38,7 +38,6 @@ LAYOUT: dict[str, tuple[str, int | None]] = {
     # 상단이 투명해야 하늘이 비치는데 알파가 없다.
     "bg_area_ice.png": ("bg/area-ice.png", 24),
     "bg_forward_fence.png": ("bg/fence.png", None),
-    "sprite_icon_font.png": ("sprite/icon-font.png", None),
     "sprite_icon_gui.png": ("sprite/icon-gui.png", None),
     "sprite_ui_popup.png": ("sprite/ui-popup.png", None),
     "sprite_prop_field.png": ("sprite/prop-field.png", None),
@@ -653,6 +652,12 @@ def main() -> int:
         if size:
             print(f"  {GUI2_SRC:26s} -> {GUI2_OUT:24s} [격자 {size[0]}x{size[1]}]")
 
+    big = source / BIG_FONT_SRC
+    if big.exists():
+        size = prepare_big_font(big)
+        if size:
+            print(f"  {BIG_FONT_SRC:26s} -> {BIG_FONT_OUT:24s} [{size[0]}x{size[1]}]")
+
     small = source / SMALL_FONT_SRC
     if small.exists():
         size = prepare_small_font(small)
@@ -683,20 +688,39 @@ def main() -> int:
 
 
 # 작은 폰트. 6x6 격자에 a-z, 0-9 가 순서대로 들어 있다.
-SMALL_FONT_SRC = "smallfont.png"
+# 큰 폰트. 글자가 명목 칸 경계를 넘나들어 자르지 않는다 — 실제 칸은 런타임이 알파로 찾는다.
+# 다만 배경에 알파 1~4 짜리 잔향이 6만 픽셀 깔려 있어, 그대로 두면 그 잔향이 줄과 줄을
+# 이어 버려 검출이 7줄을 3줄로 본다. 그러면 `0` 이 통째로 사라지고 `X` 가 `WX` 를 덮는다.
+BIG_FONT_SRC = "fonts1.png"
+BIG_FONT_OUT = "sprite/icon-font.png"
+
+SMALL_FONT_SRC = "fonts2.png"
 SMALL_FONT_OUT = "sprite/icon-font-small.png"
-SMALL_FONT_GRID = 6
+SMALL_FONT_GRID = 7
 # 잉크로 칠 알파 하한.
 #
 # 0 으로 두면 칸 전체에 퍼진 알파 1~5 짜리 잔여까지 잉크로 세어
 # 상자가 칸 전체가 되고 여백이 하나도 안 잘린다. 8 을 넘기면 글자 모양만 남는다.
 SMALL_FONT_ALPHA = 8
-# 칸 순서. 원본 시트에 이 순서로 들어 있다.
-SMALL_FONT_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+# 칸 순서. 원본 시트에 이 순서로 들어 있다. 7x7 = 49칸 중 마지막 한 칸은 비어 있다.
+SMALL_FONT_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789-/+?.%:!'()>"
+
+# 글자를 세로 어디에 놓을지. 기호는 저마다 자리가 달라 규칙으로 못 잡는다.
+#
+#   BASE   바닥이 베이스라인에 앉는다 (기본값)
+#   DROP   베이스라인 아래로 꼬리가 내려간다
+#   MID    x-하이트 한가운데에 걸린다
+#   HANG   대문자 높이에 매달린다
+SMALL_FONT_DROP = "gjpqy/()"
+SMALL_FONT_MID = "-+>"
+SMALL_FONT_HANG = "'"
 # 디센더 깊이 (x-하이트 대비). 꼬리가 이만큼 베이스라인 아래로 내려간다.
 SMALL_FONT_DESCENDER = 0.32
 # 글자 좌우 여백(px). 붙여 놓으면 글자끼리 닿는다.
 SMALL_FONT_SIDE_BEARING = 3
+# 줄을 찾을 때 이보다 좁은 틈은 메운다. `i` 와 `j` 의 점이 몸통과 떨어져 있어
+# 그냥 두면 한 줄이 세 줄로 쪼개진다.
+SMALL_FONT_ROW_GAP = 24
 
 
 def _lines(solid: np.ndarray, axis: int, fill: float) -> list[tuple[int, int]]:
@@ -796,6 +820,20 @@ def prepare_gui2(src: Path) -> tuple[int, int] | None:
     return sheet.size
 
 
+def prepare_big_font(src: Path) -> tuple[int, int] | None:
+    """큰 폰트는 자르지 않고 **알파 잔향만 털어** 넘긴다. 이유는 상수 옆에 적어 두었다."""
+    rgba = np.array(Image.open(src).convert("RGBA"))
+    # 잉크는 `> SMALL_FONT_ALPHA` 다. 같은 값까지 지워야 한다 —
+    # 알파가 딱 8 인 1px 조각이 글자 옆에 붙어 있어, 남겨 두면 그게 한 칸을 차지해
+    # 마지막 줄의 기호가 통째로 한 칸씩 밀린다.
+    rgba[..., 3][rgba[..., 3] <= SMALL_FONT_ALPHA] = 0
+    out = OUT_ROOT / BIG_FONT_OUT
+    out.parent.mkdir(parents=True, exist_ok=True)
+    image = Image.fromarray(rgba, mode="RGBA")
+    image.save(out, optimize=True)
+    return image.size
+
+
 def prepare_small_font(src: Path) -> tuple[int, int] | None:
     """
     작은 폰트를 **베이스라인을 맞춰** 균등 격자로 다시 짠다.
@@ -804,46 +842,78 @@ def prepare_small_font(src: Path) -> tuple[int, int] | None:
     그대로 균등 분할하면 글자가 줄 위에서 오르내리고,
     그렇다고 칸마다 잉크 바닥을 맞추면 **디센더(g j p q y)의 꼬리가 베이스라인에 붙는다.**
 
-    그래서 글자마다 잉크 상자를 재고, 디센더인지 아닌지에 따라 놓는 높이를 달리한다.
+    기호가 들어오면서 경우가 하나 더 늘었다. 빼기표와 아포스트로피는 바닥이
+    베이스라인에 앉으면 안 된다 — 각각 글자 한가운데와 꼭대기에 있어야 한다.
+    그래서 글자마다 **위쪽이 베이스라인에서 얼마나 올라가는지**를 정하고 그 자리에 놓는다.
+
     결과는 모든 칸이 같은 크기이고 베이스라인이 한 줄로 서는 시트다 —
     거기서부터는 균등 분할이 정확하다.
     """
     image = Image.open(src).convert("RGBA")
     mask = np.array(image.getchannel("A")) > SMALL_FONT_ALPHA
-    h, w = mask.shape
-    cw, ch = w // SMALL_FONT_GRID, h // SMALL_FONT_GRID
+    height, width = mask.shape
 
-    # 글자마다 잉크 상자를 잰다. 순서는 a-z, 0-9.
+    # 칸을 균등하게 나눠 자를 수 없다. 그림이 명목 격자에서 밀려 있어
+    # 아래쪽 두 줄은 글자가 경계를 넘는다. 그래서 **실제 줄과 글자 자리**를 찾는다.
+    bands = close_gaps(runs_of(mask.any(axis=1)), SMALL_FONT_ROW_GAP)
+    if len(bands) != SMALL_FONT_GRID:
+        print(f"  [건너뜀] {src.name} 줄이 {len(bands)}개, 기대는 {SMALL_FONT_GRID}")
+        return None
+
     boxes: list[tuple[int, int, int, int] | None] = []
-    for r in range(SMALL_FONT_GRID):
-        for c in range(SMALL_FONT_GRID):
-            cell = mask[r * ch : (r + 1) * ch, c * cw : (c + 1) * cw]
-            if not cell.any():
+    for r, (y0, y1) in enumerate(bands):
+        row = mask[y0:y1]
+        # 마지막 줄은 글자가 모자란다. 7칸으로 나누라고 하면 멀쩡한 기호를 반으로 자른다.
+        count = min(SMALL_FONT_GRID, len(SMALL_FONT_CHARS) - r * SMALL_FONT_GRID)
+        if count <= 0:
+            break
+        cells, _ = row_layout(row, count)
+        for x0, x1 in cells:
+            piece = row[:, x0:x1]
+            if not piece.any():
                 boxes.append(None)
                 continue
-            ys, xs = np.where(cell)
-            boxes.append((int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1))
+            ys, xs = np.where(piece)
+            boxes.append((x0 + int(xs.min()), y0 + int(ys.min()),
+                          x0 + int(xs.max()) + 1, y0 + int(ys.max()) + 1))
 
     if all(b is None for b in boxes):
         print(f"  [건너뜀] {src.name} 내용이 없음")
         return None
 
+    def index_of(chars: str) -> set[int]:
+        return {SMALL_FONT_CHARS.index(ch) for ch in chars if ch in SMALL_FONT_CHARS}
+
     # 위로도 아래로도 삐치지 않는 글자들. 이들의 높이가 곧 x-하이트다.
-    plain = [SMALL_FONT_CHARS.index(ch) for ch in "acemnorsuvwxz"]
-    x_height = int(np.median([boxes[i][3] - boxes[i][1] for i in plain if boxes[i]]))
+    plain = [i for i in index_of("acemnorsuvwxz") if boxes[i]]
+    x_height = int(np.median([boxes[i][3] - boxes[i][1] for i in plain]))
     depth = max(1, round(x_height * SMALL_FONT_DESCENDER))
 
-    descenders = {SMALL_FONT_CHARS.index(ch) for ch in "gjpqy"}
+    drop, mid, hang = index_of(SMALL_FONT_DROP), index_of(SMALL_FONT_MID), index_of(SMALL_FONT_HANG)
 
-    ascents = []
-    for i, box in enumerate(boxes):
-        if not box:
-            continue
-        height = box[3] - box[1]
-        ascents.append(height - depth if i in descenders else height)
+    # 대문자 높이는 어센더 글자에서 얻는다. 매달리는 기호가 이 높이에 맞춰진다.
+    tall = [i for i in index_of("bdfhklt") if boxes[i]]
+    ascent_hint = max((boxes[i][3] - boxes[i][1]) for i in tall) if tall else x_height
 
-    ascent = max(ascents)
-    cell_h = ascent + depth
+    def above_baseline(i: int, glyph_h: int) -> float:
+        """이 글자의 **위쪽이 베이스라인에서 얼마나 올라가는가.** 놓을 자리를 이걸로 정한다."""
+        if i in drop:
+            return glyph_h - depth
+        if i in mid:
+            # x-하이트 한가운데에 걸린다. 빼기표와 더하기표가 글자 사이에 뜬다.
+            return x_height / 2 + glyph_h / 2
+        if i in hang:
+            # 대문자 높이에서 아래로 자란다. 아포스트로피가 글자 위에 붙는다.
+            return ascent_hint
+        return glyph_h
+
+    ups = [above_baseline(i, b[3] - b[1]) for i, b in enumerate(boxes) if b]
+    downs = [max(0.0, (b[3] - b[1]) - above_baseline(i, b[3] - b[1]))
+             for i, b in enumerate(boxes) if b]
+
+    ascent = int(np.ceil(max(ups)))
+    descent = int(np.ceil(max(downs)))
+    cell_h = ascent + descent
     cell_w = max((b[2] - b[0]) for b in boxes if b) + SMALL_FONT_SIDE_BEARING * 2
 
     sheet = Image.new(
@@ -855,14 +925,11 @@ def prepare_small_font(src: Path) -> tuple[int, int] | None:
         if not box:
             continue
         r, c = divmod(i, SMALL_FONT_GRID)
-        glyph = image.crop(
-            (c * cw + box[0], r * ch + box[1], c * cw + box[2], r * ch + box[3])
-        )
-        height = box[3] - box[1]
-        own_ascent = height - depth if i in descenders else height
+        glyph = image.crop(box)
+        up = above_baseline(i, box[3] - box[1])
         x = c * cell_w + (cell_w - glyph.width) // 2
-        # 베이스라인은 ascent 자리다. 디센더는 그 아래로 depth 만큼 더 내려간다.
-        y = r * cell_h + (ascent - own_ascent)
+        # 베이스라인은 ascent 자리다. 글자는 거기서 `up` 만큼 위로 올라가 시작한다.
+        y = r * cell_h + round(ascent - up)
         sheet.paste(glyph, (x, y))
 
     out = OUT_ROOT / SMALL_FONT_OUT

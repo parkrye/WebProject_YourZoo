@@ -24,25 +24,42 @@ export function detectFrames(source: CanvasImageSource, grid: GridSpec): Frame[]
   ctx.drawImage(source, 0, 0)
   const data = ctx.getImageData(0, 0, sheetW, sheetH).data
 
-  const rowBands = findBands(rowSums(data, sheetW, sheetH), rows)
+  const rowBands = findBands(rowSums(data, sheetW, sheetH), rows, sheetH / rows)
   if (!rowBands) return uniformFrames(grid)
 
   const paddedRows = padBands(rowBands, sheetH)
+  const pitch = sheetW / cols
 
   const frames: Frame[] = []
   for (let r = 0; r < rowBands.length; r++) {
     const band = rowBands[r] as Band
-    const colBands = findBands(colSums(data, sheetW, band.start, band.end), cols)
+    const colBands = findBands(colSums(data, sheetW, band.start, band.end), cols, pitch)
     if (!colBands) return uniformFrames(grid)
 
     const row = paddedRows[r] as Band
-    for (const col of padBands(colBands, sheetW)) {
-      frames.push({
-        sx: col.start,
-        sy: row.start,
-        sw: col.end - col.start + 1,
-        sh: row.end - row.start + 1,
-      })
+    const padded = padBands(colBands, sheetW)
+
+    /*
+      찾은 밴드를 **자리에 앉힌다.** 개수가 맞으면 순서대로 들어가고,
+      모자라면 빈 자리가 생긴다 — 그 자리는 아무도 참조하지 않는 빈 프레임이 된다.
+
+      자리는 밴드의 가운데가 어느 칸에 떨어지는지로 정한다. 다만 자리가 뒤로 가는 일은
+      없으므로, 이미 찬 자리가 나오면 그 다음 빈 자리로 민다.
+    */
+    const slots: (Band | undefined)[] = new Array<Band | undefined>(cols)
+    let next = 0
+    for (const col of padded) {
+      const centre = (col.start + col.end) / 2
+      const wanted = Math.min(cols - 1, Math.max(next, Math.floor(centre / pitch)))
+      slots[wanted] = col
+      next = wanted + 1
+    }
+
+    for (let c = 0; c < cols; c++) {
+      const col = slots[c]
+      frames.push(col
+        ? { sx: col.start, sy: row.start, sw: col.end - col.start + 1, sh: row.end - row.start + 1 }
+        : { sx: Math.round(pitch * c), sy: row.start, sw: 1, sh: row.end - row.start + 1 })
     }
   }
 
@@ -113,12 +130,22 @@ function colSums(data: Uint8ClampedArray, w: number, y0: number, y1: number): Ui
  * 남으면 **간격이 가장 좁은 이웃끼리 합친다**. 붙어 있는 글자 사이는 그림자만 겹치므로
  * 그 지점이 항상 밴드 내부의 최소값이 된다.
  */
-function findBands(sums: Uint32Array, expected: number): Band[] | null {
+function findBands(sums: Uint32Array, expected: number, pitch: number): Band[] | null {
   const bands = splitBands(sums, 1)
   if (bands.length === 0) return null
 
+  /*
+    모자란 개수를 채우려고 쪼갤 때, **명목 칸 폭보다 좁은 밴드는 쪼개지 않는다.**
+
+    개수가 모자란 데는 두 가지 이유가 있다. 글자 둘이 붙었거나, 칸이 비었거나.
+    앞은 쪼개는 게 맞지만 뒤는 멀쩡한 글자를 반으로 자른다.
+    둘은 폭으로 갈린다 — 두 글자가 붙었다면 그 밴드는 한 칸보다 넓다.
+
+    폰트 시트의 마지막 줄이 이렇다. 49칸에 글자가 48개라 마지막 줄이 6개뿐인데,
+    이 조건이 없으면 개수를 맞추려고 `>` 를 반으로 잘라 두 칸에 담았다.
+  */
   while (bands.length < expected) {
-    if (!splitWidest(bands, sums)) return null
+    if (!splitWidest(bands, sums, pitch)) break
   }
   while (bands.length > expected) {
     mergeClosest(bands)
@@ -162,7 +189,7 @@ function splitBands(sums: Uint32Array, threshold: number): Band[] {
 }
 
 /** 가장 넓은 밴드를 내부 최소 밀도 지점에서 둘로 나눈다. 나눌 수 없으면 false. */
-function splitWidest(bands: Band[], sums: Uint32Array): boolean {
+function splitWidest(bands: Band[], sums: Uint32Array, pitch: number): boolean {
   let target = -1
   let widest = 0
   for (let i = 0; i < bands.length; i++) {
@@ -177,6 +204,8 @@ function splitWidest(bands: Band[], sums: Uint32Array): boolean {
 
   const band = bands[target] as Band
   const width = band.end - band.start + 1
+  // 한 칸에도 못 미치는 밴드는 글자 하나다. 여기서 멈추면 남는 자리는 빈 칸이 된다.
+  if (width < pitch) return false
   const margin = Math.max(2, Math.floor(width * SPLIT_MARGIN_RATIO))
   const from = band.start + margin
   const to = band.end - margin

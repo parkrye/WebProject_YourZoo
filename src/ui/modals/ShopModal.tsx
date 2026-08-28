@@ -77,19 +77,11 @@ export function ShopModal() {
                   onClick={() => setPending({ kind: 'CASH', item: product })}
                 >
                   <IconGlyph icon={GUI.COIN_LARGE} size={54} />
-                  {/*
-                    덤은 총량에 합치지 않는다. 11 이라고만 쓰면 묶음이 이득이라는 게 안 보인다.
-
-                    예전엔 `10 + 1` 로 적었는데 **폰트에 A-Z 와 0-9 밖에 없어 `+` 가 지워졌다.**
-                    화면에는 `10 1` 이라고만 떠서 무슨 뜻인지 알 수 없었다. 그래서 말로 적는다.
-                  */}
-                  <BitmapLabel text={`${product.cash} CASH`} size={30} />
-                  {/* 덤이 없는 상품도 자리는 남긴다. 안 그러면 그 카드만 가격 줄이 올라온다. */}
-                  <span className="shop-item-bonus">
-                    {product.bonus > 0 && (
-                      <BitmapLabel text={`PLUS ${product.bonus} FREE`} size={17} />
-                    )}
-                  </span>
+                  {/* 덤은 합치지 않고 `10 + 1` 로 적는다. 11 이라고만 쓰면 이득이 안 보인다. */}
+                  <BitmapLabel
+                    text={product.bonus > 0 ? `${product.cash} + ${product.bonus}` : `${product.cash} CASH`}
+                    size={30}
+                  />
                   <BitmapLabel text={`${groupThousands(product.krw)} KRW`} size={22} />
                 </button>
               ))}
