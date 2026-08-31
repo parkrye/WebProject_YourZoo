@@ -43,7 +43,7 @@ const SLIDE_DURATION = 0.42
  * 물 영역은 평소 울타리와 트레이에 가려 어디에 놓는지 보이지 않는다.
  * 다만 완전히 치우지는 않는다 — 울타리가 사라지면 우리 경계도 함께 사라진다.
  */
-const FENCE_OFFSET_DRAGGING = 0.32
+const FENCE_OFFSET_DRAGGING = 0.46
 
 export function ZooScreen({ detail }: ZooScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
