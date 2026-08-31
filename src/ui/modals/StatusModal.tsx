@@ -1,6 +1,6 @@
 import { GUI } from '@/assets/manifest'
 import { averageVisitorMultiplier, settleDay } from '@/domain/economy'
-import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
+import { ENCLOSURE_ORDER, enclosureLabel } from '@/domain/enclosure'
 import { UNLOCK_COST, UNLOCK_REPUTATION } from '@/domain/balance'
 import { useState } from 'react'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
@@ -28,6 +28,7 @@ export function StatusModal() {
   const unlocked = useGameStore((s) => s.unlocked)
   const day = useGameStore((s) => s.clock.day)
   const zooName = useGameStore((s) => s.zooName)
+  const enclosureNames = useGameStore((s) => s.enclosureNames)
 
   const placed = animals.filter((a) => a.status === 'PLACED').length
   const storedCount = animals.filter((a) => a.status === 'STORED').length
@@ -90,7 +91,7 @@ export function StatusModal() {
             const count = animals.filter((a) => a.status === 'PLACED' && a.enclosureId === id).length
             return (
               <div key={id} className="stat-row">
-                <BitmapLabel text={ENCLOSURES[id].label} size={24} />
+                <BitmapLabel text={enclosureLabel(id, enclosureNames)} size={24} />
                 <BitmapLabel
                   // 잠긴 우리는 두 조건을 함께 적는다. 돈만 적어 두면 명성 조건을 모른다.
                   text={open ? `${count}` : `LOCKED ${UNLOCK_COST[id]}G ${UNLOCK_REPUTATION[id]} FAME`}

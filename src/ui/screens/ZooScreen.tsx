@@ -8,7 +8,7 @@ import { audio } from '@/audio/AudioManager'
 import { startTicker } from '@/core/ticker'
 import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST, UNLOCK_REPUTATION } from '@/domain/balance'
 import { phaseOf } from '@/domain/clock'
-import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
+import { ENCLOSURE_ORDER, enclosureLabel } from '@/domain/enclosure'
 import { SceneRenderer, type DropGuide, type EnclosureTransition } from '@/render/SceneRenderer'
 import {
   clampCamera, createCamera, MIN_ZOOM, panCamera, screenToScene, zoomStep, type Camera,
@@ -113,6 +113,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const myZooName = useGameStore((s) => s.zooName)
   const myAnimals = useGameStore((s) => s.animals)
   const myProps = useGameStore((s) => s.props)
+  const myEnclosureNames = useGameStore((s) => s.enclosureNames)
+  const myCapacity = useGameStore((s) => s.capacity)
 
   const enclosure = visiting ? visitEnclosure : myEnclosure
   const unlocked = visiting ? visiting.unlocked : myUnlocked
@@ -392,6 +394,9 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   }
 
   const here = animals.filter((a) => a.status === 'PLACED' && a.enclosureId === enclosure).length
+  // 이름과 정원도 보고 있는 동물원의 것을 따른다. 남의 우리에 내 정원을 적을 수는 없다.
+  const names = visiting ? visiting.enclosureNames : myEnclosureNames
+  const room = (visiting ? visiting.capacity?.[enclosure] : myCapacity[enclosure]) ?? MAX_ANIMALS_PER_ENCLOSURE
   const canPan = detail && tool === 'PAN'
 
   return (
@@ -440,10 +445,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           */}
           {detail ? (
             <div className="hud-top-right">
-              <BitmapLabel text={ENCLOSURES[enclosure].label} size={24} align="right" />
+              <BitmapLabel text={enclosureLabel(enclosure, names)} size={24} align="right" />
               <div className="hud-purse">
                 <IconGlyph icon={GUI.PAW} size={26} />
-                <BitmapLabel text={`${here} / ${MAX_ANIMALS_PER_ENCLOSURE}`} size={22} />
+                <BitmapLabel text={`${here} / ${room}`} size={22} />
               </div>
             </div>
           ) : (
@@ -484,10 +489,23 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                 </div>
               </div>
 
-              <div className="hud-enclosure-name">
-                <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
-                <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
-              </div>
+              {/*
+                이름표를 누르면 그 우리를 손본다. 아래 띠에 단추를 하나 더 두는 것보다
+                **고칠 대상 위에서** 여는 편이 무엇을 고치는지 분명하다.
+              */}
+              <button
+                type="button"
+                className="hud-enclosure-name"
+                disabled={!!visiting || !isOpen}
+                onClick={() => openModal('ENCLOSURE')}
+              >
+                <BitmapLabel text={enclosureLabel(enclosure, names)} size={38} align="center" />
+                <BitmapLabel
+                  text={isOpen ? `ANIMALS ${here} / ${room}` : 'LOCKED'}
+                  size={22}
+                  align="center"
+                />
+              </button>
             </>
           )}
 

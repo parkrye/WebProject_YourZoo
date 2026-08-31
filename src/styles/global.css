@@ -169,6 +169,7 @@ html, body, #root {
 
 .hud-purse { display: flex; align-items: center; gap: 8px; }
 
+/* 이름표는 그 우리를 손보는 문이기도 하다. 눌러서 이름과 정원을 고친다. */
 .hud-enclosure-name {
   position: absolute;
   top: 20px;
@@ -179,6 +180,22 @@ html, body, #root {
   border: 2px solid rgba(138, 90, 43, 0.7);
   border-radius: 10px;
   text-align: center;
+  cursor: pointer;
+  transition: filter 0.12s ease, border-color 0.12s ease;
+}
+.hud-enclosure-name:hover:not(:disabled) {
+  filter: brightness(1.15);
+  border-color: #d9a441;
+}
+/* 남의 동물원이나 잠긴 우리에서는 그냥 이름표다. */
+.hud-enclosure-name:disabled { cursor: default; }
+
+.enclosure-head { display: flex; flex-direction: column; gap: 2px; }
+
+.enclosure-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
 }
 
 .hud-arrow { position: absolute; top: 46%; transform: translateY(-50%); z-index: 5; }

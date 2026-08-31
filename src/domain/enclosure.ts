@@ -28,6 +28,16 @@ export const ENCLOSURES: Record<BiomeId, EnclosureDef> = {
   },
 }
 
+/**
+ * 화면에 뜨는 우리 이름.
+ *
+ * 주인이 붙인 이름이 있으면 그것을, 없으면 기본 이름을 쓴다.
+ * 남의 동물원을 볼 때도 같은 함수를 쓴다 — 그쪽이 붙인 이름을 넘기면 된다.
+ */
+export function enclosureLabel(id: BiomeId, names?: Partial<Record<BiomeId, string>>): string {
+  return names?.[id]?.trim() || ENCLOSURES[id].label
+}
+
 export function enclosureIndex(id: BiomeId): number {
   return ENCLOSURE_ORDER.indexOf(id)
 }

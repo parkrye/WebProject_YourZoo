@@ -121,7 +121,33 @@ export const REPUTATION_PER_APPEAL = 0.1
 export const OVERCROWD_THRESHOLD = 8
 export const OVERCROWD_PENALTY = 2
 
+/**
+ * 우리 정원의 **처음** 값. 골드를 들여 늘릴 수 있다.
+ *
+ * 매력도의 혼잡 계산은 늘린 정원이 아니라 이 값을 기준으로 둔다 —
+ * 정원을 늘렸다고 같은 마릿수가 덜 붐비게 보일 이유는 없다.
+ */
 export const MAX_ANIMALS_PER_ENCLOSURE = 12
+
+/** 한 번에 늘어나는 마릿수. */
+export const ENCLOSURE_EXPAND_STEP = 2
+
+/** 여기까지만 늘어난다. 우리 하나에 스무 마리면 화면이 이미 빽빽하다. */
+export const MAX_ENCLOSURE_CAPACITY = 20
+
+/** 정원을 처음 늘릴 때의 값. 한 단계 올라갈 때마다 이만큼씩 더 든다. */
+const EXPAND_BASE_COST = 400
+
+/**
+ * 정원을 한 단계 늘리는 값.
+ *
+ * 늘릴수록 비싸진다. 같은 값으로 계속 늘릴 수 있으면 우리를 새로 여는 것보다
+ * 한 우리를 키우는 쪽이 늘 싸져서, 사막도 얼음도 열 이유가 없어진다.
+ */
+export function expandCost(capacity: number): number {
+  const steps = Math.max(0, Math.round((capacity - MAX_ANIMALS_PER_ENCLOSURE) / ENCLOSURE_EXPAND_STEP))
+  return EXPAND_BASE_COST * (steps + 1)
+}
 export const MAX_VISITORS_PER_ENCLOSURE = 14
 /**
  * 동물이 있는 우리의 최소 동시 관람객.
@@ -172,4 +198,5 @@ export const UNLOCK_REPUTATION = {
 } as const
 
 export const ANIMAL_NAME_MAX_LENGTH = 10
+export const ENCLOSURE_NAME_MAX_LENGTH = 14
 export const ZOO_NAME_MAX_LENGTH = 14

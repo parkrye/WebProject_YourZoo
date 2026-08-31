@@ -7,6 +7,7 @@ import { TitleScreen, type TitleStep } from '@/ui/screens/TitleScreen'
 import { AuthScreen } from '@/ui/screens/AuthScreen'
 import { ZooScreen } from '@/ui/screens/ZooScreen'
 import { OptionsModal } from '@/ui/modals/OptionsModal'
+import { EnclosureModal } from '@/ui/modals/EnclosureModal'
 import { StatusModal } from '@/ui/modals/StatusModal'
 import { RequestModal } from '@/ui/modals/RequestModal'
 import { ReportModal } from '@/ui/modals/ReportModal'
@@ -60,6 +61,7 @@ export function GameRoot() {
 
       {modal === 'OPTIONS' && <OptionsModal />}
       {modal === 'STATUS' && <StatusModal />}
+      {modal === 'ENCLOSURE' && <EnclosureModal />}
       {modal === 'REQUEST' && <RequestModal />}
       {modal === 'REPORT' && <ReportModal />}
       {modal === 'SHOP' && <ShopModal />}

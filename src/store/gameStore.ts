@@ -3,7 +3,8 @@ import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
   ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, CASH_TO_GOLD, DAY_DURATION_SEC,
-  MAX_ANIMALS_PER_ENCLOSURE,
+  ENCLOSURE_EXPAND_STEP, ENCLOSURE_NAME_MAX_LENGTH, MAX_ANIMALS_PER_ENCLOSURE, MAX_ENCLOSURE_CAPACITY,
+  expandCost,
   PROP_CREATE_COST, PROP_SELL_RATIO, SHEET_COST, SHIPPING_DAYS,
   START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST, UNLOCK_REPUTATION,
   productTotal, type CashProduct,
@@ -39,7 +40,7 @@ import { getImage } from './imageDb'
 
 export type ScreenId = 'TITLE' | 'AUTH' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
 export type ModalId =
-  | 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'ARRIVAL' | null
+  | 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'ARRIVAL' | 'ENCLOSURE' | null
 
 /**
  * 서버 동기화 상태.
@@ -106,6 +107,10 @@ interface GameState {
   clock: ClockState
   currentEnclosure: BiomeId
   unlocked: BiomeId[]
+  /** 우리마다 주인이 붙인 이름. 없으면 기본 이름을 쓴다. */
+  enclosureNames: Partial<Record<BiomeId, string>>
+  /** 우리마다의 정원. 골드를 들여 늘린다. */
+  capacity: Record<BiomeId, number>
   animals: Animal[]
   /** 소유한 프롭. 동물과 같은 배송 -> 창고 -> 배치 흐름을 탄다. */
   props: OwnedProp[]
@@ -199,6 +204,10 @@ interface GameState {
   canPlaceIn(enclosureId: BiomeId): boolean
   unlockEnclosure(id: BiomeId): boolean
   isUnlocked(id: BiomeId): boolean
+  /** 우리에 이름을 붙인다. 값은 들지 않는다. 빈 이름이면 기본 이름으로 되돌린다. */
+  renameEnclosure(id: BiomeId, name: string): void
+  /** 정원을 한 단계 늘린다. 골드가 모자라거나 상한이면 false. */
+  expandEnclosure(id: BiomeId): boolean
 
   /** 비회원으로 시작한다. 무작위 아이디를 발급하고 이름 짓기로 간다. */
   startNewGame(): void
@@ -231,6 +240,12 @@ const initial = {
   clock: { day: 1, elapsed: 0 } as ClockState,
   currentEnclosure: 'FIELD' as BiomeId,
   unlocked: ['FIELD'] as BiomeId[],
+  enclosureNames: {} as Partial<Record<BiomeId, string>>,
+  capacity: {
+    FIELD: MAX_ANIMALS_PER_ENCLOSURE,
+    DESERT: MAX_ANIMALS_PER_ENCLOSURE,
+    ICE: MAX_ANIMALS_PER_ENCLOSURE,
+  } as Record<BiomeId, number>,
   animals: [] as Animal[],
   props: [] as OwnedProp[],
   orders: [] as Order[],
@@ -263,14 +278,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   skipTutorial: () => set({ tutorial: 'DONE' }),
   openModal: (modal) => set({ modal }),
   /**
-   * 정산 팝업을 닫는 건 하루 연출의 마지막 단계다. 닫히면서 화면이 다시 밝아진다.
-   * 다만 오늘 도착한 것이 있으면 알림을 먼저 띄우고, 그게 닫힐 때 밝아진다.
+   * 정산 팝업을 닫으면 화면이 다시 밝아진다.
+   *
+   * 도착 알림은 **밝아진 뒤에** 뜬다. 예전에는 캄캄한 화면 위에 이어 붙였는데,
+   * 검은 막이 언제 걷힐지 모른 채 팝업 두 개를 연달아 읽어야 해서
+   * 하루가 끝난 느낌 대신 창을 치우는 일감이 됐다.
    */
   closeModal: () =>
     set((s) => {
+      // 도착 알림을 닫는 건 하루 연출의 끝이다. 알림 내용도 여기서 비운다.
+      if (s.modal === 'ARRIVAL') return { modal: null, arrivals: null }
       if (s.dayFade !== 'HOLD') return { modal: null }
-      if (s.modal === 'REPORT' && s.arrivals) return { modal: 'ARRIVAL' as const }
-      return { modal: null, dayFade: 'IN' as const, arrivals: null }
+      return { modal: null, dayFade: 'IN' as const }
     }),
 
   /**
@@ -414,7 +433,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     void pushCurrentSave(true)
   },
 
-  endDayFade: () => set({ dayFade: 'NONE' }),
+  /**
+   * 밝아지기가 끝났다. 오늘 도착한 것이 있으면 이제 알린다.
+   *
+   * 화면이 완전히 밝아진 뒤라 시계도 함께 돈다 — 택배를 확인하는 동안
+   * 세상이 멈춰 있을 이유가 없다.
+   */
+  endDayFade: () =>
+    set((s) => ({
+      dayFade: 'NONE',
+      ...(s.arrivals && s.modal === null && { modal: 'ARRIVAL' as const }),
+    })),
 
   clearArrivals: () => set({ arrivals: null }),
 
@@ -465,6 +494,27 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setOption: (key, value) => set((s) => ({ options: { ...s.options, [key]: value } })),
 
+  renameEnclosure: (id, name) =>
+    set((s) => ({
+      // 글자 제약은 입력 칸이 이미 걸러 준다. 여기서는 길이만 자른다.
+      enclosureNames: { ...s.enclosureNames, [id]: name.trim().slice(0, ENCLOSURE_NAME_MAX_LENGTH) },
+    })),
+
+  expandEnclosure: (id) => {
+    const { gold, capacity } = get()
+    const now = capacityOf(capacity, id)
+    if (now >= MAX_ENCLOSURE_CAPACITY) return false
+
+    const cost = expandCost(now)
+    if (gold < cost) return false
+
+    set((s) => ({
+      gold: s.gold - cost,
+      capacity: { ...s.capacity, [id]: now + ENCLOSURE_EXPAND_STEP },
+    }))
+    return true
+  },
+
   goToTitle: () => {
     /*
       화면을 바꾸기 **전에** 저장한다. 주기 저장은 동물원 안에서만 도는데,
@@ -494,9 +544,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => ({ draft: { ...s.draft, prop: { ...s.draft.prop, ...patch } } })),
 
   canPlaceIn: (enclosureId) => {
-    const { animals, unlocked } = get()
+    const { animals, unlocked, capacity } = get()
     if (!unlocked.includes(enclosureId)) return false
-    return placedIn(animals, enclosureId).length < MAX_ANIMALS_PER_ENCLOSURE
+    return placedIn(animals, enclosureId).length < capacityOf(capacity, enclosureId)
   },
 
   orderAnimal: (animal, cost = ANIMAL_CREATE_COST) => {
@@ -869,6 +919,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       clock: save.clock,
       currentEnclosure: save.currentEnclosure,
       unlocked: save.unlocked,
+      enclosureNames: save.enclosureNames ?? {},
+      // 구버전 세이브에는 정원이 없다. 빠진 우리는 처음 값으로 채운다.
+      capacity: { ...initial.capacity, ...(save.capacity ?? {}) },
       animals: save.animals,
       props: save.props ?? [],
       orders: save.orders ?? [],
@@ -894,6 +947,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       clock: s.clock,
       currentEnclosure: s.currentEnclosure,
       unlocked: s.unlocked,
+      enclosureNames: s.enclosureNames,
+      capacity: s.capacity,
       animals: s.animals,
       props: s.props,
       orders: s.orders,
@@ -903,6 +958,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 }))
+
+/** 구버전 세이브에는 정원이 없다. 없으면 처음 값이다. */
+function capacityOf(capacity: Partial<Record<BiomeId, number>>, id: BiomeId): number {
+  return capacity[id] ?? MAX_ANIMALS_PER_ENCLOSURE
+}
 
 /** 운영 현황에 남겨 두는 정산 기록 수. */
 const REPORT_HISTORY = 7
@@ -1047,6 +1107,9 @@ async function publishCurrentZoo(): Promise<void> {
       reputation: s.reputation,
       day: s.clock.day,
       unlocked: s.unlocked,
+      // 우리에 붙인 이름과 정원도 함께 올린다. 구경하는 쪽 화면에 그대로 뜬다.
+      enclosureNames: s.enclosureNames,
+      capacity: s.capacity,
       animals,
       props,
     },

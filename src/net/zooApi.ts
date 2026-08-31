@@ -16,6 +16,10 @@ export interface ZooDoc {
   readonly reputation: number
   readonly day: number
   readonly unlocked: readonly BiomeId[]
+  /** 주인이 우리에 붙인 이름. 없는 우리는 기본 이름으로 뜬다. */
+  readonly enclosureNames?: Partial<Record<BiomeId, string>>
+  /** 우리마다의 정원. 구경하는 화면에 `n / 정원` 으로 뜬다. */
+  readonly capacity?: Partial<Record<BiomeId, number>>
   readonly animals: readonly Animal[]
   readonly props: readonly OwnedProp[]
   readonly updatedAt: number
