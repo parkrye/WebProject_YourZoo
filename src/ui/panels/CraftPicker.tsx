@@ -30,7 +30,8 @@ export function CraftPicker<T extends string>({
         <BitmapLabel text={title} size={26} />
       </header>
 
-      <div className="wizard-body">
+      {/* 카드가 여럿이라 위에 붙인다. 가운데로 띄우면 제목과의 사이가 통째로 빈다. */}
+      <div className="wizard-body is-top">
         <div className="craft-grid">
           {order.map((id) => {
             const spec = specs[id]

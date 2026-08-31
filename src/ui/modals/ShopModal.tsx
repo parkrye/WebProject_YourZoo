@@ -148,6 +148,8 @@ export function ShopModal() {
                     <button
                       type="button"
                       className={pick?.kind === 'EXCHANGE' ? 'shop-item is-active' : 'shop-item'}
+                      // 바꿀 캐시가 없으면 누를 수 없다. 눌러도 아무 일이 없으면 고장으로 읽힌다.
+                      disabled={cash < 1}
                       onClick={() => choose({ kind: 'EXCHANGE' })}
                     >
                       <span className="shop-trade">
@@ -216,6 +218,7 @@ export function ShopModal() {
               pick={pick}
               quantity={quantity}
               max={max}
+              affordable={!pick || affordableFor(pick, quantity, gold, cash)}
               onQuantity={setQuantity}
               onBuy={() => setConfirming(true)}
             />
@@ -243,6 +246,8 @@ interface ShopDetailProps {
   pick: ShopPick | null
   quantity: number
   max: number
+  /** 치를 것이 모자라면 살 수 없다. 캐시 상품은 현금이라 늘 참이다. */
+  affordable: boolean
   onQuantity: (n: number) => void
   onBuy: () => void
 }
@@ -253,7 +258,7 @@ interface ShopDetailProps {
  * 아무것도 고르지 않았을 때도 **자리를 그대로 남긴다.** 판이 통째로 나타났다
  * 사라지면 목록의 폭이 매번 바뀌어, 고르는 동안 화면이 출렁인다.
  */
-function ShopDetail({ pick, quantity, max, onQuantity, onBuy }: ShopDetailProps) {
+function ShopDetail({ pick, quantity, max, affordable, onQuantity, onBuy }: ShopDetailProps) {
   if (!pick) {
     return (
       <aside className="shop-detail is-empty">
@@ -283,8 +288,8 @@ function ShopDetail({ pick, quantity, max, onQuantity, onBuy }: ShopDetailProps)
         <BitmapLabel text={total.text} size={28} />
       </div>
 
-      <button type="button" className="shop-buy" onClick={onBuy}>
-        <BitmapLabel text="BUY" size={26} />
+      <button type="button" className="shop-buy" disabled={!affordable} onClick={onBuy}>
+        <BitmapLabel text={affordable ? 'BUY' : 'NOT ENOUGH'} size={26} />
       </button>
     </aside>
   )
@@ -340,6 +345,13 @@ function maxQuantity(pick: ShopPick, gold: number, cash: number): number {
   if (pick.kind === 'CASH') return 1
   if (pick.kind === 'EXCHANGE') return Math.max(1, cash)
   return Math.min(SHOP_MAX_QUANTITY, Math.max(1, Math.floor(gold / priceOf(pick))))
+}
+
+/** 치를 것이 있는가. 캐시 상품은 현금 결제라 소지품과 무관하다. */
+function affordableFor(pick: ShopPick, quantity: number, gold: number, cash: number): boolean {
+  if (pick.kind === 'CASH') return true
+  if (pick.kind === 'EXCHANGE') return cash >= quantity
+  return gold >= priceOf(pick) * quantity
 }
 
 function priceOf(pick: ShopPick): number {

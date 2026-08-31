@@ -262,6 +262,27 @@ html, body, #root {
   z-index: 60;
 }
 
+/*
+  동물원을 오갈 때의 암전. 하루 넘김보다 위에 깔린다 —
+  둘이 겹칠 일은 없지만, 겹친다면 지금 벌어지는 이동이 앞이다.
+*/
+.travel-fade {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  pointer-events: none;
+  z-index: 46;
+}
+
+.travel-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 /* 하루가 넘어갈 때의 암전. 알파는 rAF 가 직접 물린다 — DayFade.tsx 참고. */
 .day-fade {
   position: absolute;
@@ -1063,7 +1084,10 @@ html, body, #root {
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
-  width: 520px;
+  /* 라벨이 캔버스라 줄바꿈이 없다. 폭을 고정하면 긴 안내가 테두리에 닿는다. */
+  width: max-content;
+  min-width: 420px;
+  max-width: 92%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1075,7 +1099,7 @@ html, body, #root {
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
 }
 
-.tutorial-card.is-anchored { bottom: auto; width: 480px; }
+.tutorial-card.is-anchored { bottom: auto; }
 
 .tutorial-skip { pointer-events: auto; margin-top: 2px; opacity: 0.65; }
 .tutorial-skip:hover { opacity: 1; }
@@ -1743,6 +1767,9 @@ html, body, #root {
   padding-bottom: 8px;
   border-bottom: 2px solid rgba(138, 90, 43, 0.28);
 }
+
+/* 카드를 늘어놓는 걸음은 위에 붙인다. 가운데로 띄우면 제목과의 사이가 통째로 빈다. */
+.wizard-body.is-top { justify-content: flex-start; }
 
 /* 걸음마다 내용의 양이 다르다. 남는 자리를 여기가 먹고, 넘치면 여기만 스크롤한다. */
 .wizard-body {

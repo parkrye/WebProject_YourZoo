@@ -13,7 +13,11 @@ const TABS: readonly TabItem<RequestTab>[] = [
 ]
 
 const POPUP_WIDTH = 1180
-const POPUP_HEIGHT = 900
+/*
+  화면 높이가 900 이라 900 을 주면 팝업이 화면을 위아래로 꽉 채워, 창이 아니라
+  또 하나의 화면처럼 보였다. 24칸 그리기 걸음도 820 이면 넉넉하다.
+*/
+const POPUP_HEIGHT = 820
 
 /**
  * 만드는 곳.

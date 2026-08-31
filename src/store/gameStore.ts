@@ -66,6 +66,14 @@ export interface Arrivals {
  */
 export type DayFade = 'NONE' | 'OUT' | 'HOLD' | 'IN'
 
+/**
+ * 동물원을 오갈 때의 암전 단계.
+ *
+ * 하루 넘김과 단계 이름은 같지만 **뜻이 다르다** — 여기서 `HOLD` 는 읽을 것이 있어
+ * 멈춘 게 아니라, 어디로 가는지 한 줄 읽을 시간을 주려고 잠깐 캄캄한 상태다.
+ */
+export type TravelPhase = 'NONE' | 'OUT' | 'HOLD' | 'IN'
+
 export interface OptionsState {
   bgm: number
   sfx: number
@@ -114,6 +122,16 @@ interface GameState {
   pendingDay: ClockAdvanceResult | null
   /** 구경 중인 남의 동물원. null 이면 내 동물원이다. 세이브에는 넣지 않는다. */
   visiting: ZooDoc | null
+  /**
+   * 동물원을 오갈 때의 암전 단계.
+   *
+   * 예전에는 남의 동물원이 **한 프레임 만에 바뀌었다.** 배경도 우리도 비슷해서
+   * 들어간 건지 아직 내 동물원인지 알 수 없었다. 어두워졌다 밝아지고,
+   * 캄캄한 동안 어디로 가는지 한 줄 적어 준다.
+   */
+  travel: TravelPhase
+  /** 암전이 끝나면 적용할 이동. `visiting: null` 이면 집으로 돌아온다. */
+  pendingTravel: { visiting: ZooDoc | null } | null
   /** 구경 중에 보고 있는 우리. 내 `currentEnclosure` 를 건드리지 않는다. */
   visitEnclosure: BiomeId
   /** 오늘 아침 창고에 도착한 것들. 알림을 닫으면 비운다. 세이브에는 넣지 않는다. */
@@ -136,6 +154,8 @@ interface GameState {
   startVisit(doc: ZooDoc): Promise<void>
   /** 구경을 끝내고 내 동물원으로 돌아온다. */
   endVisit(): void
+  /** 암전의 다음 단계로. 진행은 화면 쪽(`TravelFade`)이 재고 여기서는 단계만 넘긴다. */
+  advanceTravel(): void
   /** 도착 알림을 닫는다. */
   clearArrivals(): void
   moveEnclosure(direction: -1 | 1): void
@@ -219,6 +239,8 @@ const initial = {
   dayFade: 'NONE' as DayFade,
   pendingDay: null as ClockAdvanceResult | null,
   visiting: null as ZooDoc | null,
+  travel: 'NONE' as TravelPhase,
+  pendingTravel: null as { visiting: ZooDoc | null } | null,
   visitEnclosure: 'FIELD' as BiomeId,
   arrivals: null as Arrivals | null,
   sync: 'OFF' as SyncState,
@@ -263,6 +285,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     if (state.screen !== 'ZOO' && state.screen !== 'ZOO_DETAIL') return
     if (state.isDrawing || state.modal === 'REPORT') return
+    // 동물원을 오가는 동안에도 멈춘다. 캄캄한 사이에 자정이 오면 두 연출이 겹친다.
+    if (state.travel !== 'NONE') return
     // 암전이 시작되면 정산이 끝나고 화면이 다시 밝아질 때까지 시계는 멈춘다.
     if (state.dayFade !== 'NONE') return
     // 남의 동물원을 보는 중에 내 하루가 끝나 암전과 리포트가 끼어들면 곤란하다.
@@ -404,20 +428,33 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startVisit: async (doc) => {
     // 남의 그림은 내 IndexedDB 에 없다. 들어가기 전에 받아 둬야 빈 우리를 보지 않는다.
+    // 암전보다 **먼저** 받는다. 캄캄한 동안 받으면 밝아진 뒤에도 우리가 비어 있다.
     const ids = [
       ...doc.animals.flatMap((a) => (a.spriteSheet ? [a.imageId, a.spriteSheet.imageId] : [a.imageId])),
       ...(doc.props ?? []).map((p) => p.imageId).filter((id): id is string => id !== null),
     ]
     await preloadRemote(ids)
-    set({
-      visiting: doc,
-      visitEnclosure: firstUnlocked(doc.unlocked),
-      screen: 'ZOO',
-      modal: null,
-    })
+    set({ travel: 'OUT', pendingTravel: { visiting: doc }, modal: null })
   },
 
-  endVisit: () => set({ visiting: null, screen: 'ZOO', modal: null }),
+  endVisit: () => set({ travel: 'OUT', pendingTravel: { visiting: null }, modal: null }),
+
+  advanceTravel: () => {
+    const { travel, pendingTravel } = get()
+    if (travel === 'OUT') {
+      const doc = pendingTravel?.visiting ?? null
+      set({
+        visiting: doc,
+        ...(doc && { visitEnclosure: firstUnlocked(doc.unlocked) }),
+        screen: 'ZOO',
+        modal: null,
+        pendingTravel: null,
+        travel: 'HOLD',
+      })
+      return
+    }
+    set({ travel: travel === 'HOLD' ? 'IN' : 'NONE' })
+  },
 
   setOption: (key, value) => set((s) => ({ options: { ...s.options, [key]: value } })),
 
