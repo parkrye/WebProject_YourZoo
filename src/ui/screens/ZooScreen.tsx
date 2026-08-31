@@ -9,7 +9,7 @@ import { startTicker } from '@/core/ticker'
 import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST } from '@/domain/balance'
 import { phaseOf } from '@/domain/clock'
 import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
-import { SceneRenderer, type EnclosureTransition } from '@/render/SceneRenderer'
+import { SceneRenderer, type DropGuide, type EnclosureTransition } from '@/render/SceneRenderer'
 import {
   clampCamera, createCamera, MIN_ZOOM, panCamera, screenToScene, zoomStep, type Camera,
 } from '@/render/camera'
@@ -55,6 +55,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const cameraRef = useRef<Camera>(createCamera())
   /** 렌더 루프가 매 프레임 읽는다. state 로 두면 트윈이 한 박자 늦는다. */
   const loweringRef = useRef(false)
+  /** 배치 안내선. 같은 이유로 ref 다 — 손을 따라 매 프레임 다시 그린다. */
+  const dropGuideRef = useRef<DropGuide | null>(null)
   const [camera, setCamera] = useState<Camera>(cameraRef.current)
   const [tool, setTool] = useState<DetailTool>('CURSOR')
   const panRef = useRef<{ x: number; y: number } | null>(null)
@@ -69,8 +71,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null)
   const [dropError, setDropError] = useState<string | null>(null)
-  /** 드래그 중인 손이 트레이 밖(= 우리 위)에 있는가. 그때만 시야를 비워 준다. */
-  const [dragOverScene, setDragOverScene] = useState(false)
   const transitionRef = useRef<EnclosureTransition | null>(null)
 
   // 우리 3개를 모두 유지하며 계속 시뮬레이션한다. 넘겼다 돌아왔을 때 얼어 있으면 어색하다.
@@ -171,9 +171,15 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     for (const sim of sims.values()) sim.syncProps(props)
   }, [props, sims])
 
+  /*
+    무언가를 끌기 시작하면 트레이도 펜스도 곧바로 내려간다.
+    예전에는 손이 트레이 밖으로 나갔을 때만 내렸는데, 물 영역이 하필 트레이가
+    있는 화면 아래쪽이라 **놓으려고 손을 내리면 트레이가 다시 올라와** 놓을 자리를 가렸다.
+    고르는 동안에는 트레이가 필요하지만 이미 집은 뒤에는 필요 없다.
+  */
   useEffect(() => {
-    loweringRef.current = dragOverScene
-  }, [dragOverScene])
+    loweringRef.current = drag !== null
+  }, [drag])
 
   useEffect(() => {
     if (!dropError) return
@@ -227,6 +233,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           sim,
           elapsed: store.clock.elapsed,
           fenceOffset: fenceRef.current,
+          dropGuide: dropGuideRef.current,
           camera: cameraRef.current,
           selectedId: selectedIdRef.current,
           transition: transitionRef.current,
@@ -253,11 +260,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const trackGhost = useCallback((state: DragState) => {
     setDrag(state)
     setGhost(toStage(state.clientX, state.clientY))
-
-    // 트레이 위에 손이 있으면 아직 고르는 중이다. 벗어나야 놓을 자리를 보여 준다.
-    const tray = document.querySelector('.storage-tray')?.getBoundingClientRect()
-    setDragOverScene(!tray || state.clientY < tray.top)
-  }, [toStage])
+    dropGuideRef.current = guideFor(state, canPlaceIn(enclosure), canPlaceProp(props, enclosure))
+  }, [toStage, canPlaceIn, enclosure, props])
 
   /** 뷰포트 좌표를 씬의 정규화 좌표로 바꾼다. Stage 의 CSS 축소를 되돌려야 한다. */
   const toScene = useCallback((clientX: number, clientY: number) => {
@@ -346,7 +350,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const handleDrop = (state: DragState): void => {
     setDrag(null)
     setGhost(null)
-    setDragOverScene(false)
+    dropGuideRef.current = null
 
     const scene = toScene(state.clientX, state.clientY)
     if (!scene) return
@@ -649,7 +653,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             stored={stored}
             storedProps={storedPropList}
             shippingCount={shippingCount}
-            lowered={dragOverScene}
+            lowered={drag !== null}
             onSelect={(item) => select(item.kind === 'ANIMAL' ? item.id : null)}
             onDragStart={trackGhost}
             onDragMove={trackGhost}
@@ -673,6 +677,15 @@ export function ZooScreen({ detail }: ZooScreenProps) {
       )}
     </div>
   )
+}
+
+/**
+ * 끌고 있는 것이 어디에 들어갈 수 있는지.
+ * 동물은 제 서식지 칸에만, 프롭은 어디에나 들어간다.
+ */
+function guideFor(state: DragState, roomForAnimal: boolean, roomForProp: boolean): DropGuide {
+  if (state.item.kind === 'PROP') return { habitat: null, blocked: !roomForProp }
+  return { habitat: state.item.animal.traits.habitat, blocked: !roomForAnimal }
 }
 
 interface LockedOverlayProps {

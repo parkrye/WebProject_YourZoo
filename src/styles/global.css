@@ -857,10 +857,14 @@ html, body, #root {
 /* 트레이 위에서 고르는 동안은 비쳐만 보이고 */
 .storage-tray.is-dragging { opacity: 0.35; }
 
-/* 우리 위로 넘어가면 아예 내려가 물 영역까지 훤히 보이게 한다. */
+/*
+  집어 든 순간부터 트레이는 화면 밖으로 완전히 비켜난다.
+  물 영역이 하필 트레이 자리라, 조금만 남겨 두면 놓을 자리를 그만큼 가린다.
+  고르는 동안에는 트레이가 필요하지만 이미 집은 뒤에는 필요 없다.
+*/
 .storage-tray.is-lowered {
-  opacity: 0.12;
-  transform: translateY(78%);
+  opacity: 0;
+  transform: translateY(100%);
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
 .storage-tray.is-closing { animation: tray-out 0.18s ease-in both; }
