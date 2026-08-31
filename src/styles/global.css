@@ -878,7 +878,12 @@ html, body, #root {
 }
 
 .storage-tray {
-  animation: tray-in 0.2s ease-out both;
+  /*
+    `both` 를 쓰면 안 된다. 애니메이션이 끝난 뒤에도 마지막 키프레임의
+    `transform: translateY(0)` 이 계속 적용돼, 아래의 `.is-lowered` 변형을 통째로 덮는다.
+    트레이가 내려가지 않아 물에 놓을 자리를 계속 가리고 있던 원인이 이것이었다.
+  */
+  animation: tray-in 0.2s ease-out;
   position: absolute;
   left: 0;
   right: 0;
