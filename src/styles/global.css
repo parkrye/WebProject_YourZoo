@@ -725,6 +725,24 @@ html, body, #root {
   background: rgba(10, 8, 5, 0.62);
 }
 
+/* 해금 조건 두 줄. 채운 조건은 밝게, 못 채운 것은 붉게 남긴다. */
+.locked-reqs { display: flex; gap: 26px; align-items: center; }
+
+.locked-req {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 16px;
+  border-radius: 12px;
+  border: 2px solid rgba(216, 56, 47, 0.75);
+  background: rgba(216, 56, 47, 0.14);
+}
+
+.locked-req.is-met {
+  border-color: rgba(114, 200, 96, 0.8);
+  background: rgba(73, 168, 58, 0.18);
+}
+
 /* ── 상세보기 팬 ─────────────────────────────────────────── */
 
 .screen-canvas.is-pannable { cursor: grab; touch-action: none; }
@@ -1146,8 +1164,8 @@ html, body, #root {
 
 .shop-list {
   display: flex;
-  gap: 22px;
-  margin: auto 0;
+  flex-wrap: wrap;
+  gap: 18px;
 }
 
 /* 상점 목록. 22종이 들어가므로 팝업 안에서만 스크롤한다. */
@@ -1217,6 +1235,121 @@ html, body, #root {
 }
 .shop-item:hover { transform: translateY(-3px); filter: brightness(1.05); }
 .shop-item:active { transform: translateY(0); }
+
+/* 목록과 상세 판. 판은 늘 자리를 지킨다 — 나타났다 사라지면 목록 폭이 출렁인다. */
+.shop-body {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 306px;
+  gap: 22px;
+}
+
+.shop-stock {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+/* 캐시 탭의 구분선. 파는 물건과 가진 것을 바꾸는 일은 성격이 다르다. */
+.shop-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.7;
+}
+.shop-divider::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 2px;
+  background: rgba(138, 90, 43, 0.45);
+}
+
+.shop-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 16px;
+  border-radius: 16px;
+  border: 2px solid rgba(138, 90, 43, 0.55);
+  background: rgba(120, 78, 34, 0.12);
+}
+
+.shop-detail.is-empty { opacity: 0.55; }
+
+.shop-preview {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 168px;
+  border-radius: 12px;
+  background: rgba(243, 228, 194, 0.16);
+}
+
+.shop-preview.is-empty {
+  border: 3px dashed rgba(138, 90, 43, 0.5);
+  background: transparent;
+}
+
+.shop-trade { display: flex; align-items: center; gap: 8px; }
+
+.shop-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+.shop-qty.is-disabled { opacity: 0.35; }
+
+.qty-button {
+  display: grid;
+  place-items: center;
+  min-width: 46px;
+  height: 42px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #fbf3e0 0%, #efdfba 100%);
+  box-shadow: inset 0 0 0 2px rgba(200, 168, 106, 0.85), 0 2px 0 3px #8a5a2b;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+.qty-button:hover:not(:disabled) { filter: brightness(1.06); }
+.qty-button:active:not(:disabled) { transform: translateY(2px); }
+.qty-button:disabled { opacity: 0.4; cursor: default; }
+
+.qty-value { min-width: 64px; }
+
+.shop-total { display: flex; align-items: center; gap: 8px; }
+
+.shop-buy {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  height: 54px;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #f2c230 0%, #d9a441 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 236, 180, 0.8), 0 3px 0 4px #8a5a2b;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+.shop-buy:hover:not(:disabled) { filter: brightness(1.06); }
+.shop-buy:active:not(:disabled) { transform: translateY(2px); }
+.shop-buy:disabled { opacity: 0.4; cursor: default; }
+
+/* 고른 것은 목록에서도 표시해 둔다. 오른쪽 판만 바뀌면 무엇을 골랐는지 놓친다. */
+.shop-item.is-active,
+.shop-card.is-active {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 236, 180, 0.9),
+    0 0 0 3px #f2c230,
+    0 3px 0 4px #8a5a2b;
+}
 
 .shop-note {
   display: flex;

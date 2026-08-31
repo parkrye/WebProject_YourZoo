@@ -6,7 +6,7 @@ import {
 } from '@/assets/manifest'
 import { audio } from '@/audio/AudioManager'
 import { startTicker } from '@/core/ticker'
-import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST } from '@/domain/balance'
+import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST, UNLOCK_REPUTATION } from '@/domain/balance'
 import { phaseOf } from '@/domain/clock'
 import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
 import { SceneRenderer, type DropGuide, type EnclosureTransition } from '@/render/SceneRenderer'
@@ -412,7 +412,12 @@ export function ZooScreen({ detail }: ZooScreenProps) {
       )}
 
       {!isOpen && !modal && !trayOpen && !visiting && (
-        <LockedOverlay id={enclosure} gold={gold} onUnlock={() => unlockEnclosure(enclosure)} />
+        <LockedOverlay
+          id={enclosure}
+          gold={gold}
+          reputation={reputation}
+          onUnlock={() => unlockEnclosure(enclosure)}
+        />
       )}
 
       {/*
@@ -691,26 +696,55 @@ function guideFor(state: DragState, roomForAnimal: boolean, roomForProp: boolean
 interface LockedOverlayProps {
   id: BiomeId
   gold: number
+  reputation: number
   onUnlock: () => void
 }
 
-function LockedOverlay({ id, gold, onUnlock }: LockedOverlayProps) {
+/**
+ * 잠긴 우리.
+ *
+ * 조건이 둘이므로 **가진 것과 필요한 것을 나란히** 적는다.
+ * "NOT ENOUGH" 한 줄만 띄우면 무엇이 얼마나 모자란지 알 수 없어,
+ * 얼마를 더 모아야 하는지 가늠할 수가 없다.
+ */
+function LockedOverlay({ id, gold, reputation, onUnlock }: LockedOverlayProps) {
   const cost = UNLOCK_COST[id]
-  const affordable = gold >= cost
+  const fame = UNLOCK_REPUTATION[id]
+  const rich = gold >= cost
+  const famous = reputation >= fame
+  const ready = rich && famous
 
   return (
     <div className="locked-overlay">
       <IconGlyph icon={GUI.LOCK} size={72} />
       <BitmapLabel text="LOCKED" size={64} align="center" />
-      <BitmapLabel text={`UNLOCK FOR ${cost} GOLD`} size={28} align="center" />
+
+      <div className="locked-reqs">
+        <span className={rich ? 'locked-req is-met' : 'locked-req'}>
+          <IconGlyph icon={GUI.COIN} size={30} />
+          <BitmapLabel text={`${gold} / ${cost}`} size={24} />
+        </span>
+        <span className={famous ? 'locked-req is-met' : 'locked-req'}>
+          <IconGlyph icon={GUI.MEDAL} size={30} />
+          <BitmapLabel text={`${reputation} / ${fame}`} size={24} />
+        </span>
+      </div>
+
       <IconButton
-        icon={affordable ? GUI.LOCK_OPEN : GUI.EYE_OFF}
+        icon={ready ? GUI.LOCK_OPEN : GUI.EYE_OFF}
         size={86}
         title="UNLOCK"
-        disabled={!affordable}
+        disabled={!ready}
         onClick={onUnlock}
       />
-      {!affordable && <BitmapLabel text="NOT ENOUGH GOLD" size={22} align="center" />}
+      {/* 명성은 동물을 배치해야만 오른다. 그 사실을 여기서 한 번 알려 준다. */}
+      {!ready && (
+        <BitmapLabel
+          text={rich ? 'PLACE ANIMALS TO EARN FAME' : 'NOT ENOUGH GOLD'}
+          size={22}
+          align="center"
+        />
+      )}
     </div>
   )
 }

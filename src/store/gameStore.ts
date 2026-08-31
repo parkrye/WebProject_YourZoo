@@ -2,10 +2,10 @@ import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
-  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, DAY_DURATION_SEC,
+  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, CASH_TO_GOLD, DAY_DURATION_SEC,
   MAX_ANIMALS_PER_ENCLOSURE,
   PROP_CREATE_COST, PROP_SELL_RATIO, SHEET_COST, SHIPPING_DAYS,
-  START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST,
+  START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST, UNLOCK_REPUTATION,
   productTotal, type CashProduct,
 } from '@/domain/balance'
 import { canPlaceProp, createPropId, propPrice, type OwnedProp } from '@/domain/prop'
@@ -156,6 +156,8 @@ interface GameState {
   sellAnimal(id: string): boolean
   /** 캐시 상품 구매. 실제 결제는 없고 그냥 지급한다. */
   buyCash(product: CashProduct): void
+  /** 캐시를 코인으로 바꾼다. 한 방향뿐이라 되돌릴 수 없다. */
+  exchangeCash(count: number): boolean
   /** 캐시를 써서 8x3 스프라이트 시트를 만든다. 성공하면 true. */
   animateAnimal(id: string): Promise<boolean>
   /** 동물 이름을 바꾼다. 빈 이름은 무시한다. */
@@ -526,6 +528,13 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   buyCash: (product) => set((s) => ({ cash: s.cash + productTotal(product) })),
 
+  exchangeCash: (count) => {
+    const { cash } = get()
+    if (count < 1 || cash < count) return false
+    set((s) => ({ cash: s.cash - count, gold: s.gold + count * CASH_TO_GOLD }))
+    return true
+  },
+
   buyShopAnimal: (item) => {
     const { gold, clock } = get()
     if (gold < item.price) return false
@@ -693,8 +702,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   unlockEnclosure: (id) => {
-    const { gold, unlocked } = get()
+    const { gold, reputation, unlocked } = get()
     if (unlocked.includes(id)) return false
+
+    // 돈과 명성을 **둘 다** 본다. 명성은 동물을 배치해야만 오르므로,
+    // 화면만 켜 두고 모은 돈으로 우리를 늘리는 길을 막는다.
+    if (reputation < UNLOCK_REPUTATION[id]) return false
 
     const cost = UNLOCK_COST[id]
     if (gold < cost) return false

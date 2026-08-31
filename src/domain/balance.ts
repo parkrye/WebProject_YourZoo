@@ -51,6 +51,25 @@ export const CASH_PRODUCTS: readonly CashProduct[] = [
 
 export const productTotal = (product: CashProduct): number => product.cash + product.bonus
 
+/**
+ * 캐시 하나를 인게임 코인으로 바꿀 때의 환율.
+ *
+ * **한 방향뿐이다.** 코인으로 캐시를 살 수 있으면 캐시로만 되는 것(프레임 애니메이션)이
+ * 시간만 들이면 공짜가 되고, 그러면 유료 재화라는 구분 자체가 사라진다.
+ *
+ * 1000 은 동물 한 마리 제작비(50)의 스무 배다. 캐시를 코인으로 쓰는 사람이
+ * 손해 봤다고 느끼지 않을 만큼 넉넉하되, 캐시 본래 쓰임을 덮을 만큼은 아니다.
+ */
+export const CASH_TO_GOLD = 1000
+
+/**
+ * 상점에서 한 번에 살 수 있는 최대 수량.
+ *
+ * 소지금으로만 막으면 후반에 수백 마리를 한 번에 사게 되고, 그만큼의 사육비가
+ * 다음 자정에 한꺼번에 빠진다. 살 수 있는 것과 감당할 수 있는 것은 다르다.
+ */
+export const SHOP_MAX_QUANTITY = 10
+
 /** 동물 한 마리의 8x3 스프라이트 시트를 만드는 데 드는 캐시. */
 export const SHEET_COST = 1
 
@@ -134,6 +153,22 @@ export const UNLOCK_COST = {
   FIELD: 0,
   DESERT: 500,
   ICE: 1500,
+} as const
+
+/**
+ * 우리를 여는 데 필요한 명성.
+ *
+ * 돈만으로 열게 두면 **동물원을 운영하지 않고도** 새 우리가 열린다 —
+ * 수입은 시간에 비례해 들어오므로 화면만 켜 두면 언젠가 500 이 모인다.
+ * 명성은 배치한 동물의 매력도에서만 오르므로, 실제로 우리를 채워야 넘는다.
+ *
+ * 하루 명성 증가분은 배치한 동물 매력도 합의 10% 다. 매력도 30 짜리 세 마리면
+ * 하루 +9 — 사막은 사나흘, 얼음은 그 위로 한참 더 걸린다.
+ */
+export const UNLOCK_REPUTATION = {
+  FIELD: 0,
+  DESERT: 30,
+  ICE: 100,
 } as const
 
 export const ANIMAL_NAME_MAX_LENGTH = 10

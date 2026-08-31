@@ -1,7 +1,7 @@
 import { GUI } from '@/assets/manifest'
 import { averageVisitorMultiplier, settleDay } from '@/domain/economy'
 import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
-import { UNLOCK_COST } from '@/domain/balance'
+import { UNLOCK_COST, UNLOCK_REPUTATION } from '@/domain/balance'
 import { useState } from 'react'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { signed } from '@/ui/signed'
@@ -92,7 +92,8 @@ export function StatusModal() {
               <div key={id} className="stat-row">
                 <BitmapLabel text={ENCLOSURES[id].label} size={24} />
                 <BitmapLabel
-                  text={open ? `${count}` : `LOCKED ${UNLOCK_COST[id]}`}
+                  // 잠긴 우리는 두 조건을 함께 적는다. 돈만 적어 두면 명성 조건을 모른다.
+                  text={open ? `${count}` : `LOCKED ${UNLOCK_COST[id]}G ${UNLOCK_REPUTATION[id]} FAME`}
                   size={24}
                 />
               </div>
