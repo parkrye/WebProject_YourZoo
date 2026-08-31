@@ -33,6 +33,10 @@ export interface SaveV2 {
   clock: ClockState
   currentEnclosure: BiomeId
   unlocked: BiomeId[]
+  /** 우리마다 주인이 붙인 이름. 구버전 세이브에는 없다 — 그때는 기본 이름을 쓴다. */
+  enclosureNames?: Partial<Record<BiomeId, string>>
+  /** 우리마다의 정원. 구버전 세이브에는 없다 — 그때는 처음 값으로 읽는다. */
+  capacity?: Partial<Record<BiomeId, number>>
   /** 그림 픽셀은 IndexedDB 에 있고 여기에는 imageId 만 남는다. */
   animals: Animal[]
   /** 소유한 프롭. 구버전 세이브에는 없다 — 그때는 빈 배열로 읽는다. */

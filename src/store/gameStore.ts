@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
-  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, DAY_DURATION_SEC,
-  MAX_ANIMALS_PER_ENCLOSURE,
+  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, CASH_TO_GOLD, DAY_DURATION_SEC,
+  ENCLOSURE_EXPAND_STEP, ENCLOSURE_NAME_MAX_LENGTH, MAX_ANIMALS_PER_ENCLOSURE, MAX_ENCLOSURE_CAPACITY,
+  expandCost,
   PROP_CREATE_COST, PROP_SELL_RATIO, SHEET_COST, SHIPPING_DAYS,
-  START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST,
+  START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST, UNLOCK_REPUTATION,
   productTotal, type CashProduct,
 } from '@/domain/balance'
 import { canPlaceProp, createPropId, propPrice, type OwnedProp } from '@/domain/prop'
@@ -21,8 +22,10 @@ import { createUserId, isUserId } from '@/domain/userId'
 import { dayIncome, settleDay, type DailyReport } from '@/domain/economy'
 import { ENCLOSURE_ORDER, neighborEnclosure, neighborUnlocked } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
-import { emptyDraft, type RequestDraft } from '@/domain/requestDraft'
-import { randomTraits } from '@/domain/traits'
+import {
+  emptyAnimalDraft, emptyPropDraft, emptyRequestDraft,
+  type AnimalDraft, type PropDraft, type RequestDraft, type RequestTab,
+} from '@/domain/requestDraft'
 import { type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
@@ -37,7 +40,7 @@ import { getImage } from './imageDb'
 
 export type ScreenId = 'TITLE' | 'AUTH' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
 export type ModalId =
-  | 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'ARRIVAL' | null
+  | 'OPTIONS' | 'STATUS' | 'REQUEST' | 'REPORT' | 'SHOP' | 'VISIT' | 'ARRIVAL' | 'ENCLOSURE' | null
 
 /**
  * 서버 동기화 상태.
@@ -63,6 +66,14 @@ export interface Arrivals {
  * `IN` 다시 밝아지는 중
  */
 export type DayFade = 'NONE' | 'OUT' | 'HOLD' | 'IN'
+
+/**
+ * 동물원을 오갈 때의 암전 단계.
+ *
+ * 하루 넘김과 단계 이름은 같지만 **뜻이 다르다** — 여기서 `HOLD` 는 읽을 것이 있어
+ * 멈춘 게 아니라, 어디로 가는지 한 줄 읽을 시간을 주려고 잠깐 캄캄한 상태다.
+ */
+export type TravelPhase = 'NONE' | 'OUT' | 'HOLD' | 'IN'
 
 export interface OptionsState {
   bgm: number
@@ -96,6 +107,10 @@ interface GameState {
   clock: ClockState
   currentEnclosure: BiomeId
   unlocked: BiomeId[]
+  /** 우리마다 주인이 붙인 이름. 없으면 기본 이름을 쓴다. */
+  enclosureNames: Partial<Record<BiomeId, string>>
+  /** 우리마다의 정원. 골드를 들여 늘린다. */
+  capacity: Record<BiomeId, number>
   animals: Animal[]
   /** 소유한 프롭. 동물과 같은 배송 -> 창고 -> 배치 흐름을 탄다. */
   props: OwnedProp[]
@@ -112,6 +127,16 @@ interface GameState {
   pendingDay: ClockAdvanceResult | null
   /** 구경 중인 남의 동물원. null 이면 내 동물원이다. 세이브에는 넣지 않는다. */
   visiting: ZooDoc | null
+  /**
+   * 동물원을 오갈 때의 암전 단계.
+   *
+   * 예전에는 남의 동물원이 **한 프레임 만에 바뀌었다.** 배경도 우리도 비슷해서
+   * 들어간 건지 아직 내 동물원인지 알 수 없었다. 어두워졌다 밝아지고,
+   * 캄캄한 동안 어디로 가는지 한 줄 적어 준다.
+   */
+  travel: TravelPhase
+  /** 암전이 끝나면 적용할 이동. `visiting: null` 이면 집으로 돌아온다. */
+  pendingTravel: { visiting: ZooDoc | null } | null
   /** 구경 중에 보고 있는 우리. 내 `currentEnclosure` 를 건드리지 않는다. */
   visitEnclosure: BiomeId
   /** 오늘 아침 창고에 도착한 것들. 알림을 닫으면 비운다. 세이브에는 넣지 않는다. */
@@ -134,6 +159,8 @@ interface GameState {
   startVisit(doc: ZooDoc): Promise<void>
   /** 구경을 끝내고 내 동물원으로 돌아온다. */
   endVisit(): void
+  /** 암전의 다음 단계로. 진행은 화면 쪽(`TravelFade`)이 재고 여기서는 단계만 넘긴다. */
+  advanceTravel(): void
   /** 도착 알림을 닫는다. */
   clearArrivals(): void
   moveEnclosure(direction: -1 | 1): void
@@ -142,8 +169,10 @@ interface GameState {
   /** 요청서 제출. 값은 만드는 방식이 정한다. */
   orderAnimal(animal: Animal, cost?: number): boolean
   canOrderAnimal(): boolean
-  patchDraft(patch: Partial<RequestDraft>): void
-  clearDraft(): void
+  /** 요청서에서 보던 탭. 창을 닫았다 열어도 그 자리로 돌아온다. */
+  setRequestTab(tab: RequestTab): void
+  patchAnimalDraft(patch: Partial<AnimalDraft>): void
+  patchPropDraft(patch: Partial<PropDraft>): void
   /** 창고에서 우리로. 서식지·정원이 맞지 않으면 false. */
   placeAnimal(id: string, enclosureId: BiomeId): boolean
   /** 우리에서 창고로. */
@@ -152,6 +181,8 @@ interface GameState {
   sellAnimal(id: string): boolean
   /** 캐시 상품 구매. 실제 결제는 없고 그냥 지급한다. */
   buyCash(product: CashProduct): void
+  /** 캐시를 코인으로 바꾼다. 한 방향뿐이라 되돌릴 수 없다. */
+  exchangeCash(count: number): boolean
   /** 캐시를 써서 8x3 스프라이트 시트를 만든다. 성공하면 true. */
   animateAnimal(id: string): Promise<boolean>
   /** 동물 이름을 바꾼다. 빈 이름은 무시한다. */
@@ -173,6 +204,10 @@ interface GameState {
   canPlaceIn(enclosureId: BiomeId): boolean
   unlockEnclosure(id: BiomeId): boolean
   isUnlocked(id: BiomeId): boolean
+  /** 우리에 이름을 붙인다. 값은 들지 않는다. 빈 이름이면 기본 이름으로 되돌린다. */
+  renameEnclosure(id: BiomeId, name: string): void
+  /** 정원을 한 단계 늘린다. 골드가 모자라거나 상한이면 false. */
+  expandEnclosure(id: BiomeId): boolean
 
   /** 비회원으로 시작한다. 무작위 아이디를 발급하고 이름 짓기로 간다. */
   startNewGame(): void
@@ -182,6 +217,8 @@ interface GameState {
   logInAndStart(userId: string, password: string): Promise<string | null>
   /** 로그아웃하고 타이틀로 돌아간다. */
   logOut(): void
+  /** 놀던 것을 저장해 두고 타이틀로 돌아간다. 로그아웃과 달리 계정은 그대로다. */
+  goToTitle(): void
   /** 이름을 확정하고 게임에 진입한다. */
   confirmZooName(name: string): void
   continueGame(): boolean
@@ -203,16 +240,24 @@ const initial = {
   clock: { day: 1, elapsed: 0 } as ClockState,
   currentEnclosure: 'FIELD' as BiomeId,
   unlocked: ['FIELD'] as BiomeId[],
+  enclosureNames: {} as Partial<Record<BiomeId, string>>,
+  capacity: {
+    FIELD: MAX_ANIMALS_PER_ENCLOSURE,
+    DESERT: MAX_ANIMALS_PER_ENCLOSURE,
+    ICE: MAX_ANIMALS_PER_ENCLOSURE,
+  } as Record<BiomeId, number>,
   animals: [] as Animal[],
   props: [] as OwnedProp[],
   orders: [] as Order[],
-  draft: emptyDraft(randomTraits(createRng(1))),
+  draft: emptyRequestDraft(),
   lastReport: null as DailyReport | null,
   reports: [] as DailyReport[],
   options: { bgm: 0.7, sfx: 0.8 },
   dayFade: 'NONE' as DayFade,
   pendingDay: null as ClockAdvanceResult | null,
   visiting: null as ZooDoc | null,
+  travel: 'NONE' as TravelPhase,
+  pendingTravel: null as { visiting: ZooDoc | null } | null,
   visitEnclosure: 'FIELD' as BiomeId,
   arrivals: null as Arrivals | null,
   sync: 'OFF' as SyncState,
@@ -233,14 +278,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   skipTutorial: () => set({ tutorial: 'DONE' }),
   openModal: (modal) => set({ modal }),
   /**
-   * 정산 팝업을 닫는 건 하루 연출의 마지막 단계다. 닫히면서 화면이 다시 밝아진다.
-   * 다만 오늘 도착한 것이 있으면 알림을 먼저 띄우고, 그게 닫힐 때 밝아진다.
+   * 정산 팝업을 닫으면 화면이 다시 밝아진다.
+   *
+   * 도착 알림은 **밝아진 뒤에** 뜬다. 예전에는 캄캄한 화면 위에 이어 붙였는데,
+   * 검은 막이 언제 걷힐지 모른 채 팝업 두 개를 연달아 읽어야 해서
+   * 하루가 끝난 느낌 대신 창을 치우는 일감이 됐다.
    */
   closeModal: () =>
     set((s) => {
+      // 도착 알림을 닫는 건 하루 연출의 끝이다. 알림 내용도 여기서 비운다.
+      if (s.modal === 'ARRIVAL') return { modal: null, arrivals: null }
       if (s.dayFade !== 'HOLD') return { modal: null }
-      if (s.modal === 'REPORT' && s.arrivals) return { modal: 'ARRIVAL' as const }
-      return { modal: null, dayFade: 'IN' as const, arrivals: null }
+      return { modal: null, dayFade: 'IN' as const }
     }),
 
   /**
@@ -257,6 +306,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     const state = get()
     if (state.screen !== 'ZOO' && state.screen !== 'ZOO_DETAIL') return
     if (state.isDrawing || state.modal === 'REPORT') return
+    // 동물원을 오가는 동안에도 멈춘다. 캄캄한 사이에 자정이 오면 두 연출이 겹친다.
+    if (state.travel !== 'NONE') return
     // 암전이 시작되면 정산이 끝나고 화면이 다시 밝아질 때까지 시계는 멈춘다.
     if (state.dayFade !== 'NONE') return
     // 남의 동물원을 보는 중에 내 하루가 끝나 암전과 리포트가 끼어들면 곤란하다.
@@ -382,7 +433,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     void pushCurrentSave(true)
   },
 
-  endDayFade: () => set({ dayFade: 'NONE' }),
+  /**
+   * 밝아지기가 끝났다. 오늘 도착한 것이 있으면 이제 알린다.
+   *
+   * 화면이 완전히 밝아진 뒤라 시계도 함께 돈다 — 택배를 확인하는 동안
+   * 세상이 멈춰 있을 이유가 없다.
+   */
+  endDayFade: () =>
+    set((s) => ({
+      dayFade: 'NONE',
+      ...(s.arrivals && s.modal === null && { modal: 'ARRIVAL' as const }),
+    })),
 
   clearArrivals: () => set({ arrivals: null }),
 
@@ -398,34 +459,94 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   startVisit: async (doc) => {
     // 남의 그림은 내 IndexedDB 에 없다. 들어가기 전에 받아 둬야 빈 우리를 보지 않는다.
+    // 암전보다 **먼저** 받는다. 캄캄한 동안 받으면 밝아진 뒤에도 우리가 비어 있다.
     const ids = [
-      ...doc.animals.flatMap((a) => (a.spriteSheet ? [a.imageId, a.spriteSheet.imageId] : [a.imageId])),
+      ...doc.animals.flatMap((a) => [
+        a.imageId,
+        ...(a.spriteSheet ? [a.spriteSheet.imageId] : []),
+        // 리그 동물은 부위 그림까지 받아야 한다. 빠지면 몸통 한 조각만 늘어난다.
+        ...Object.values(a.rig ?? {}),
+      ]),
       ...(doc.props ?? []).map((p) => p.imageId).filter((id): id is string => id !== null),
     ]
     await preloadRemote(ids)
-    set({
-      visiting: doc,
-      visitEnclosure: firstUnlocked(doc.unlocked),
-      screen: 'ZOO',
-      modal: null,
-    })
+    set({ travel: 'OUT', pendingTravel: { visiting: doc }, modal: null })
   },
 
-  endVisit: () => set({ visiting: null, screen: 'ZOO', modal: null }),
+  endVisit: () => set({ travel: 'OUT', pendingTravel: { visiting: null }, modal: null }),
+
+  advanceTravel: () => {
+    const { travel, pendingTravel } = get()
+    if (travel === 'OUT') {
+      const doc = pendingTravel?.visiting ?? null
+      set({
+        visiting: doc,
+        ...(doc && { visitEnclosure: firstUnlocked(doc.unlocked) }),
+        screen: 'ZOO',
+        modal: null,
+        pendingTravel: null,
+        travel: 'HOLD',
+      })
+      return
+    }
+    set({ travel: travel === 'HOLD' ? 'IN' : 'NONE' })
+  },
 
   setOption: (key, value) => set((s) => ({ options: { ...s.options, [key]: value } })),
+
+  renameEnclosure: (id, name) =>
+    set((s) => ({
+      // 글자 제약은 입력 칸이 이미 걸러 준다. 여기서는 길이만 자른다.
+      enclosureNames: { ...s.enclosureNames, [id]: name.trim().slice(0, ENCLOSURE_NAME_MAX_LENGTH) },
+    })),
+
+  expandEnclosure: (id) => {
+    const { gold, capacity } = get()
+    const now = capacityOf(capacity, id)
+    if (now >= MAX_ENCLOSURE_CAPACITY) return false
+
+    const cost = expandCost(now)
+    if (gold < cost) return false
+
+    set((s) => ({
+      gold: s.gold - cost,
+      capacity: { ...s.capacity, [id]: now + ENCLOSURE_EXPAND_STEP },
+    }))
+    return true
+  },
+
+  goToTitle: () => {
+    /*
+      화면을 바꾸기 **전에** 저장한다. 주기 저장은 동물원 안에서만 도는데,
+      화면부터 넘기면 그 구독이 타이틀에서 깨어나 아무것도 쓰지 않고 돌아간다.
+      그러면 마지막 저장 이후의 진행이 통째로 사라진다.
+    */
+    writeSave(get().snapshot())
+    void pushCurrentSave(true)
+    set({
+      screen: 'TITLE',
+      modal: null,
+      // 남의 동물원을 보던 중이었다면 그것부터 놓는다. 암전도 함께 걷는다.
+      visiting: null,
+      travel: 'NONE',
+      pendingTravel: null,
+    })
+  },
 
   isUnlocked: (id) => get().unlocked.includes(id),
 
   canOrderAnimal: () => get().gold >= ANIMAL_CREATE_COST,
 
-  patchDraft: (patch) => set((s) => ({ draft: { ...s.draft, ...patch } })),
-  clearDraft: () => set({ draft: emptyDraft(randomTraits(createRng(Date.now() & 0xffff))) }),
+  setRequestTab: (tab) => set((s) => ({ draft: { ...s.draft, tab } })),
+  patchAnimalDraft: (patch) =>
+    set((s) => ({ draft: { ...s.draft, animal: { ...s.draft.animal, ...patch } } })),
+  patchPropDraft: (patch) =>
+    set((s) => ({ draft: { ...s.draft, prop: { ...s.draft.prop, ...patch } } })),
 
   canPlaceIn: (enclosureId) => {
-    const { animals, unlocked } = get()
+    const { animals, unlocked, capacity } = get()
     if (!unlocked.includes(enclosureId)) return false
-    return placedIn(animals, enclosureId).length < MAX_ANIMALS_PER_ENCLOSURE
+    return placedIn(animals, enclosureId).length < capacityOf(capacity, enclosureId)
   },
 
   orderAnimal: (animal, cost = ANIMAL_CREATE_COST) => {
@@ -446,7 +567,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       gold: s.gold - cost,
       animals: [...s.animals, placed],
       tutorial: s.tutorial === 'DRAW' ? 'INSPECT' : s.tutorial,
-      draft: emptyDraft(randomTraits(createRng(Date.now() & 0xffff))),
+      // 초안은 여기서만 비운다. 제출이 성공한 순간이 유일하게 안전한 시점이다.
+      draft: { ...s.draft, animal: emptyAnimalDraft() },
     }))
     return true
   },
@@ -517,6 +639,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   buyCash: (product) => set((s) => ({ cash: s.cash + productTotal(product) })),
+
+  exchangeCash: (count) => {
+    const { cash } = get()
+    if (count < 1 || cash < count) return false
+    set((s) => ({ cash: s.cash - count, gold: s.gold + count * CASH_TO_GOLD }))
+    return true
+  },
 
   buyShopAnimal: (item) => {
     const { gold, clock } = get()
@@ -590,7 +719,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   orderProp: (prop, cost = PROP_CREATE_COST) => {
     const { gold } = get()
     if (gold < cost) return false
-    set((s) => ({ gold: s.gold - cost, props: [...s.props, prop] }))
+    set((s) => ({
+      gold: s.gold - cost,
+      props: [...s.props, prop],
+      draft: { ...s.draft, prop: emptyPropDraft() },
+    }))
     return true
   },
 
@@ -681,8 +814,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   unlockEnclosure: (id) => {
-    const { gold, unlocked } = get()
+    const { gold, reputation, unlocked } = get()
     if (unlocked.includes(id)) return false
+
+    // 돈과 명성을 **둘 다** 본다. 명성은 동물을 배치해야만 오르므로,
+    // 화면만 켜 두고 모은 돈으로 우리를 늘리는 길을 막는다.
+    if (reputation < UNLOCK_REPUTATION[id]) return false
 
     const cost = UNLOCK_COST[id]
     if (gold < cost) return false
@@ -697,7 +834,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       ...initial,
       userId: createUserId(),
-      draft: emptyDraft(randomTraits(createRng(7))),
+      draft: emptyRequestDraft(),
       screen: 'NAMING',
     })
   },
@@ -715,7 +852,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       account: result.account,
       // 계정만 생겼을 뿐 아직 올린 것은 없다. 여기서 SYNCED 라고 하면 거짓말이 된다.
       sync: 'PENDING',
-      draft: emptyDraft(randomTraits(createRng(7))),
+      draft: emptyRequestDraft(),
       screen: 'NAMING',
     })
     return null
@@ -735,7 +872,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...initial,
         userId: result.account.userId,
         account: result.account,
-        draft: emptyDraft(randomTraits(createRng(7))),
+        draft: emptyRequestDraft(),
         screen: 'NAMING',
       })
       return null
@@ -782,6 +919,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       clock: save.clock,
       currentEnclosure: save.currentEnclosure,
       unlocked: save.unlocked,
+      enclosureNames: save.enclosureNames ?? {},
+      // 구버전 세이브에는 정원이 없다. 빠진 우리는 처음 값으로 채운다.
+      capacity: { ...initial.capacity, ...(save.capacity ?? {}) },
       animals: save.animals,
       props: save.props ?? [],
       orders: save.orders ?? [],
@@ -807,6 +947,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       clock: s.clock,
       currentEnclosure: s.currentEnclosure,
       unlocked: s.unlocked,
+      enclosureNames: s.enclosureNames,
+      capacity: s.capacity,
       animals: s.animals,
       props: s.props,
       orders: s.orders,
@@ -816,6 +958,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 }))
+
+/** 구버전 세이브에는 정원이 없다. 없으면 처음 값이다. */
+function capacityOf(capacity: Partial<Record<BiomeId, number>>, id: BiomeId): number {
+  return capacity[id] ?? MAX_ANIMALS_PER_ENCLOSURE
+}
 
 /** 운영 현황에 남겨 두는 정산 기록 수. */
 const REPORT_HISTORY = 7
@@ -942,6 +1089,12 @@ async function publishCurrentZoo(): Promise<void> {
   for (const animal of animals) {
     await collectImage(images, animal.imageId)
     if (animal.spriteSheet) await collectImage(images, animal.spriteSheet.imageId)
+    /*
+      파츠로 만든 동물은 **부위마다 그림이 따로다.** 이걸 빼고 올리면
+      구경하는 쪽에서 부위를 하나도 못 읽어, 대표 그림(몸통 한 조각)을
+      동물 한 마리 크기로 늘려 그린다. 기괴하게 보이던 원인이 이것이었다.
+    */
+    for (const partId of Object.values(animal.rig ?? {})) await collectImage(images, partId)
   }
   for (const prop of props) {
     if (prop.imageId) await collectImage(images, prop.imageId)
@@ -954,6 +1107,9 @@ async function publishCurrentZoo(): Promise<void> {
       reputation: s.reputation,
       day: s.clock.day,
       unlocked: s.unlocked,
+      // 우리에 붙인 이름과 정원도 함께 올린다. 구경하는 쪽 화면에 그대로 뜬다.
+      enclosureNames: s.enclosureNames,
+      capacity: s.capacity,
       animals,
       props,
     },

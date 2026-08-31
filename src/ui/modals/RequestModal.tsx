@@ -1,12 +1,10 @@
-import { useState } from 'react'
 import { Popup } from '@/ui/components/Popup'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
 import { useGameStore } from '@/store/gameStore'
 import { NewAnimalForm } from '@/ui/panels/NewAnimalForm'
 import { NewPropForm } from '@/ui/panels/NewPropForm'
 import { OrdersTab } from '@/ui/panels/OrdersTab'
-
-type RequestTab = 'NEW' | 'PROP' | 'ORDERS'
+import type { RequestTab } from '@/domain/requestDraft'
 
 const TABS: readonly TabItem<RequestTab>[] = [
   { id: 'NEW', label: 'NEW ANIMAL' },
@@ -15,7 +13,11 @@ const TABS: readonly TabItem<RequestTab>[] = [
 ]
 
 const POPUP_WIDTH = 1180
-const POPUP_HEIGHT = 900
+/*
+  화면 높이가 900 이라 900 을 주면 팝업이 화면을 위아래로 꽉 채워, 창이 아니라
+  또 하나의 화면처럼 보였다. 24칸 그리기 걸음도 820 이면 넉넉하다.
+*/
+const POPUP_HEIGHT = 820
 
 /**
  * 만드는 곳.
@@ -26,7 +28,9 @@ const POPUP_HEIGHT = 900
  */
 export function RequestModal() {
   const closeModal = useGameStore((s) => s.closeModal)
-  const [tab, setTab] = useState<RequestTab>('NEW')
+  // 보던 탭도 작업 내용이다. 자정 정산에 창이 내려가도 돌아올 자리는 남는다.
+  const tab = useGameStore((s) => s.draft.tab)
+  const setTab = useGameStore((s) => s.setRequestTab)
 
   return (
     <Popup title="REQUEST FORM" width={POPUP_WIDTH} height={POPUP_HEIGHT} onClose={closeModal}>

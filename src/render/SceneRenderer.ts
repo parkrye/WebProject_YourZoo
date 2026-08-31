@@ -1,6 +1,6 @@
 import { getAssets } from '@/assets/AssetStore'
 import {
-  LOGICAL_HEIGHT, LOGICAL_WIDTH, VISITOR_HEIGHT,
+  LOGICAL_HEIGHT, LOGICAL_WIDTH, ROAM_BOX, VISITOR_HEIGHT,
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
 import { easeInOutCubic } from '@/core/math'
@@ -25,6 +25,22 @@ export interface SceneInput {
   selectedId?: string | null
   /** 우리를 넘기는 중이면 두 씬을 나란히 밀어 보여준다. */
   transition?: EnclosureTransition | null
+  /** 창고에서 무언가를 끌고 있는 중이면 놓을 수 있는 곳을 보여 준다. */
+  dropGuide?: DropGuide | null
+}
+
+/**
+ * 배치 안내.
+ *
+ * 끌어온 것이 **어디에 들어갈 수 있는지**를 점선으로 알려 준다.
+ * 로밍 박스는 코드에만 있고 배경 그림에는 경계가 없어, 물가 잔디 위에 놓았다가
+ * 거절당하는 일이 잦았다. 놓기 전에 보여 주면 될 일이다.
+ */
+export interface DropGuide {
+  /** 들어갈 수 있는 서식지. `null` 이면 어디든 된다 — 프롭이 그렇다. */
+  habitat: Habitat | null
+  /** 정원이 찼거나 자리가 없어 어디에도 놓을 수 없는 상태. 전부 빨갛게 그린다. */
+  blocked?: boolean
 }
 
 export interface EnclosureTransition {
@@ -107,9 +123,42 @@ export class SceneRenderer {
     this.drawSortedLayer(ctx, sim, 'WATER', view)
     this.drawAreaLight(ctx, light.area, view)
 
+    // 안내선은 조명 뒤에 그린다. 밤에 같이 어두워지면 알려 주는 구실을 못 한다.
+    if (input.dropGuide) this.drawDropGuide(ctx, input.dropGuide, view)
+
     // 울타리와 손님은 따로 그려 조명을 세게 먹인다.
     // 화면 전체에 걸면 관찰 대상인 우리 안까지 같이 어두워진다.
     this.drawFenceLayer(ctx, sim, light.fence, input.fenceOffset, view)
+  }
+
+  /**
+   * 놓을 수 있는 곳과 없는 곳.
+   *
+   * 세 서식지의 로밍 박스를 모두 그린다. **되는 곳만 그리면** 나머지가 왜 안 되는지
+   * 알 수 없고, 물처럼 화면 아래쪽에 있는 영역은 아예 있는 줄도 모른다.
+   */
+  private drawDropGuide(ctx: CanvasRenderingContext2D, guide: DropGuide, view: ViewBox): void {
+    const { font } = getAssets()
+
+    ctx.save()
+    ctx.lineWidth = GUIDE_LINE_WIDTH
+    ctx.setLineDash(GUIDE_DASH)
+    for (const habitat of GUIDE_ORDER) {
+      const box = ROAM_BOX[habitat]
+      const ok = !guide.blocked && (guide.habitat === null || guide.habitat === habitat)
+      const x = box.x0 * view.width
+      const y = box.y0 * view.height
+      const w = (box.x1 - box.x0) * view.width
+      const h = (box.y1 - box.y0) * view.height
+
+      ctx.fillStyle = ok ? GUIDE_OK_FILL : GUIDE_NO_FILL
+      ctx.strokeStyle = ok ? GUIDE_OK_LINE : GUIDE_NO_LINE
+      ctx.fillRect(x, y, w, h)
+      ctx.strokeRect(x, y, w, h)
+      // 이름을 붙여 둔다. 색만으로는 어느 칸이 무엇인지 알 수 없다.
+      font.draw(ctx, habitat, x + GUIDE_LABEL_PAD, y + GUIDE_LABEL_PAD, { size: GUIDE_LABEL_SIZE })
+    }
+    ctx.restore()
   }
 
   /**
@@ -463,3 +512,19 @@ interface PropPainter {
   readonly aspect: number
   draw(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void
 }
+
+// ─────────────────────────────────────────────────────────────
+// 배치 안내선
+// ─────────────────────────────────────────────────────────────
+
+/** 위에서 아래로. 그리는 순서가 곧 겹칠 때의 순서다. */
+const GUIDE_ORDER: readonly Habitat[] = ['SKY', 'LAND', 'WATER']
+const GUIDE_DASH = [16, 12]
+const GUIDE_LINE_WIDTH = 4
+const GUIDE_LABEL_SIZE = 22
+const GUIDE_LABEL_PAD = 12
+/** 팔레트의 초록·빨강과 같은 색. 게임 안에서 같은 뜻으로 쓰이던 색을 그대로 쓴다. */
+const GUIDE_OK_LINE = '#7ce06a'
+const GUIDE_NO_LINE = '#e8564b'
+const GUIDE_OK_FILL = 'rgba(73, 168, 58, 0.16)'
+const GUIDE_NO_FILL = 'rgba(216, 56, 47, 0.13)'

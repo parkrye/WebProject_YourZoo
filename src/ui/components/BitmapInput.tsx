@@ -14,11 +14,21 @@ interface BitmapInputProps {
    *
    * 폰트에 소문자가 없어 입력값을 그대로 그려도 제대로 안 보이는데다,
    * 어깨너머로도 읽힌다. 글자 수만 보여 주는 편이 낫다.
+   *
+   * **반드시 `FONT_CHARS` 에 있는 글자여야 한다.** 예전에는 별표를 넘겼는데
+   * 시트에 별표가 없어 폰트가 조용히 버렸고, 그 결과 비밀번호 칸에
+   * 아무것도 그려지지 않아 타이핑이 먹고 있는지조차 알 수 없었다.
    */
   mask?: string
 }
 
 const CARET_BLINK_MS = 530
+
+/**
+ * 마스크 글자의 자간. 기본값(0.05)으로 점을 이으면 말줄임표처럼 붙어
+ * 몇 자를 쳤는지 세어지지 않는다.
+ */
+const MASK_LETTER_SPACING = 0.45
 
 /**
  * 스프라이트 폰트로 보이는 입력 필드.
@@ -51,7 +61,11 @@ export function BitmapInput({
 
   return (
     <div className="bitmap-input" style={{ width }} onPointerDown={() => inputRef.current?.focus()}>
-      <BitmapLabel text={showPlaceholder ? placeholder : shown} size={size} />
+      <BitmapLabel
+        text={showPlaceholder ? placeholder : shown}
+        size={size}
+        {...(mask && !showPlaceholder && { letterSpacing: MASK_LETTER_SPACING })}
+      />
       {focused && caretOn && <span className="bitmap-caret" style={{ height: size }} />}
       <input
         ref={inputRef}

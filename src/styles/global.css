@@ -169,6 +169,7 @@ html, body, #root {
 
 .hud-purse { display: flex; align-items: center; gap: 8px; }
 
+/* 이름표는 그 우리를 손보는 문이기도 하다. 눌러서 이름과 정원을 고친다. */
 .hud-enclosure-name {
   position: absolute;
   top: 20px;
@@ -179,6 +180,22 @@ html, body, #root {
   border: 2px solid rgba(138, 90, 43, 0.7);
   border-radius: 10px;
   text-align: center;
+  cursor: pointer;
+  transition: filter 0.12s ease, border-color 0.12s ease;
+}
+.hud-enclosure-name:hover:not(:disabled) {
+  filter: brightness(1.15);
+  border-color: #d9a441;
+}
+/* 남의 동물원이나 잠긴 우리에서는 그냥 이름표다. */
+.hud-enclosure-name:disabled { cursor: default; }
+
+.enclosure-head { display: flex; flex-direction: column; gap: 2px; }
+
+.enclosure-row {
+  display: flex;
+  align-items: center;
+  gap: 18px;
 }
 
 .hud-arrow { position: absolute; top: 46%; transform: translateY(-50%); z-index: 5; }
@@ -260,6 +277,27 @@ html, body, #root {
   animation: backdrop-in 0.16s ease-out both;
   /* 하루 넘김 암전(45)보다 위. 리포트는 검은 화면 위에서 읽어야 한다. */
   z-index: 60;
+}
+
+/*
+  동물원을 오갈 때의 암전. 하루 넘김보다 위에 깔린다 —
+  둘이 겹칠 일은 없지만, 겹친다면 지금 벌어지는 이동이 앞이다.
+*/
+.travel-fade {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  pointer-events: none;
+  z-index: 46;
+}
+
+.travel-caption {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
 }
 
 /* 하루가 넘어갈 때의 암전. 알파는 rAF 가 직접 물린다 — DayFade.tsx 참고. */
@@ -346,10 +384,28 @@ html, body, #root {
 
 .slider-row {
   display: grid;
-  grid-template-columns: 108px 1fr 70px;
+  grid-template-columns: 152px 1fr 70px;
   align-items: center;
   gap: 16px;
 }
+
+.slider-head { display: flex; align-items: center; gap: 10px; }
+
+/* 소리를 껐다 켜는 단추. 손잡이를 끝까지 끌었다 되돌릴 이유가 없다. */
+.slider-toggle {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(120, 78, 34, 0.16);
+  cursor: pointer;
+  transition: filter 0.12s ease, transform 0.08s ease;
+}
+.slider-toggle:hover { filter: brightness(1.1); }
+.slider-toggle:active { transform: translateY(2px); }
+
+.options-exit { display: flex; justify-content: center; margin-top: auto; }
 
 .slider-row input[type='range'] { width: 100%; accent-color: #d9a441; }
 
@@ -725,6 +781,24 @@ html, body, #root {
   background: rgba(10, 8, 5, 0.62);
 }
 
+/* 해금 조건 두 줄. 채운 조건은 밝게, 못 채운 것은 붉게 남긴다. */
+.locked-reqs { display: flex; gap: 26px; align-items: center; }
+
+.locked-req {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 16px;
+  border-radius: 12px;
+  border: 2px solid rgba(216, 56, 47, 0.75);
+  background: rgba(216, 56, 47, 0.14);
+}
+
+.locked-req.is-met {
+  border-color: rgba(114, 200, 96, 0.8);
+  background: rgba(73, 168, 58, 0.18);
+}
+
 /* ── 상세보기 팬 ─────────────────────────────────────────── */
 
 .screen-canvas.is-pannable { cursor: grab; touch-action: none; }
@@ -839,7 +913,12 @@ html, body, #root {
 }
 
 .storage-tray {
-  animation: tray-in 0.2s ease-out both;
+  /*
+    `both` 를 쓰면 안 된다. 애니메이션이 끝난 뒤에도 마지막 키프레임의
+    `transform: translateY(0)` 이 계속 적용돼, 아래의 `.is-lowered` 변형을 통째로 덮는다.
+    트레이가 내려가지 않아 물에 놓을 자리를 계속 가리고 있던 원인이 이것이었다.
+  */
+  animation: tray-in 0.2s ease-out;
   position: absolute;
   left: 0;
   right: 0;
@@ -857,10 +936,14 @@ html, body, #root {
 /* 트레이 위에서 고르는 동안은 비쳐만 보이고 */
 .storage-tray.is-dragging { opacity: 0.35; }
 
-/* 우리 위로 넘어가면 아예 내려가 물 영역까지 훤히 보이게 한다. */
+/*
+  집어 든 순간부터 트레이는 화면 밖으로 완전히 비켜난다.
+  물 영역이 하필 트레이 자리라, 조금만 남겨 두면 놓을 자리를 그만큼 가린다.
+  고르는 동안에는 트레이가 필요하지만 이미 집은 뒤에는 필요 없다.
+*/
 .storage-tray.is-lowered {
-  opacity: 0.12;
-  transform: translateY(78%);
+  opacity: 0;
+  transform: translateY(100%);
   transition: transform 0.22s ease, opacity 0.22s ease;
 }
 .storage-tray.is-closing { animation: tray-out 0.18s ease-in both; }
@@ -1041,7 +1124,10 @@ html, body, #root {
   left: 50%;
   bottom: 10px;
   transform: translateX(-50%);
-  width: 520px;
+  /* 라벨이 캔버스라 줄바꿈이 없다. 폭을 고정하면 긴 안내가 테두리에 닿는다. */
+  width: max-content;
+  min-width: 420px;
+  max-width: 92%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1053,7 +1139,7 @@ html, body, #root {
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.55);
 }
 
-.tutorial-card.is-anchored { bottom: auto; width: 480px; }
+.tutorial-card.is-anchored { bottom: auto; }
 
 .tutorial-skip { pointer-events: auto; margin-top: 2px; opacity: 0.65; }
 .tutorial-skip:hover { opacity: 1; }
@@ -1142,8 +1228,8 @@ html, body, #root {
 
 .shop-list {
   display: flex;
-  gap: 22px;
-  margin: auto 0;
+  flex-wrap: wrap;
+  gap: 18px;
 }
 
 /* 상점 목록. 22종이 들어가므로 팝업 안에서만 스크롤한다. */
@@ -1213,6 +1299,121 @@ html, body, #root {
 }
 .shop-item:hover { transform: translateY(-3px); filter: brightness(1.05); }
 .shop-item:active { transform: translateY(0); }
+
+/* 목록과 상세 판. 판은 늘 자리를 지킨다 — 나타났다 사라지면 목록 폭이 출렁인다. */
+.shop-body {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 306px;
+  gap: 22px;
+}
+
+.shop-stock {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow: hidden;
+}
+
+/* 캐시 탭의 구분선. 파는 물건과 가진 것을 바꾸는 일은 성격이 다르다. */
+.shop-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.7;
+}
+.shop-divider::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 2px;
+  background: rgba(138, 90, 43, 0.45);
+}
+
+.shop-detail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 18px 16px;
+  border-radius: 16px;
+  border: 2px solid rgba(138, 90, 43, 0.55);
+  background: rgba(120, 78, 34, 0.12);
+}
+
+.shop-detail.is-empty { opacity: 0.55; }
+
+.shop-preview {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 168px;
+  border-radius: 12px;
+  background: rgba(243, 228, 194, 0.16);
+}
+
+.shop-preview.is-empty {
+  border: 3px dashed rgba(138, 90, 43, 0.5);
+  background: transparent;
+}
+
+.shop-trade { display: flex; align-items: center; gap: 8px; }
+
+.shop-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: auto;
+}
+.shop-qty.is-disabled { opacity: 0.35; }
+
+.qty-button {
+  display: grid;
+  place-items: center;
+  min-width: 46px;
+  height: 42px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #fbf3e0 0%, #efdfba 100%);
+  box-shadow: inset 0 0 0 2px rgba(200, 168, 106, 0.85), 0 2px 0 3px #8a5a2b;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+.qty-button:hover:not(:disabled) { filter: brightness(1.06); }
+.qty-button:active:not(:disabled) { transform: translateY(2px); }
+.qty-button:disabled { opacity: 0.4; cursor: default; }
+
+.qty-value { min-width: 64px; }
+
+.shop-total { display: flex; align-items: center; gap: 8px; }
+
+.shop-buy {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  height: 54px;
+  border: 0;
+  border-radius: 12px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #f2c230 0%, #d9a441 100%);
+  box-shadow: inset 0 0 0 2px rgba(255, 236, 180, 0.8), 0 3px 0 4px #8a5a2b;
+  transition: transform 0.08s ease, filter 0.12s ease;
+}
+.shop-buy:hover:not(:disabled) { filter: brightness(1.06); }
+.shop-buy:active:not(:disabled) { transform: translateY(2px); }
+.shop-buy:disabled { opacity: 0.4; cursor: default; }
+
+/* 고른 것은 목록에서도 표시해 둔다. 오른쪽 판만 바뀌면 무엇을 골랐는지 놓친다. */
+.shop-item.is-active,
+.shop-card.is-active {
+  box-shadow:
+    inset 0 0 0 2px rgba(255, 236, 180, 0.9),
+    0 0 0 3px #f2c230,
+    0 3px 0 4px #8a5a2b;
+}
 
 .shop-note {
   display: flex;
@@ -1606,6 +1807,9 @@ html, body, #root {
   padding-bottom: 8px;
   border-bottom: 2px solid rgba(138, 90, 43, 0.28);
 }
+
+/* 카드를 늘어놓는 걸음은 위에 붙인다. 가운데로 띄우면 제목과의 사이가 통째로 빈다. */
+.wizard-body.is-top { justify-content: flex-start; }
 
 /* 걸음마다 내용의 양이 다르다. 남는 자리를 여기가 먹고, 넘치면 여기만 스크롤한다. */
 .wizard-body {

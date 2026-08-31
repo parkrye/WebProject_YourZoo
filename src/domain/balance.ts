@@ -51,6 +51,25 @@ export const CASH_PRODUCTS: readonly CashProduct[] = [
 
 export const productTotal = (product: CashProduct): number => product.cash + product.bonus
 
+/**
+ * 캐시 하나를 인게임 코인으로 바꿀 때의 환율.
+ *
+ * **한 방향뿐이다.** 코인으로 캐시를 살 수 있으면 캐시로만 되는 것(프레임 애니메이션)이
+ * 시간만 들이면 공짜가 되고, 그러면 유료 재화라는 구분 자체가 사라진다.
+ *
+ * 1000 은 동물 한 마리 제작비(50)의 스무 배다. 캐시를 코인으로 쓰는 사람이
+ * 손해 봤다고 느끼지 않을 만큼 넉넉하되, 캐시 본래 쓰임을 덮을 만큼은 아니다.
+ */
+export const CASH_TO_GOLD = 1000
+
+/**
+ * 상점에서 한 번에 살 수 있는 최대 수량.
+ *
+ * 소지금으로만 막으면 후반에 수백 마리를 한 번에 사게 되고, 그만큼의 사육비가
+ * 다음 자정에 한꺼번에 빠진다. 살 수 있는 것과 감당할 수 있는 것은 다르다.
+ */
+export const SHOP_MAX_QUANTITY = 10
+
 /** 동물 한 마리의 8x3 스프라이트 시트를 만드는 데 드는 캐시. */
 export const SHEET_COST = 1
 
@@ -102,7 +121,33 @@ export const REPUTATION_PER_APPEAL = 0.1
 export const OVERCROWD_THRESHOLD = 8
 export const OVERCROWD_PENALTY = 2
 
+/**
+ * 우리 정원의 **처음** 값. 골드를 들여 늘릴 수 있다.
+ *
+ * 매력도의 혼잡 계산은 늘린 정원이 아니라 이 값을 기준으로 둔다 —
+ * 정원을 늘렸다고 같은 마릿수가 덜 붐비게 보일 이유는 없다.
+ */
 export const MAX_ANIMALS_PER_ENCLOSURE = 12
+
+/** 한 번에 늘어나는 마릿수. */
+export const ENCLOSURE_EXPAND_STEP = 2
+
+/** 여기까지만 늘어난다. 우리 하나에 스무 마리면 화면이 이미 빽빽하다. */
+export const MAX_ENCLOSURE_CAPACITY = 20
+
+/** 정원을 처음 늘릴 때의 값. 한 단계 올라갈 때마다 이만큼씩 더 든다. */
+const EXPAND_BASE_COST = 400
+
+/**
+ * 정원을 한 단계 늘리는 값.
+ *
+ * 늘릴수록 비싸진다. 같은 값으로 계속 늘릴 수 있으면 우리를 새로 여는 것보다
+ * 한 우리를 키우는 쪽이 늘 싸져서, 사막도 얼음도 열 이유가 없어진다.
+ */
+export function expandCost(capacity: number): number {
+  const steps = Math.max(0, Math.round((capacity - MAX_ANIMALS_PER_ENCLOSURE) / ENCLOSURE_EXPAND_STEP))
+  return EXPAND_BASE_COST * (steps + 1)
+}
 export const MAX_VISITORS_PER_ENCLOSURE = 14
 /**
  * 동물이 있는 우리의 최소 동시 관람객.
@@ -136,5 +181,22 @@ export const UNLOCK_COST = {
   ICE: 1500,
 } as const
 
+/**
+ * 우리를 여는 데 필요한 명성.
+ *
+ * 돈만으로 열게 두면 **동물원을 운영하지 않고도** 새 우리가 열린다 —
+ * 수입은 시간에 비례해 들어오므로 화면만 켜 두면 언젠가 500 이 모인다.
+ * 명성은 배치한 동물의 매력도에서만 오르므로, 실제로 우리를 채워야 넘는다.
+ *
+ * 하루 명성 증가분은 배치한 동물 매력도 합의 10% 다. 매력도 30 짜리 세 마리면
+ * 하루 +9 — 사막은 사나흘, 얼음은 그 위로 한참 더 걸린다.
+ */
+export const UNLOCK_REPUTATION = {
+  FIELD: 0,
+  DESERT: 30,
+  ICE: 100,
+} as const
+
 export const ANIMAL_NAME_MAX_LENGTH = 10
+export const ENCLOSURE_NAME_MAX_LENGTH = 14
 export const ZOO_NAME_MAX_LENGTH = 14

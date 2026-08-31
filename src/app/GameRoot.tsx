@@ -1,4 +1,5 @@
 import { DayFade } from './DayFade'
+import { TravelFade } from './TravelFade'
 import { useState } from 'react'
 import { Stage } from './Stage'
 import { NamingScreen } from '@/ui/screens/NamingScreen'
@@ -6,6 +7,7 @@ import { TitleScreen, type TitleStep } from '@/ui/screens/TitleScreen'
 import { AuthScreen } from '@/ui/screens/AuthScreen'
 import { ZooScreen } from '@/ui/screens/ZooScreen'
 import { OptionsModal } from '@/ui/modals/OptionsModal'
+import { EnclosureModal } from '@/ui/modals/EnclosureModal'
 import { StatusModal } from '@/ui/modals/StatusModal'
 import { RequestModal } from '@/ui/modals/RequestModal'
 import { ReportModal } from '@/ui/modals/ReportModal'
@@ -54,9 +56,12 @@ export function GameRoot() {
 
       {/* 암전은 화면과 HUD 위, 팝업 아래에 깔린다. 리포트는 검은 화면 위에서 읽는다. */}
       <DayFade />
+      {/* 동물원을 오갈 때의 암전. 하루 넘김과 겹치지 않는다 — 오가는 동안 시계는 멈춘다. */}
+      <TravelFade />
 
       {modal === 'OPTIONS' && <OptionsModal />}
       {modal === 'STATUS' && <StatusModal />}
+      {modal === 'ENCLOSURE' && <EnclosureModal />}
       {modal === 'REQUEST' && <RequestModal />}
       {modal === 'REPORT' && <ReportModal />}
       {modal === 'SHOP' && <ShopModal />}

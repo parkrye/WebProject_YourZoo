@@ -97,6 +97,10 @@ interface ZooDoc {
   reputation: number
   day: number
   unlocked: string[]
+  /** 주인이 우리에 붙인 이름. 없으면 클라이언트가 기본 이름을 쓴다. */
+  enclosureNames: Record<string, string>
+  /** 우리마다의 정원. */
+  capacity: Record<string, number>
   animals: unknown[]
   props: unknown[]
   updatedAt: number
@@ -407,10 +411,35 @@ function asZooDoc(userId: string, body: Record<string, unknown>): ZooDoc | null 
     reputation: count(body.reputation),
     day: count(body.day),
     unlocked: unlocked.map((u) => text(u).slice(0, MAX_NAME)),
+    enclosureNames: nameMap(body.enclosureNames),
+    capacity: countMap(body.capacity),
     animals,
     props,
     updatedAt: Date.now(),
   }
+}
+
+/** 우리 수만큼의 작은 표. 키도 값도 길이를 자른다 — 통째로 믿을 이유가 없다. */
+const MAX_MAP_ENTRIES = 8
+
+function nameMap(value: unknown): Record<string, string> {
+  const out: Record<string, string> = {}
+  if (!value || typeof value !== 'object') return out
+  for (const [key, name] of Object.entries(value as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_MAP_ENTRIES) break
+    out[text(key).slice(0, MAX_NAME)] = text(name).slice(0, MAX_NAME)
+  }
+  return out
+}
+
+function countMap(value: unknown): Record<string, number> {
+  const out: Record<string, number> = {}
+  if (!value || typeof value !== 'object') return out
+  for (const [key, n] of Object.entries(value as Record<string, unknown>)) {
+    if (Object.keys(out).length >= MAX_MAP_ENTRIES) break
+    out[text(key).slice(0, MAX_NAME)] = count(n)
+  }
+  return out
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -6,10 +6,10 @@ import {
 } from '@/assets/manifest'
 import { audio } from '@/audio/AudioManager'
 import { startTicker } from '@/core/ticker'
-import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST } from '@/domain/balance'
+import { MAX_ANIMALS_PER_ENCLOSURE, UNLOCK_COST, UNLOCK_REPUTATION } from '@/domain/balance'
 import { phaseOf } from '@/domain/clock'
-import { ENCLOSURE_ORDER, ENCLOSURES } from '@/domain/enclosure'
-import { SceneRenderer, type EnclosureTransition } from '@/render/SceneRenderer'
+import { ENCLOSURE_ORDER, enclosureLabel } from '@/domain/enclosure'
+import { SceneRenderer, type DropGuide, type EnclosureTransition } from '@/render/SceneRenderer'
 import {
   clampCamera, createCamera, MIN_ZOOM, panCamera, screenToScene, zoomStep, type Camera,
 } from '@/render/camera'
@@ -43,7 +43,7 @@ const SLIDE_DURATION = 0.42
  * 물 영역은 평소 울타리와 트레이에 가려 어디에 놓는지 보이지 않는다.
  * 다만 완전히 치우지는 않는다 — 울타리가 사라지면 우리 경계도 함께 사라진다.
  */
-const FENCE_OFFSET_DRAGGING = 0.32
+const FENCE_OFFSET_DRAGGING = 0.46
 
 export function ZooScreen({ detail }: ZooScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -55,6 +55,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const cameraRef = useRef<Camera>(createCamera())
   /** 렌더 루프가 매 프레임 읽는다. state 로 두면 트윈이 한 박자 늦는다. */
   const loweringRef = useRef(false)
+  /** 배치 안내선. 같은 이유로 ref 다 — 손을 따라 매 프레임 다시 그린다. */
+  const dropGuideRef = useRef<DropGuide | null>(null)
   const [camera, setCamera] = useState<Camera>(cameraRef.current)
   const [tool, setTool] = useState<DetailTool>('CURSOR')
   const panRef = useRef<{ x: number; y: number } | null>(null)
@@ -69,8 +71,6 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const [drag, setDrag] = useState<DragState | null>(null)
   const [ghost, setGhost] = useState<{ x: number; y: number } | null>(null)
   const [dropError, setDropError] = useState<string | null>(null)
-  /** 드래그 중인 손이 트레이 밖(= 우리 위)에 있는가. 그때만 시야를 비워 준다. */
-  const [dragOverScene, setDragOverScene] = useState(false)
   const transitionRef = useRef<EnclosureTransition | null>(null)
 
   // 우리 3개를 모두 유지하며 계속 시뮬레이션한다. 넘겼다 돌아왔을 때 얼어 있으면 어색하다.
@@ -113,6 +113,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const myZooName = useGameStore((s) => s.zooName)
   const myAnimals = useGameStore((s) => s.animals)
   const myProps = useGameStore((s) => s.props)
+  const myEnclosureNames = useGameStore((s) => s.enclosureNames)
+  const myCapacity = useGameStore((s) => s.capacity)
 
   const enclosure = visiting ? visitEnclosure : myEnclosure
   const unlocked = visiting ? visiting.unlocked : myUnlocked
@@ -171,9 +173,15 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     for (const sim of sims.values()) sim.syncProps(props)
   }, [props, sims])
 
+  /*
+    무언가를 끌기 시작하면 트레이도 펜스도 곧바로 내려간다.
+    예전에는 손이 트레이 밖으로 나갔을 때만 내렸는데, 물 영역이 하필 트레이가
+    있는 화면 아래쪽이라 **놓으려고 손을 내리면 트레이가 다시 올라와** 놓을 자리를 가렸다.
+    고르는 동안에는 트레이가 필요하지만 이미 집은 뒤에는 필요 없다.
+  */
   useEffect(() => {
-    loweringRef.current = dragOverScene
-  }, [dragOverScene])
+    loweringRef.current = drag !== null
+  }, [drag])
 
   useEffect(() => {
     if (!dropError) return
@@ -227,6 +235,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           sim,
           elapsed: store.clock.elapsed,
           fenceOffset: fenceRef.current,
+          dropGuide: dropGuideRef.current,
           camera: cameraRef.current,
           selectedId: selectedIdRef.current,
           transition: transitionRef.current,
@@ -253,11 +262,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const trackGhost = useCallback((state: DragState) => {
     setDrag(state)
     setGhost(toStage(state.clientX, state.clientY))
-
-    // 트레이 위에 손이 있으면 아직 고르는 중이다. 벗어나야 놓을 자리를 보여 준다.
-    const tray = document.querySelector('.storage-tray')?.getBoundingClientRect()
-    setDragOverScene(!tray || state.clientY < tray.top)
-  }, [toStage])
+    dropGuideRef.current = guideFor(state, canPlaceIn(enclosure), canPlaceProp(props, enclosure))
+  }, [toStage, canPlaceIn, enclosure, props])
 
   /** 뷰포트 좌표를 씬의 정규화 좌표로 바꾼다. Stage 의 CSS 축소를 되돌려야 한다. */
   const toScene = useCallback((clientX: number, clientY: number) => {
@@ -346,7 +352,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   const handleDrop = (state: DragState): void => {
     setDrag(null)
     setGhost(null)
-    setDragOverScene(false)
+    dropGuideRef.current = null
 
     const scene = toScene(state.clientX, state.clientY)
     if (!scene) return
@@ -388,6 +394,9 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   }
 
   const here = animals.filter((a) => a.status === 'PLACED' && a.enclosureId === enclosure).length
+  // 이름과 정원도 보고 있는 동물원의 것을 따른다. 남의 우리에 내 정원을 적을 수는 없다.
+  const names = visiting ? visiting.enclosureNames : myEnclosureNames
+  const room = (visiting ? visiting.capacity?.[enclosure] : myCapacity[enclosure]) ?? MAX_ANIMALS_PER_ENCLOSURE
   const canPan = detail && tool === 'PAN'
 
   return (
@@ -408,7 +417,12 @@ export function ZooScreen({ detail }: ZooScreenProps) {
       )}
 
       {!isOpen && !modal && !trayOpen && !visiting && (
-        <LockedOverlay id={enclosure} gold={gold} onUnlock={() => unlockEnclosure(enclosure)} />
+        <LockedOverlay
+          id={enclosure}
+          gold={gold}
+          reputation={reputation}
+          onUnlock={() => unlockEnclosure(enclosure)}
+        />
       )}
 
       {/*
@@ -431,10 +445,10 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           */}
           {detail ? (
             <div className="hud-top-right">
-              <BitmapLabel text={ENCLOSURES[enclosure].label} size={24} align="right" />
+              <BitmapLabel text={enclosureLabel(enclosure, names)} size={24} align="right" />
               <div className="hud-purse">
                 <IconGlyph icon={GUI.PAW} size={26} />
-                <BitmapLabel text={`${here} / ${MAX_ANIMALS_PER_ENCLOSURE}`} size={22} />
+                <BitmapLabel text={`${here} / ${room}`} size={22} />
               </div>
             </div>
           ) : (
@@ -475,10 +489,23 @@ export function ZooScreen({ detail }: ZooScreenProps) {
                 </div>
               </div>
 
-              <div className="hud-enclosure-name">
-                <BitmapLabel text={ENCLOSURES[enclosure].label} size={38} align="center" />
-                <BitmapLabel text={isOpen ? `ANIMALS ${here}` : 'LOCKED'} size={22} align="center" />
-              </div>
+              {/*
+                이름표를 누르면 그 우리를 손본다. 아래 띠에 단추를 하나 더 두는 것보다
+                **고칠 대상 위에서** 여는 편이 무엇을 고치는지 분명하다.
+              */}
+              <button
+                type="button"
+                className="hud-enclosure-name"
+                disabled={!!visiting || !isOpen}
+                onClick={() => openModal('ENCLOSURE')}
+              >
+                <BitmapLabel text={enclosureLabel(enclosure, names)} size={38} align="center" />
+                <BitmapLabel
+                  text={isOpen ? `ANIMALS ${here} / ${room}` : 'LOCKED'}
+                  size={22}
+                  align="center"
+                />
+              </button>
             </>
           )}
 
@@ -649,7 +676,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             stored={stored}
             storedProps={storedPropList}
             shippingCount={shippingCount}
-            lowered={dragOverScene}
+            lowered={drag !== null}
             onSelect={(item) => select(item.kind === 'ANIMAL' ? item.id : null)}
             onDragStart={trackGhost}
             onDragMove={trackGhost}
@@ -675,29 +702,67 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   )
 }
 
+/**
+ * 끌고 있는 것이 어디에 들어갈 수 있는지.
+ * 동물은 제 서식지 칸에만, 프롭은 어디에나 들어간다.
+ */
+function guideFor(state: DragState, roomForAnimal: boolean, roomForProp: boolean): DropGuide {
+  if (state.item.kind === 'PROP') return { habitat: null, blocked: !roomForProp }
+  return { habitat: state.item.animal.traits.habitat, blocked: !roomForAnimal }
+}
+
 interface LockedOverlayProps {
   id: BiomeId
   gold: number
+  reputation: number
   onUnlock: () => void
 }
 
-function LockedOverlay({ id, gold, onUnlock }: LockedOverlayProps) {
+/**
+ * 잠긴 우리.
+ *
+ * 조건이 둘이므로 **가진 것과 필요한 것을 나란히** 적는다.
+ * "NOT ENOUGH" 한 줄만 띄우면 무엇이 얼마나 모자란지 알 수 없어,
+ * 얼마를 더 모아야 하는지 가늠할 수가 없다.
+ */
+function LockedOverlay({ id, gold, reputation, onUnlock }: LockedOverlayProps) {
   const cost = UNLOCK_COST[id]
-  const affordable = gold >= cost
+  const fame = UNLOCK_REPUTATION[id]
+  const rich = gold >= cost
+  const famous = reputation >= fame
+  const ready = rich && famous
 
   return (
     <div className="locked-overlay">
       <IconGlyph icon={GUI.LOCK} size={72} />
       <BitmapLabel text="LOCKED" size={64} align="center" />
-      <BitmapLabel text={`UNLOCK FOR ${cost} GOLD`} size={28} align="center" />
+
+      <div className="locked-reqs">
+        <span className={rich ? 'locked-req is-met' : 'locked-req'}>
+          <IconGlyph icon={GUI.COIN} size={30} />
+          <BitmapLabel text={`${gold} / ${cost}`} size={24} />
+        </span>
+        <span className={famous ? 'locked-req is-met' : 'locked-req'}>
+          <IconGlyph icon={GUI.MEDAL} size={30} />
+          <BitmapLabel text={`${reputation} / ${fame}`} size={24} />
+        </span>
+      </div>
+
       <IconButton
-        icon={affordable ? GUI.LOCK_OPEN : GUI.EYE_OFF}
+        icon={ready ? GUI.LOCK_OPEN : GUI.EYE_OFF}
         size={86}
         title="UNLOCK"
-        disabled={!affordable}
+        disabled={!ready}
         onClick={onUnlock}
       />
-      {!affordable && <BitmapLabel text="NOT ENOUGH GOLD" size={22} align="center" />}
+      {/* 명성은 동물을 배치해야만 오른다. 그 사실을 여기서 한 번 알려 준다. */}
+      {!ready && (
+        <BitmapLabel
+          text={rich ? 'PLACE ANIMALS TO EARN FAME' : 'NOT ENOUGH GOLD'}
+          size={22}
+          align="center"
+        />
+      )}
     </div>
   )
 }
