@@ -7,16 +7,16 @@ import {
   ANIMAL_CRAFTS, ANIMAL_CRAFT_ORDER, DETAIL_COLS, DETAIL_ROW_LABELS,
   type AnimalCraft,
 } from '@/domain/craft'
-import { LOCOMOTIONS, LOCOMOTION_ORDER, type Locomotion } from '@/domain/locomotion'
+import { LOCOMOTIONS, LOCOMOTION_ORDER } from '@/domain/locomotion'
 import { rigOf } from '@/domain/rig'
 import { TEMPLATES, type TemplateId } from '@/domain/templates'
+import type { AnimalStep, TraitMode } from '@/domain/requestDraft'
 import {
   ANIMAL_TYPE_ORDER, HABITATS, TRAIT_KEYS, TRAIT_LABELS,
   randomTraits, traitsFromType, withTrait,
-  type AnimalTraits, type AnimalTypeId,
+  type AnimalTraits,
 } from '@/domain/traits'
 import { createRng } from '@/core/rng'
-import type { ExportedDrawing } from '@/draw/export'
 import { composeSheet } from '@/render/animal/composeSheet'
 import { registerFromBlob } from '@/sim/imageCache'
 import { putImage } from '@/store/imageDb'
@@ -31,11 +31,7 @@ import { FrameStudio } from './FrameStudio'
 import { RigStudio } from './RigStudio'
 import { WizardFrame } from './WizardFrame'
 
-type Step = 'CRAFT' | 'LOCOMOTION' | 'TEMPLATE' | 'DRAW' | 'TRAITS' | 'NAME'
-type TraitMode = 'TYPE' | 'CUSTOM' | 'RANDOM'
-
 const TRAIT_MODES: readonly TraitMode[] = ['TYPE', 'CUSTOM', 'RANDOM']
-const DETAIL_TOTAL = DETAIL_COLS * DETAIL_ROW_LABELS.length
 
 interface NewAnimalFormProps {
   onDone: () => void
@@ -63,24 +59,19 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   const cash = useGameStore((s) => s.cash)
   const orderAnimal = useGameStore((s) => s.orderAnimal)
 
-  const [step, setStep] = useState<Step>('CRAFT')
-  const [craft, setCraft] = useState<AnimalCraft>('SIMPLE')
-  const [locomotion, setLocomotion] = useState<Locomotion>('QUADRUPED')
-  const [templateId, setTemplateId] = useState<TemplateId>('DEER')
-  const [name, setName] = useState('')
-  const [mode, setMode] = useState<TraitMode>('TYPE')
-  const [typeId, setTypeId] = useState<AnimalTypeId>(ANIMAL_TYPE_ORDER[0] as AnimalTypeId)
-  const [custom, setCustom] = useState<AnimalTraits>(() => randomTraits(createRng(11)))
-  const [rolled, setRolled] = useState<AnimalTraits>(() => randomTraits(createRng(23)))
-  const [rollSeed, setRollSeed] = useState(23)
-  const [habitat, setHabitat] = useState<AnimalTraits['habitat']>('LAND')
+  /*
+    위저드가 들고 있는 값은 전부 **스토어의 초안**에 있다.
+    여기서 useState 로 들고 있으면 요청서를 덮는 창 하나에 통째로 사라진다 —
+    자정 정산 팝업이 뜨는 순간 그리던 그림도 이름도 습성도 없어졌다.
+  */
+  const draft = useGameStore((s) => s.draft.animal)
+  const patch = useGameStore((s) => s.patchAnimalDraft)
+  const {
+    step, craft, locomotion, templateId, name, mode, typeId, custom, rolled, habitat,
+    single, rigParts, frames,
+  } = draft
 
-  const [single, setSingle] = useState<ExportedDrawing | null>(null)
-  /** 리그 파츠. 부위 id 로 찾는다. */
-  const [rigParts, setRigParts] = useState<Record<string, ExportedDrawing>>({})
-  const [frames, setFrames] = useState<(ExportedDrawing | null)[]>(
-    () => Array(DETAIL_TOTAL).fill(null),
-  )
+  // 창이 닫히면 같이 사라져도 되는 것만 여기 남긴다.
   const [drawOpen, setDrawOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -120,23 +111,23 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     return () => URL.revokeObjectURL(previewUrl)
   }, [previewUrl])
 
+  const goto = (next: AnimalStep): void => patch({ step: next })
+
   const startCraft = (id: AnimalCraft): void => {
-    setCraft(id)
     // 실루엣을 쓰는 방식은 이동 유형부터 고른다. 실루엣 열 몇 개를 한 번에
     // 늘어놓으면 사자와 거북이가 나란히 놓여 무엇이 다른지 읽히지 않는다.
     const needsShape = id === 'TEMPLATE' || id === 'RIG' || id === 'FRAMES'
-    setStep(needsShape ? 'LOCOMOTION' : 'DRAW')
+    patch({ craft: id, step: needsShape ? 'LOCOMOTION' : 'DRAW' })
   }
 
   /** 템플릿을 고르면 서식지도 그에 맞춘다. 물 템플릿을 땅에 두면 움직임이 어긋난다. */
   const pickTemplate = (id: TemplateId): void => {
-    setTemplateId(id)
     const template = TEMPLATES[id]
-    if (template.habitat) setHabitat(template.habitat)
-    if (template.suggestedType) {
-      setMode('TYPE')
-      setTypeId(template.suggestedType)
-    }
+    patch({
+      templateId: id,
+      ...(template.habitat && { habitat: template.habitat }),
+      ...(template.suggestedType && { mode: 'TYPE' as const, typeId: template.suggestedType }),
+    })
   }
 
   const submit = async (): Promise<void> => {
@@ -217,8 +208,8 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     return (
       <WizardFrame
         title="HOW DOES IT MOVE"
-        onBack={() => setStep('CRAFT')}
-        onNext={() => setStep('TEMPLATE')}
+        onBack={() => goto('CRAFT')}
+        onNext={() => goto('TEMPLATE')}
       >
         <div className="wizard-grid">
           {LOCOMOTION_ORDER.map((id) => (
@@ -227,7 +218,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
               type="button"
               className={locomotion === id ? 'wizard-card is-active' : 'wizard-card'}
               onClick={() => {
-                setLocomotion(id)
+                patch({ locomotion: id })
                 const first = LOCOMOTIONS[id].templates[0]
                 if (first) pickTemplate(first)
               }}
@@ -245,8 +236,8 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     return (
       <WizardFrame
         title="PICK A SHAPE"
-        onBack={() => setStep('LOCOMOTION')}
-        onNext={() => setStep('DRAW')}
+        onBack={() => goto('LOCOMOTION')}
+        onNext={() => goto('DRAW')}
         nextLabel="DRAW"
       >
         <div className="wizard-grid">
@@ -270,8 +261,8 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     return (
       <WizardFrame
         title={framed ? 'DRAW 24 FRAMES' : rigged ? 'DRAW EACH PART' : 'DRAW IT'}
-        onBack={() => setStep(usesTemplate ? 'TEMPLATE' : 'CRAFT')}
-        onNext={() => setStep('TRAITS')}
+        onBack={() => goto(usesTemplate ? 'TEMPLATE' : 'CRAFT')}
+        onNext={() => goto('TRAITS')}
         nextReady={drawn}
       >
         {rigged ? (
@@ -279,7 +270,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
             spec={rig}
             parts={rigParts}
             onChange={(partId, drawing) =>
-              setRigParts((prev) => ({ ...prev, [partId]: drawing }))
+              patch({ rigParts: { ...rigParts, [partId]: drawing } })
             }
           />
         ) : framed ? (
@@ -288,7 +279,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
             frames={frames}
             guide={guide}
             onChange={(i, drawing) =>
-              setFrames((prev) => prev.map((f, n) => (n === i ? drawing : f)))
+              patch({ frames: frames.map((f, n) => (n === i ? drawing : f)) })
             }
           />
         ) : (
@@ -313,7 +304,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
             {...(single && { initial: single.blob })}
             onClose={() => setDrawOpen(false)}
             onDone={(result) => {
-              setSingle(result)
+              patch({ single: result })
               setDrawOpen(false)
             }}
           />
@@ -326,8 +317,8 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     return (
       <WizardFrame
         title="HOW DOES IT BEHAVE"
-        onBack={() => setStep('DRAW')}
-        onNext={() => setStep('NAME')}
+        onBack={() => goto('DRAW')}
+        onNext={() => goto('NAME')}
       >
         <div className="wizard-fields">
           <BitmapLabel text="HABITAT" size={18} />
@@ -337,7 +328,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
                 key={h}
                 type="button"
                 className={habitat === h ? 'chip is-active' : 'chip'}
-                onClick={() => setHabitat(h)}
+                onClick={() => patch({ habitat: h })}
               >
                 <BitmapLabel text={h} size={18} />
               </button>
@@ -351,7 +342,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
                 key={m}
                 type="button"
                 className={mode === m ? 'chip is-active' : 'chip'}
-                onClick={() => setMode(m)}
+                onClick={() => patch({ mode: m })}
               >
                 <BitmapLabel text={m} size={18} />
               </button>
@@ -365,7 +356,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
                   key={id}
                   type="button"
                   className={typeId === id ? 'chip is-active' : 'chip'}
-                  onClick={() => setTypeId(id)}
+                  onClick={() => patch({ typeId: id })}
                 >
                   <BitmapLabel text={id} size={17} />
                 </button>
@@ -380,7 +371,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
                   key={key}
                   label={TRAIT_LABELS[key]}
                   value={custom[key]}
-                  onChange={(v) => setCustom(withTrait(custom, key, v))}
+                  onChange={(v) => patch({ custom: withTrait(custom, key, v) })}
                 />
               ))}
             </div>
@@ -391,9 +382,8 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
               type="button"
               className="labeled-button"
               onClick={() => {
-                const seed = rollSeed + 1
-                setRollSeed(seed)
-                setRolled(randomTraits(createRng(Math.imul(seed, 2654435761))))
+                const seed = draft.rollSeed + 1
+                patch({ rollSeed: seed, rolled: randomTraits(createRng(Math.imul(seed, 2654435761))) })
               }}
             >
               <IconGlyph icon={GUI.UNDO} size={36} />
@@ -408,7 +398,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
   return (
     <WizardFrame
       title="NAME IT"
-      onBack={() => setStep('TRAITS')}
+      onBack={() => goto('TRAITS')}
       onSubmit={() => void submit()}
       submitReady={drawn && affordable && !busy && name.trim().length > 0}
       cost={spec.coins}
@@ -424,7 +414,7 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
         <BitmapLabel text="NAME" size={18} />
         <BitmapInput
           value={name}
-          onChange={setName}
+          onChange={(next) => patch({ name: next })}
           maxLength={ANIMAL_NAME_MAX_LENGTH}
           placeholder="ENTER NAME"
           width={330}

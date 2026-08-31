@@ -21,8 +21,10 @@ import { createUserId, isUserId } from '@/domain/userId'
 import { dayIncome, settleDay, type DailyReport } from '@/domain/economy'
 import { ENCLOSURE_ORDER, neighborEnclosure, neighborUnlocked } from '@/domain/enclosure'
 import { createOrder, expireOrders, matchesOrder, MAX_ACTIVE_ORDERS, type Order } from '@/domain/orders'
-import { emptyDraft, type RequestDraft } from '@/domain/requestDraft'
-import { randomTraits } from '@/domain/traits'
+import {
+  emptyAnimalDraft, emptyPropDraft, emptyRequestDraft,
+  type AnimalDraft, type PropDraft, type RequestDraft, type RequestTab,
+} from '@/domain/requestDraft'
 import { type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
@@ -142,8 +144,10 @@ interface GameState {
   /** 요청서 제출. 값은 만드는 방식이 정한다. */
   orderAnimal(animal: Animal, cost?: number): boolean
   canOrderAnimal(): boolean
-  patchDraft(patch: Partial<RequestDraft>): void
-  clearDraft(): void
+  /** 요청서에서 보던 탭. 창을 닫았다 열어도 그 자리로 돌아온다. */
+  setRequestTab(tab: RequestTab): void
+  patchAnimalDraft(patch: Partial<AnimalDraft>): void
+  patchPropDraft(patch: Partial<PropDraft>): void
   /** 창고에서 우리로. 서식지·정원이 맞지 않으면 false. */
   placeAnimal(id: string, enclosureId: BiomeId): boolean
   /** 우리에서 창고로. */
@@ -206,7 +210,7 @@ const initial = {
   animals: [] as Animal[],
   props: [] as OwnedProp[],
   orders: [] as Order[],
-  draft: emptyDraft(randomTraits(createRng(1))),
+  draft: emptyRequestDraft(),
   lastReport: null as DailyReport | null,
   reports: [] as DailyReport[],
   options: { bgm: 0.7, sfx: 0.8 },
@@ -419,8 +423,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   canOrderAnimal: () => get().gold >= ANIMAL_CREATE_COST,
 
-  patchDraft: (patch) => set((s) => ({ draft: { ...s.draft, ...patch } })),
-  clearDraft: () => set({ draft: emptyDraft(randomTraits(createRng(Date.now() & 0xffff))) }),
+  setRequestTab: (tab) => set((s) => ({ draft: { ...s.draft, tab } })),
+  patchAnimalDraft: (patch) =>
+    set((s) => ({ draft: { ...s.draft, animal: { ...s.draft.animal, ...patch } } })),
+  patchPropDraft: (patch) =>
+    set((s) => ({ draft: { ...s.draft, prop: { ...s.draft.prop, ...patch } } })),
 
   canPlaceIn: (enclosureId) => {
     const { animals, unlocked } = get()
@@ -446,7 +453,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       gold: s.gold - cost,
       animals: [...s.animals, placed],
       tutorial: s.tutorial === 'DRAW' ? 'INSPECT' : s.tutorial,
-      draft: emptyDraft(randomTraits(createRng(Date.now() & 0xffff))),
+      // 초안은 여기서만 비운다. 제출이 성공한 순간이 유일하게 안전한 시점이다.
+      draft: { ...s.draft, animal: emptyAnimalDraft() },
     }))
     return true
   },
@@ -590,7 +598,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   orderProp: (prop, cost = PROP_CREATE_COST) => {
     const { gold } = get()
     if (gold < cost) return false
-    set((s) => ({ gold: s.gold - cost, props: [...s.props, prop] }))
+    set((s) => ({
+      gold: s.gold - cost,
+      props: [...s.props, prop],
+      draft: { ...s.draft, prop: emptyPropDraft() },
+    }))
     return true
   },
 
@@ -697,7 +709,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({
       ...initial,
       userId: createUserId(),
-      draft: emptyDraft(randomTraits(createRng(7))),
+      draft: emptyRequestDraft(),
       screen: 'NAMING',
     })
   },
@@ -715,7 +727,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       account: result.account,
       // 계정만 생겼을 뿐 아직 올린 것은 없다. 여기서 SYNCED 라고 하면 거짓말이 된다.
       sync: 'PENDING',
-      draft: emptyDraft(randomTraits(createRng(7))),
+      draft: emptyRequestDraft(),
       screen: 'NAMING',
     })
     return null
@@ -735,7 +747,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ...initial,
         userId: result.account.userId,
         account: result.account,
-        draft: emptyDraft(randomTraits(createRng(7))),
+        draft: emptyRequestDraft(),
         screen: 'NAMING',
       })
       return null

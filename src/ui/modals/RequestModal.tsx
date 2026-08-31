@@ -1,12 +1,10 @@
-import { useState } from 'react'
 import { Popup } from '@/ui/components/Popup'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
 import { useGameStore } from '@/store/gameStore'
 import { NewAnimalForm } from '@/ui/panels/NewAnimalForm'
 import { NewPropForm } from '@/ui/panels/NewPropForm'
 import { OrdersTab } from '@/ui/panels/OrdersTab'
-
-type RequestTab = 'NEW' | 'PROP' | 'ORDERS'
+import type { RequestTab } from '@/domain/requestDraft'
 
 const TABS: readonly TabItem<RequestTab>[] = [
   { id: 'NEW', label: 'NEW ANIMAL' },
@@ -26,7 +24,9 @@ const POPUP_HEIGHT = 900
  */
 export function RequestModal() {
   const closeModal = useGameStore((s) => s.closeModal)
-  const [tab, setTab] = useState<RequestTab>('NEW')
+  // 보던 탭도 작업 내용이다. 자정 정산에 창이 내려가도 돌아올 자리는 남는다.
+  const tab = useGameStore((s) => s.draft.tab)
+  const setTab = useGameStore((s) => s.setRequestTab)
 
   return (
     <Popup title="REQUEST FORM" width={POPUP_WIDTH} height={POPUP_HEIGHT} onClose={closeModal}>

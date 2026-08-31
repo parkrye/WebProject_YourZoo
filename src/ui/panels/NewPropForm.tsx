@@ -3,8 +3,8 @@ import { GUI, type Habitat } from '@/assets/manifest'
 import { PROP_NAME_MAX_LENGTH, SHIPPING_DAYS } from '@/domain/balance'
 import { PROP_CRAFTS, PROP_CRAFT_ORDER, PROP_DETAIL_FRAMES, type PropCraft } from '@/domain/craft'
 import { createPropId, type OwnedProp } from '@/domain/prop'
-import { PROP_TEMPLATES, PROP_TEMPLATE_ORDER, type PropTemplateId } from '@/domain/propTemplates'
-import type { ExportedDrawing } from '@/draw/export'
+import { PROP_TEMPLATES, PROP_TEMPLATE_ORDER } from '@/domain/propTemplates'
+import type { PropStep } from '@/domain/requestDraft'
 import { composeStrip } from '@/render/animal/composeSheet'
 import { registerFromBlob } from '@/sim/imageCache'
 import { putImage } from '@/store/imageDb'
@@ -24,8 +24,6 @@ const MOTIONS: readonly { id: Habitat; label: string; hint: string }[] = [
   { id: 'SKY', label: 'SWAY', hint: 'SWINGS SIDE TO SIDE' },
 ]
 
-type Step = 'CRAFT' | 'TEMPLATE' | 'DRAW' | 'DETAILS'
-
 interface NewPropFormProps {
   onDone: () => void
 }
@@ -42,15 +40,12 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
   const gold = useGameStore((s) => s.gold)
   const day = useGameStore((s) => s.clock.day)
 
-  const [step, setStep] = useState<Step>('CRAFT')
-  const [craft, setCraft] = useState<PropCraft>('SIMPLE')
-  const [templateId, setTemplateId] = useState<PropTemplateId>('ROCK')
-  const [layer, setLayer] = useState<Habitat>('LAND')
-  const [name, setName] = useState('')
-  const [single, setSingle] = useState<ExportedDrawing | null>(null)
-  const [frames, setFrames] = useState<(ExportedDrawing | null)[]>(
-    () => Array(PROP_DETAIL_FRAMES).fill(null),
-  )
+  // 위저드의 값은 스토어의 초안에 둔다. 이유는 동물 요청서와 같다 —
+  // 요청서를 덮는 창 하나에 그리던 것이 사라지면 안 된다.
+  const draft = useGameStore((s) => s.draft.prop)
+  const patch = useGameStore((s) => s.patchPropDraft)
+  const { step, craft, templateId, layer, name, single, frames } = draft
+
   const [drawOpen, setDrawOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -67,9 +62,10 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
     return () => URL.revokeObjectURL(previewUrl)
   }, [previewUrl])
 
+  const goto = (next: PropStep): void => patch({ step: next })
+
   const startCraft = (id: PropCraft): void => {
-    setCraft(id)
-    setStep(id === 'TEMPLATE' ? 'TEMPLATE' : 'DRAW')
+    patch({ craft: id, step: id === 'TEMPLATE' ? 'TEMPLATE' : 'DRAW' })
   }
 
   const submit = async (): Promise<void> => {
@@ -132,8 +128,8 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
     return (
       <WizardFrame
         title="PICK A SHAPE"
-        onBack={() => setStep('CRAFT')}
-        onNext={() => setStep('DRAW')}
+        onBack={() => goto('CRAFT')}
+        onNext={() => goto('DRAW')}
         nextLabel="DRAW"
       >
         <div className="wizard-grid">
@@ -142,10 +138,7 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
               key={id}
               type="button"
               className={templateId === id ? 'wizard-card is-active' : 'wizard-card'}
-              onClick={() => {
-                setTemplateId(id)
-                setLayer(PROP_TEMPLATES[id].layer)
-              }}
+              onClick={() => patch({ templateId: id, layer: PROP_TEMPLATES[id].layer })}
             >
               {/*
                 아이콘이 없는 템플릿도 자리는 남긴다. 있는 카드만 키가 커지면
@@ -169,8 +162,8 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
     return (
       <WizardFrame
         title={detailed ? `DRAW ${PROP_DETAIL_FRAMES} FRAMES` : 'DRAW IT'}
-        onBack={() => setStep(craft === 'TEMPLATE' ? 'TEMPLATE' : 'CRAFT')}
-        onNext={() => setStep('DETAILS')}
+        onBack={() => goto(craft === 'TEMPLATE' ? 'TEMPLATE' : 'CRAFT')}
+        onNext={() => goto('DETAILS')}
         nextLabel="NEXT"
         nextReady={drawn}
       >
@@ -180,7 +173,7 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
             frames={frames}
             guide={guide}
             onChange={(i, drawing) =>
-              setFrames((prev) => prev.map((f, n) => (n === i ? drawing : f)))
+              patch({ frames: frames.map((f, n) => (n === i ? drawing : f)) })
             }
           />
         ) : (
@@ -206,7 +199,7 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
             {...(single && { initial: single.blob })}
             onClose={() => setDrawOpen(false)}
             onDone={(result) => {
-              setSingle(result)
+              patch({ single: result })
               setDrawOpen(false)
             }}
           />
@@ -218,7 +211,7 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
   return (
     <WizardFrame
       title="NAME AND MOTION"
-      onBack={() => setStep('DRAW')}
+      onBack={() => goto('DRAW')}
       onSubmit={() => void submit()}
       submitReady={drawn && affordable && !busy}
       cost={spec.coins}
@@ -231,7 +224,7 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
           value={name}
           maxLength={PROP_NAME_MAX_LENGTH}
           placeholder="PROP NAME"
-          onChange={setName}
+          onChange={(next) => patch({ name: next })}
         />
 
         <BitmapLabel text="MOTION" size={18} />
@@ -241,7 +234,7 @@ export function NewPropForm({ onDone }: NewPropFormProps) {
               key={m.id}
               type="button"
               className={layer === m.id ? 'motion-card is-active' : 'motion-card'}
-              onClick={() => setLayer(m.id)}
+              onClick={() => patch({ layer: m.id })}
             >
               <BitmapLabel text={m.label} size={22} align="center" />
               <BitmapLabel text={m.hint} size={13} align="center" />
