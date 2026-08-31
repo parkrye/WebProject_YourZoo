@@ -21,12 +21,16 @@ interface BitmapLabelProps {
 const SMALL_FONT_MAX = 18
 
 /**
- * 캔버스 여백. 글자 자체는 y..y+size 안에 들어가므로 이 정도면 넉넉하다.
- * 예전엔 높이를 size 의 1.35배로 잡았는데, 큰 폰트는 디센더가 없어 그만큼이 전부 빈 공간이었고
- * 라벨이 많은 화면(요청서 등)에서 세로가 그만큼 모자랐다.
+ * 캔버스 여백. 글자 자체는 y..y+size 안에 정확히 들어간다 —
+ * 큰 폰트는 베이스라인 정렬이라 잉크가 size 를 넘지 않고,
+ * 작은 폰트는 균등 격자라 디센더까지가 곧 size 다.
+ *
+ * 그래서 캔버스 높이도 `size + 여백*2` 로 딱 맞춘다. 예전에는 1.35배,
+ * 그다음엔 1.14배를 잡았는데 그 여분은 **전부 글자 아래의 죽은 공간**이었다.
+ * 그만큼 라벨의 시각적 중심이 상자 중심보다 위로 올라가, 옆에 놓인 아이콘이나
+ * 시계는 세로 가운데 정렬을 해도 항상 조금 내려앉아 보였다.
  */
 const PADDING = 4
-const HEIGHT_RATIO = 1.14
 
 /**
  * 스프라이트 폰트 텍스트를 DOM 안에 배치한다.
@@ -47,7 +51,7 @@ export function BitmapLabel({
 
     const dpr = window.devicePixelRatio || 1
     const w = Math.ceil(font.measureWidth(text, style)) + PADDING * 2
-    const h = Math.ceil(size * HEIGHT_RATIO) + PADDING * 2
+    const h = Math.ceil(size) + PADDING * 2
 
     canvas.width = Math.max(1, w * dpr)
     canvas.height = Math.max(1, h * dpr)

@@ -10,6 +10,8 @@ import { useEffect, useRef } from 'react'
 /** 아이디는 파일명이 되고 화면에도 뜬다. 서버의 규칙과 맞춰 둔다. */
 const ID_MAX = 16
 const PASSWORD_MAX = 20
+/** 폰트 시트에 있는 글자여야 한다. `FONT_CHARS` 참고. */
+const PASSWORD_MASK = '.'
 
 type AuthMode = 'LOGIN' | 'SIGNUP'
 
@@ -21,7 +23,7 @@ interface AuthScreenProps {
 /**
  * 로그인 / 회원가입.
  *
- * 비밀번호는 비트맵 폰트로 **별표만** 보여 준다. 폰트에 소문자가 없어서
+ * 비밀번호는 비트맵 폰트로 **점만** 보여 준다. 폰트에 소문자가 없어서
  * 입력값을 그대로 그리면 어차피 제대로 안 보이고, 어깨너머로도 읽힌다.
  *
  * 계정이 있어야 하는 이유는 하나다 — **다른 기기에서 이어하기.**
@@ -98,12 +100,15 @@ export function AuthScreen({ onBack }: AuthScreenProps) {
 
           <div className="auth-field">
             <BitmapLabel text="PASSWORD" size={18} />
-            {/* 눌린 글자 수만 별표로 보여 준다. 실제 값은 아래 숨은 입력이 들고 있다. */}
+            {/*
+              눌린 글자 수만 점으로 보여 준다. 실제 값은 아래 숨은 입력이 들고 있다.
+              별표를 쓰지 않는 이유는 하나다 — 폰트 시트에 별표가 없다.
+            */}
             <BitmapInput
               value={password}
               maxLength={PASSWORD_MAX}
               placeholder="4 CHARS OR MORE"
-              mask="*"
+              mask={PASSWORD_MASK}
               onChange={setPassword}
             />
           </div>
