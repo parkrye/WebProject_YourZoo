@@ -208,6 +208,8 @@ interface GameState {
   logInAndStart(userId: string, password: string): Promise<string | null>
   /** 로그아웃하고 타이틀로 돌아간다. */
   logOut(): void
+  /** 놀던 것을 저장해 두고 타이틀로 돌아간다. 로그아웃과 달리 계정은 그대로다. */
+  goToTitle(): void
   /** 이름을 확정하고 게임에 진입한다. */
   confirmZooName(name: string): void
   continueGame(): boolean
@@ -430,7 +432,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     // 남의 그림은 내 IndexedDB 에 없다. 들어가기 전에 받아 둬야 빈 우리를 보지 않는다.
     // 암전보다 **먼저** 받는다. 캄캄한 동안 받으면 밝아진 뒤에도 우리가 비어 있다.
     const ids = [
-      ...doc.animals.flatMap((a) => (a.spriteSheet ? [a.imageId, a.spriteSheet.imageId] : [a.imageId])),
+      ...doc.animals.flatMap((a) => [
+        a.imageId,
+        ...(a.spriteSheet ? [a.spriteSheet.imageId] : []),
+        // 리그 동물은 부위 그림까지 받아야 한다. 빠지면 몸통 한 조각만 늘어난다.
+        ...Object.values(a.rig ?? {}),
+      ]),
       ...(doc.props ?? []).map((p) => p.imageId).filter((id): id is string => id !== null),
     ]
     await preloadRemote(ids)
@@ -457,6 +464,24 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setOption: (key, value) => set((s) => ({ options: { ...s.options, [key]: value } })),
+
+  goToTitle: () => {
+    /*
+      화면을 바꾸기 **전에** 저장한다. 주기 저장은 동물원 안에서만 도는데,
+      화면부터 넘기면 그 구독이 타이틀에서 깨어나 아무것도 쓰지 않고 돌아간다.
+      그러면 마지막 저장 이후의 진행이 통째로 사라진다.
+    */
+    writeSave(get().snapshot())
+    void pushCurrentSave(true)
+    set({
+      screen: 'TITLE',
+      modal: null,
+      // 남의 동물원을 보던 중이었다면 그것부터 놓는다. 암전도 함께 걷는다.
+      visiting: null,
+      travel: 'NONE',
+      pendingTravel: null,
+    })
+  },
 
   isUnlocked: (id) => get().unlocked.includes(id),
 
@@ -1004,6 +1029,12 @@ async function publishCurrentZoo(): Promise<void> {
   for (const animal of animals) {
     await collectImage(images, animal.imageId)
     if (animal.spriteSheet) await collectImage(images, animal.spriteSheet.imageId)
+    /*
+      파츠로 만든 동물은 **부위마다 그림이 따로다.** 이걸 빼고 올리면
+      구경하는 쪽에서 부위를 하나도 못 읽어, 대표 그림(몸통 한 조각)을
+      동물 한 마리 크기로 늘려 그린다. 기괴하게 보이던 원인이 이것이었다.
+    */
+    for (const partId of Object.values(animal.rig ?? {})) await collectImage(images, partId)
   }
   for (const prop of props) {
     if (prop.imageId) await collectImage(images, prop.imageId)

@@ -3,7 +3,7 @@ import { GUI } from '@/assets/manifest'
 import { eligibleFor, orderLabel, type Order } from '@/domain/orders'
 import type { Animal } from '@/domain/animal'
 import { useGameStore } from '@/store/gameStore'
-import { AnimalThumb } from '@/ui/components/AnimalThumb'
+import { AnimalItemThumb } from '@/ui/components/ItemThumb'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
 
@@ -98,7 +98,7 @@ function OrderRow({ order, animals, day, picking, onPick, onDeliver }: OrderRowP
               className="order-candidate"
               onClick={() => onDeliver(animal.id)}
             >
-              <AnimalThumb imageId={animal.imageId} size={56} />
+              <AnimalItemThumb animal={animal} size={56} />
               <BitmapLabel text={animal.name} size={14} align="center" />
               <BitmapLabel text={animal.status === 'PLACED' ? 'PLACED' : 'STORED'} size={12} align="center" />
             </button>

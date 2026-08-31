@@ -3,7 +3,7 @@ import { GUI } from '@/assets/manifest'
 import { ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, SHEET_COST } from '@/domain/balance'
 import type { Animal } from '@/domain/animal'
 import { TRAIT_KEYS, TRAIT_LABELS } from '@/domain/traits'
-import { AnimalThumb } from '@/ui/components/AnimalThumb'
+import { AnimalItemThumb } from '@/ui/components/ItemThumb'
 import { BitmapInput } from '@/ui/components/BitmapInput'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
@@ -86,7 +86,8 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
 
       <div className="popup-content animal-card-body">
         <div className="animal-card-portrait">
-          <AnimalThumb imageId={animal.imageId} size={118} />
+          {/* 시트로 만든 동물은 IDLE 첫 칸을 보여 준다. 통째로 줄이면 24칸이 뭉개진다. */}
+          <AnimalItemThumb animal={animal} size={118} />
         </div>
 
         <BitmapLabel text={`${animal.traits.habitat} ${animal.traits.diet}`} size={20} />

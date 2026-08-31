@@ -39,7 +39,10 @@ export async function ensureBitmap(id: string): Promise<ImageBitmap | null> {
   if (inFlight) return inFlight
 
   // 상점 동물의 시트는 IndexedDB 가 아니라 번들에 있다. 키 접두사로 갈라 읽는다.
-  const task = id.startsWith(SHEET_KEY_PREFIX) ? loadCatalogSheet(id) : loadImageBitmap(id)
+  // 뒤의 체인은 **두 경로에 모두** 걸려야 한다 — 예전에는 삼항의 오른쪽에만 붙어
+  // 카탈로그 시트가 캐시에 들어가지 않았고, `pending` 도 영영 비워지지 않았다.
+  const load = id.startsWith(SHEET_KEY_PREFIX) ? loadCatalogSheet(id) : loadImageBitmap(id)
+  const task = load
     .then((bitmap) => {
       if (bitmap) bitmaps.set(id, bitmap)
       return bitmap

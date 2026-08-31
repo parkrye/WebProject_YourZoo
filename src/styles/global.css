@@ -367,10 +367,28 @@ html, body, #root {
 
 .slider-row {
   display: grid;
-  grid-template-columns: 108px 1fr 70px;
+  grid-template-columns: 152px 1fr 70px;
   align-items: center;
   gap: 16px;
 }
+
+.slider-head { display: flex; align-items: center; gap: 10px; }
+
+/* 소리를 껐다 켜는 단추. 손잡이를 끝까지 끌었다 되돌릴 이유가 없다. */
+.slider-toggle {
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(120, 78, 34, 0.16);
+  cursor: pointer;
+  transition: filter 0.12s ease, transform 0.08s ease;
+}
+.slider-toggle:hover { filter: brightness(1.1); }
+.slider-toggle:active { transform: translateY(2px); }
+
+.options-exit { display: flex; justify-content: center; margin-top: auto; }
 
 .slider-row input[type='range'] { width: 100%; accent-color: #d9a441; }
 
