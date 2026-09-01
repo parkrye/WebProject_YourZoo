@@ -132,13 +132,29 @@ export interface AnimalRenderer {
 Root : Selector
 ├─ Sequence  [ IsThreatened?      → Flee ]                    // timidity, 손님 근접
 ├─ Sequence  [ NeedsRest?         → Rest(dur) ]               // activity 반비례
+├─ Sequence  [ WantsDrink?        → MoveTo(waterEdge) → Drink(dur) ]  // 물가 찾기
 └─ Selector
+   ├─ Sequence [ MimicsLeader?    → Signature ]               // 리더 따라 하기
+   ├─ Sequence [ rng < 0.004      → Signature ]
+   ├─ Sequence [ WantsFollow?     → MoveTo(leader) ]          // 같은 종, sociability
    ├─ Sequence [ WantsSocial?     → MoveTo(nearestPeer) ]     // sociability
    ├─ Sequence [ WantsInspect?    → MoveTo(nearestProp) ]     // curiosity
    └─ Wander                                                  // 로밍 박스 내 랜덤 목표
 ```
 
-- `Blackboard` : `{ self, peers, props, roamBox, visitorsNear, dt, rng }`
+- `Blackboard` : `{ self, peers, flock, leader, props, roam, visitorDistance, dt, rng }`
+
+**무리와 리더.** `flock` 은 같은 우리의 같은 종이고, 그중 **아이디 사전순 첫 개체**가
+리더다. 뜻은 없지만 매 tick 다시 뽑아도 같은 답이 나오는 규칙이라야 한다 —
+가장 가까운 개체로 뽑았더니 둘이 스쳐 지날 때마다 리더가 뒤집혀, 따라가던 무리가
+제자리에서 방향만 되풀이해 틀었다.
+
+**종은 그림 키로 가른다** (`speciesKeyOf`). 상점 동물은 `sheet:LION` 을 공유해 저절로
+묶이고, 그린 동물은 그림이 개체마다 달라 혼자이며, 등록한 종에서 데려온 개체는
+원본의 그림 키를 물려받아 함께 묶인다. 종을 따로 적어 두면 그 값과 그림이 어긋날 자리가 생긴다.
+
+**물가 찾기**는 배회보다 위, 휴식보다 아래다. 아래에 두면 배회가 늘 먼저 성공해
+차례가 오지 않고, 위에 두면 지쳐 있는데 물부터 찾아 나선다.
 - 노드는 `tick(bb): Status ('RUNNING'|'SUCCESS'|'FAILURE')`
 - 조건 노드는 **traits 값을 확률 임계로** 사용한다. 예: `WantsSocial = rng() < sociability * 0.02`
   (초당 판정이 아니라 tick당 판정이므로 계수로 조절)
@@ -156,6 +172,28 @@ ticker (rAF)
 
 - `EnclosureSim` 은 **비활성 우리도 계속 돌린다** (좌우로 넘겼다 돌아왔을 때 정지해 있으면 어색).
   단, 비활성 우리는 BT를 2Hz 로 낮추고 렌더는 생략.
+- 손님이 남긴 평가는 `EnclosureSim` 이 모아 두고 화면 쪽이 프레임마다 `drainReviews()` 로
+  가져간다. 시뮬레이션이 스토어를 직접 밀면 우리 셋이 저마다 다른 시점에 밀어 넣어
+  한 프레임에 세 번 리렌더한다.
+
+### 3.3.1 등록된 종
+
+그린 동물은 주문하는 순간 `SpeciesDoc` 으로도 남는다(`PRIVATE`). 공개로 돌리면
+서버의 `_index/species.json` 에 올라가 남도 같은 값에 데려간다.
+
+| 자리 | 내용 |
+|---|---|
+| `db/users/<ID>/species.json` | 그 사람의 종 전부 (비공개 포함) |
+| `db/_index/species.json` | 공개된 종만 모은 목록 캐시 |
+
+- 종의 `id` 는 **원본의 그림 키**다. `speciesKeyOf` 가 보는 값과 같아야 이 종에서 나온
+  개체들이 우리 안에서 한 무리로 묶인다.
+- 남의 종을 데려오면 그림을 **내 IndexedDB 로 복사한다.** 주소만 들고 있으면 그린 사람이
+  종을 내리는 순간 그 동물만 사라지고, 서버가 없는 자리에서는 아예 그려지지 않는다.
+- 그래서 **동물을 팔 때 그림을 무조건 지우면 안 된다.** 형제들과 등록된 종이 같은 키를
+  가리키므로 `imagesInUse` 로 아직 쓰는 데가 있는지 먼저 본다.
+- 서버의 그림 청소기(`referencedImages`)도 `species.json` 을 본다. 안 그러면 마지막 한
+  마리를 판 순간 남이 데려갈 종의 그림이 사라진다.
 
 ### 3.4 그림판 undo/redo — 스냅샷이 아니라 커맨드
 
