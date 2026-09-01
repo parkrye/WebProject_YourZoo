@@ -288,8 +288,16 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => {
       // 도착 알림을 닫는 건 하루 연출의 끝이다. 알림 내용도 여기서 비운다.
       if (s.modal === 'ARRIVAL') return { modal: null, arrivals: null }
-      if (s.dayFade !== 'HOLD') return { modal: null }
-      return { modal: null, dayFade: 'IN' as const }
+      if (s.dayFade === 'HOLD') return { modal: null, dayFade: 'IN' as const }
+      /*
+        밀려 있던 도착 알림을 여기서 띄운다.
+
+        `endDayFade` 는 화면이 다 밝아진 그 한 순간에만 알림을 띄운다. 그때 마침
+        다른 창이 열려 있었다면 알림은 그대로 버려졌다 — 창고에는 들어와 있는데
+        무엇이 왔는지 끝내 알려 주지 않았다. 화면이 비는 다음 순간에 띄운다.
+      */
+      if (s.arrivals && s.dayFade === 'NONE') return { modal: 'ARRIVAL' as const }
+      return { modal: null }
     }),
 
   /**
