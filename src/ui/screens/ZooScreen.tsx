@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   FENCE_OFFSET_DETAIL, FENCE_OFFSET_ZOO, GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH,
-  PROP_HEIGHT, ROAM_BOX,
+  PLACE_BOX, PROP_HEIGHT,
   type BiomeId,
 } from '@/assets/manifest'
 import { audio } from '@/audio/AudioManager'
@@ -371,7 +371,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
       return
     }
 
-    const box = ROAM_BOX[state.item.animal.traits.habitat]
+    // 놓는 자리는 이동 범위보다 좁다. 여기서 보는 건 놓을 수 있는 상자다.
+    const box = PLACE_BOX[state.item.animal.traits.habitat]
     const inside =
       scene.x >= box.x0 && scene.x <= box.x1 && scene.y >= box.y0 && scene.y <= box.y1
     if (!inside) {

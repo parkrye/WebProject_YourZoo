@@ -1,6 +1,6 @@
 import { getAssets } from '@/assets/AssetStore'
 import {
-  LOGICAL_HEIGHT, LOGICAL_WIDTH, ROAM_BOX, VISITOR_HEIGHT,
+  LOGICAL_HEIGHT, LOGICAL_WIDTH, PLACE_BOX, VISITOR_HEIGHT,
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
 import { easeInOutCubic } from '@/core/math'
@@ -144,7 +144,8 @@ export class SceneRenderer {
     ctx.lineWidth = GUIDE_LINE_WIDTH
     ctx.setLineDash(GUIDE_DASH)
     for (const habitat of GUIDE_ORDER) {
-      const box = ROAM_BOX[habitat]
+      // 안내선은 **놓을 수 있는** 자리다. 돌아다니는 범위는 이보다 넓다.
+      const box = PLACE_BOX[habitat]
       const ok = !guide.blocked && (guide.habitat === null || guide.habitat === habitat)
       const x = box.x0 * view.width
       const y = box.y0 * view.height
