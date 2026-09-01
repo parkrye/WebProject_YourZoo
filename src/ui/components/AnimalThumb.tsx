@@ -19,7 +19,7 @@ interface AnimalThumbProps {
    * 리그는 대표 그림 한 장으로 끝나지 않는다 — 파츠를 합쳐야 그 동물이 된다.
    * 이걸 주지 않으면 창고에도 도착 알림에도 몸통 한 조각만 뜬다.
    */
-  rigged?: Animal | null
+  rigged?: Pick<Animal, 'rig' | 'imageId' | 'templateId'> | null
 }
 
 /**

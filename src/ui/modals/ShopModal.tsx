@@ -7,6 +7,11 @@ import {
   isShopAnimal, shopProps, shopPropName, SHOP_ANIMALS,
   type ShopAnimal, type ShopProp,
 } from '@/domain/shop'
+import type { SpeciesDoc } from '@/domain/species'
+import { speciesImageIds } from '@/domain/species'
+import { fetchPublicSpecies } from '@/net/speciesApi'
+import { preloadRemote } from '@/sim/imageCache'
+import { AnimalThumb } from '@/ui/components/AnimalThumb'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { ConfirmPopup } from '@/ui/components/ConfirmPopup'
 import { IconGlyph } from '@/ui/components/IconGlyph'
@@ -15,12 +20,26 @@ import { PropThumb, SheetThumb } from '@/ui/components/SpriteThumb'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
 import { useGameStore } from '@/store/gameStore'
 
-type ShopTab = 'CASH' | 'PROP' | 'ANIMAL'
+type ShopTab = 'CASH' | 'PROP' | 'ANIMAL' | 'SPECIES'
 
 const TABS: readonly TabItem<ShopTab>[] = [
   { id: 'ANIMAL', label: 'ANIMALS' },
+  { id: 'SPECIES', label: 'SPECIES' },
   { id: 'PROP', label: 'PROPS' },
   { id: 'CASH', label: 'CASH' },
+]
+
+/**
+ * 종 탭에서 보는 쪽.
+ *
+ * `MINE` 은 내가 그려 등록한 종이다. 비공개까지 다 보이고 공개 여부를 여기서 켠다.
+ * `PUBLIC` 은 남이 내놓은 종이다.
+ */
+type SpeciesScope = 'MINE' | 'PUBLIC'
+
+const SCOPES: readonly TabItem<SpeciesScope>[] = [
+  { id: 'MINE', label: 'MINE' },
+  { id: 'PUBLIC', label: 'FROM OTHERS' },
 ]
 
 const POPUP_WIDTH = 1180
@@ -34,6 +53,7 @@ const PREVIEW_SIZE = 150
  */
 type ShopPick =
   | { kind: 'ANIMAL'; item: ShopAnimal }
+  | { kind: 'SPECIES'; item: SpeciesDoc }
   | { kind: 'PROP'; item: ShopProp }
   | { kind: 'CASH'; item: CashProduct }
   | { kind: 'EXCHANGE' }
@@ -65,11 +85,38 @@ export function ShopModal() {
   const unlocked = useGameStore((s) => s.unlocked)
   const animals = useGameStore((s) => s.animals)
 
+  const buySpecies = useGameStore((s) => s.buySpecies)
+  const setSpeciesVisibility = useGameStore((s) => s.setSpeciesVisibility)
+  const mySpecies = useGameStore((s) => s.species)
+  const userId = useGameStore((s) => s.userId)
+
   const [tab, setTab] = useState<ShopTab>('ANIMAL')
   const [pick, setPick] = useState<ShopPick | null>(null)
   const [quantity, setQuantity] = useState(1)
   const [confirming, setConfirming] = useState(false)
+  const [scope, setScope] = useState<SpeciesScope>('MINE')
+  const [shared, setShared] = useState<SpeciesDoc[] | null>(null)
   const props = useMemo(() => shopProps(unlocked), [unlocked])
+
+  /*
+    남의 종은 그림도 남의 서버에 있다. **먼저 받아 캐시에 넣고 나서** 목록을 세운다 —
+    목록을 먼저 그리면 썸네일이 제 IndexedDB 를 뒤지다 빈손으로 돌아오고,
+    그림이 도착해도 다시 그릴 계기가 없어 칸이 영영 비어 있다.
+  */
+  useEffect(() => {
+    if (tab !== 'SPECIES' || scope !== 'PUBLIC' || shared !== null) return
+
+    let cancelled = false
+    void (async () => {
+      const list = await fetchPublicSpecies(userId)
+      await Promise.all(list.map((doc) => preloadRemote(doc.ownerId, speciesImageIds(doc))))
+      if (!cancelled) setShared(list)
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [tab, scope, shared, userId])
 
   const max = pick ? maxQuantity(pick, gold, cash) : 1
   // 소지금이 줄면 살 수 있는 수도 줄어든다. 화면에 남은 숫자가 늘 살 수 있는 수여야 한다.
@@ -95,6 +142,12 @@ export function ShopModal() {
       exchangeCash(quantity)
     } else if (pick.kind === 'PROP') {
       for (let i = 0; i < quantity; i++) if (!buyShopProp(pick.item)) break
+    } else if (pick.kind === 'SPECIES') {
+      // 남의 종은 그림을 받아 와야 해서 비동기다. 한 마리라도 실패하면 거기서 멈춘다.
+      const { item } = pick
+      void (async () => {
+        for (let i = 0; i < quantity; i++) if (!(await buySpecies(item))) break
+      })()
     } else {
       for (let i = 0; i < quantity; i++) if (!buyShopAnimal(pick.item)) break
     }
@@ -192,6 +245,25 @@ export function ShopModal() {
                 </div>
               )}
 
+              {tab === 'SPECIES' && (
+                <>
+                  <Tabs items={SCOPES} active={scope} onChange={setScope} />
+                  <SpeciesList
+                    list={scope === 'MINE' ? mySpecies : shared}
+                    scope={scope}
+                    gold={gold}
+                    pick={pick}
+                    onPick={(item) => choose({ kind: 'SPECIES', item })}
+                    onToggle={(doc) =>
+                      setSpeciesVisibility(
+                        doc.id,
+                        doc.visibility === 'PUBLIC' ? 'PRIVATE' : 'PUBLIC',
+                      )
+                    }
+                  />
+                </>
+              )}
+
               {tab === 'PROP' && (
                 <div className="shop-grid">
                   {props.map((item) => (
@@ -240,6 +312,98 @@ export function ShopModal() {
       )}
     </>
   )
+}
+
+interface SpeciesListProps {
+  /** `null` 이면 아직 서버에서 받는 중이다. 빈 배열과는 다르다. */
+  list: readonly SpeciesDoc[] | null
+  scope: SpeciesScope
+  gold: number
+  pick: ShopPick | null
+  onPick: (species: SpeciesDoc) => void
+  onToggle: (species: SpeciesDoc) => void
+}
+
+/**
+ * 등록된 종 목록.
+ *
+ * 내 종에는 공개 단추가 붙는다. **카드 안에 또 하나의 단추**를 두는 셈이라
+ * 고르기와 공개가 섞일 위험이 있지만, 공개는 그 종 위에서 눌러야 무엇을
+ * 내놓는지 분명하다. 대신 단추를 아래로 떼어 놓고 누를 때 고르기를 막는다.
+ */
+function SpeciesList({ list, scope, gold, pick, onPick, onToggle }: SpeciesListProps) {
+  if (list === null) {
+    return (
+      <div className="tray-empty">
+        <BitmapLabel text="LOOKING FOR SPECIES" size={20} />
+      </div>
+    )
+  }
+
+  if (list.length === 0) {
+    return (
+      <div className="tray-empty">
+        <BitmapLabel text={scope === 'MINE' ? 'NOTHING REGISTERED YET' : 'NOBODY SHARED ONE'} size={20} />
+        <BitmapLabel
+          text={scope === 'MINE' ? 'DRAW AN ANIMAL AND IT LANDS HERE' : 'COME BACK LATER'}
+          size={15}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="shop-grid">
+      {list.map((doc) => {
+        const open = doc.visibility === 'PUBLIC'
+        return (
+          <div
+            key={doc.id}
+            className={isPicked(pick, 'SPECIES', doc.id) ? 'shop-card is-active' : 'shop-card'}
+          >
+            <button
+              type="button"
+              className="shop-card-body"
+              disabled={gold < doc.price}
+              onClick={() => onPick(doc)}
+            >
+              <SpeciesThumb species={doc} size={92} />
+              <BitmapLabel text={doc.name} size={17} align="center" />
+              <div className="shop-price">
+                <IconGlyph icon={GUI.COIN} size={20} />
+                <BitmapLabel text={`${doc.price}`} size={18} />
+              </div>
+            </button>
+
+            {scope === 'MINE' ? (
+              <button type="button" className="species-toggle" onClick={() => onToggle(doc)}>
+                <IconGlyph icon={open ? GUI.LOCK_OPEN : GUI.LOCK} size={20} />
+                <BitmapLabel text={open ? 'PUBLIC' : 'PRIVATE'} size={14} />
+              </button>
+            ) : (
+              /* 남의 종은 누가 그렸는지가 값만큼 중요하다. 이름 대신 주인을 적는다. */
+              <div className="species-owner">
+                <BitmapLabel text={doc.ownerId} size={14} align="center" />
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/**
+ * 종 썸네일.
+ *
+ * 개체를 지어내지 않는다 — 종에는 이미 그림 키와 파츠 표가 다 있고,
+ * 목록을 그리자고 동물을 한 마리 만드는 건 앞뒤가 바뀐 일이다.
+ */
+function SpeciesThumb({ species, size }: { species: SpeciesDoc; size: number }) {
+  const sheet = species.spriteSheet
+  if (sheet) return <AnimalThumb imageId={sheet.imageId} size={size} sheet={sheet} />
+  if (species.rig) return <AnimalThumb imageId={species.imageId} size={size} rigged={species} />
+  return <AnimalThumb imageId={species.imageId} size={size} />
 }
 
 interface ShopDetailProps {
@@ -331,6 +495,7 @@ function isPicked(pick: ShopPick | null, kind: ShopPick['kind'], id: string): bo
   if (!pick || pick.kind !== kind) return false
   if (pick.kind === 'ANIMAL') return pick.item.catalogId === id
   if (pick.kind === 'PROP') return pick.item.id === id
+  if (pick.kind === 'SPECIES') return pick.item.id === id
   if (pick.kind === 'CASH') return pick.item.id === id
   return true
 }
@@ -355,12 +520,13 @@ function affordableFor(pick: ShopPick, quantity: number, gold: number, cash: num
 }
 
 function priceOf(pick: ShopPick): number {
-  if (pick.kind === 'ANIMAL' || pick.kind === 'PROP') return pick.item.price
+  if (pick.kind === 'ANIMAL' || pick.kind === 'PROP' || pick.kind === 'SPECIES') return pick.item.price
   return 0
 }
 
 function titleOf(pick: ShopPick): string {
   if (pick.kind === 'ANIMAL') return pick.item.catalogId
+  if (pick.kind === 'SPECIES') return pick.item.name
   if (pick.kind === 'PROP') return shopPropName(pick.item)
   if (pick.kind === 'CASH') {
     return pick.item.bonus > 0
@@ -387,6 +553,7 @@ function totalOf(pick: ShopPick, quantity: number): { icon: GuiIcon; text: strin
 
 function previewOf(pick: ShopPick) {
   if (pick.kind === 'ANIMAL') return <SheetThumb sheet={pick.item.sheet} size={PREVIEW_SIZE} />
+  if (pick.kind === 'SPECIES') return <SpeciesThumb species={pick.item} size={PREVIEW_SIZE} />
   if (pick.kind === 'PROP') {
     return <PropThumb biome={pick.item.biome} sprite={pick.item.sprite} size={PREVIEW_SIZE} />
   }
@@ -402,6 +569,8 @@ function previewOf(pick: ShopPick) {
 
 function noteFor(tab: ShopTab, firstBuy: boolean): string {
   if (tab === 'CASH') return '1 CASH ANIMATES ONE DRAWN ANIMAL'
+  // 등록은 저절로 되지만 공개는 아니다. 그 한 가지만 여기서 일러 준다.
+  if (tab === 'SPECIES') return 'EVERY ANIMAL YOU DRAW LANDS HERE  SHARE IT TO LET OTHERS IN'
   // 처음 사는 동물은 기다리지 않는다. 그 사실을 사기 전에 알려 준다.
   if (tab === 'ANIMAL' && firstBuy) return 'YOUR FIRST ONE ARRIVES RIGHT AWAY'
   return `ARRIVES IN STORAGE IN ${SHIPPING_DAYS.SHOP} DAY`
@@ -421,6 +590,13 @@ function confirmLines(pick: ShopPick, quantity: number): string[] {
       'THIS CANNOT BE UNDONE',
     ]
   }
-  const name = pick.kind === 'PROP' ? shopPropName(pick.item) : pick.item.catalogId
+  const name = nameOf(pick)
   return [`BUY ${quantity} ${name}`, `FOR ${groupThousands(priceOf(pick) * quantity)} COINS ?`]
+}
+
+function nameOf(pick: ShopPick): string {
+  if (pick.kind === 'PROP') return shopPropName(pick.item)
+  if (pick.kind === 'SPECIES') return pick.item.name
+  if (pick.kind === 'ANIMAL') return pick.item.catalogId
+  return ''
 }
