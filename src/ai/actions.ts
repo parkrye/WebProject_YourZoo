@@ -58,17 +58,31 @@ export function wantsInspect(): BtNode<AnimalBlackboard> {
 /** 로밍 박스 안의 임의 지점을 목표로 잡는다. 현재 위치와 너무 가까우면 다시 뽑는다. */
 export function pickWanderTarget(): BtNode<AnimalBlackboard> {
   return action(({ self, roam, rng }) => {
+    const sky = self.habitat === 'SKY'
     for (let attempt = 0; attempt < 4; attempt++) {
       const x = randRange(rng, roam.x0, roam.x1)
-      const y = randRange(rng, roam.y0, roam.y1)
+      const y = wanderY(rng, roam, sky)
       if (self.distanceTo(x, y) > 0.08) {
         self.setTarget(x, y)
         return 'SUCCESS'
       }
     }
-    self.setTarget(randRange(rng, roam.x0, roam.x1), randRange(rng, roam.y0, roam.y1))
+    self.setTarget(randRange(rng, roam.x0, roam.x1), wanderY(rng, roam, sky))
     return 'SUCCESS'
   })
+}
+
+/**
+ * 배회할 높이.
+ *
+ * 하늘의 로밍 박스는 이제 우리 바닥까지 닿는다. 그 안에서 고르게 뽑으면 새가
+ * 절반쯤은 물 위에 낮게 떠 있게 되는데, 그건 나는 게 아니라 **떠다니는 것**으로 보인다.
+ * 제곱을 씌워 위쪽으로 당긴다 — 아래로 내려오기는 하되 어쩌다 한 번이고,
+ * 물가로 내려갈 진짜 이유는 목마름이 따로 만든다.
+ */
+function wanderY(rng: AnimalBlackboard['rng'], roam: AnimalBlackboard['roam'], sky: boolean): number {
+  const t = sky ? rng() * rng() : rng()
+  return roam.y0 + (roam.y1 - roam.y0) * t
 }
 
 export function targetNearestPeer(): BtNode<AnimalBlackboard> {

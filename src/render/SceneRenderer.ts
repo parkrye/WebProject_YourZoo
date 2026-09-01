@@ -8,7 +8,7 @@ import { phaseBlend, timeLighting, type AreaLight, type FenceLight } from '@/dom
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
 import { ensureBitmap, getBitmap } from '@/sim/imageCache'
-import { propBand, PROP_BOB, PROP_SWAY, type PlacedProp } from '@/sim/props'
+import { PROP_BOB, PROP_SWAY, type PlacedProp } from '@/sim/props'
 import type { VisitorAgent } from '@/sim/VisitorAgent'
 import type { ViewBox } from './animal'
 import { applyCamera, type Camera } from './camera'
@@ -60,13 +60,13 @@ type Drawable =
 /**
  * 우리 화면의 레이어 합성.
  *
- * z0 하늘 → z1 바이옴 → z2 하늘동물 → z3 땅프롭+땅동물 → z4 물프롭+물동물
- * → z5 펜스 → z6 손님   (docs/01-assets.md §3)
+ * z0 하늘 → z1 바이옴 → z2 우리 안의 모든 것 → z3 펜스 → z4 손님
+ * (docs/01-assets.md §3)
  *
  * **손님은 펜스보다 앞이다.** 뒤에 그리면 펜스 안쪽에 서 있는 꼴이 되어
  * 관람객이 우리에 갇힌 것처럼 보인다. 관람객은 난간 이쪽 편에 서 있어야 한다.
  *
- * z3·z4 는 프롭과 동물을 **하나의 목록으로 합쳐 y 오름차순 정렬**해 그린다.
+ * z2 는 프롭과 동물을 **하나의 목록으로 합쳐 y 오름차순 정렬**해 그린다.
  * 그래야 동물이 프롭 뒤로 지나갈 때 프롭에 가려진다.
  */
 export class SceneRenderer {
@@ -117,10 +117,8 @@ export class SceneRenderer {
     dim(ctx, view, light.sky.brightness)
 
     ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
-    // 하늘도 같은 패스를 쓴다. 예전에는 동물만 그려서 **하늘에 매단 프롭이 사라졌다.**
-    this.drawSortedLayer(ctx, sim, 'SKY', view)
-    this.drawSortedLayer(ctx, sim, 'LAND', view)
-    this.drawSortedLayer(ctx, sim, 'WATER', view)
+    // 동물도 프롭도 한 패스에서 깊이순으로 그린다. 하늘에 매단 프롭도 여기 낀다.
+    this.drawSortedScene(ctx, sim, view)
     this.drawAreaLight(ctx, light.area, view)
 
     // 안내선은 조명 뒤에 그린다. 밤에 같이 어두워지면 알려 주는 구실을 못 한다.
@@ -287,23 +285,22 @@ export class SceneRenderer {
     ctx.globalAlpha = 1
   }
 
-  private drawSortedLayer(
-    ctx: CanvasRenderingContext2D,
-    sim: EnclosureSim,
-    layer: Habitat,
-    view: ViewBox,
-  ): void {
+  /**
+   * 우리 안의 모든 것을 **깊이 한 줄로 세워** 그린다.
+   *
+   * 예전에는 하늘 → 땅 → 물 순으로 세 번 나눠 그렸다. 그때는 세 서식지의 y 범위가
+   * 겹치지 않아서 그 순서가 곧 깊이 순서였다. 하늘이 우리 전체를 날게 된 지금은
+   * 아니다 — 물 위를 나는 새가 하늘 패스에서 먼저 그려져 **물고기 뒤로 숨었다.**
+   *
+   * y 는 서식지와 무관하게 바닥에 비친 깊이다. 그걸로 한 번에 정렬하면 맞다.
+   * 범위가 겹치지 않던 시절의 결과와도 같다.
+   */
+  private drawSortedScene(ctx: CanvasRenderingContext2D, sim: EnclosureSim, view: ViewBox): void {
     // 프레임마다 배열을 새로 만들면 GC 압력이 커진다. 하나를 비워 재사용한다.
     this.buffer.length = 0
 
-    // 프롭은 만들 때 고른 거동과 무관하게 **놓인 높이**로 층이 정해진다.
-    // 하늘에 매단 통나무가 땅 동물보다 앞에 오면 안 된다.
-    for (const prop of sim.props) {
-      if (propBand(prop.y) === layer) this.buffer.push({ kind: 'PROP', y: prop.y, prop })
-    }
-    for (const agent of sim.animals) {
-      if (agent.habitat === layer) this.buffer.push({ kind: 'ANIMAL', y: agent.y, agent })
-    }
+    for (const prop of sim.props) this.buffer.push({ kind: 'PROP', y: prop.y, prop })
+    for (const agent of sim.animals) this.buffer.push({ kind: 'ANIMAL', y: agent.y, agent })
 
     this.buffer.sort(byDepth)
 

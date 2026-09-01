@@ -1,5 +1,6 @@
 import {
   ANIMAL_HEIGHT, LOGICAL_HEIGHT, LOGICAL_WIDTH, PERSPECTIVE_SCALE, ROAM_BOX,
+  SKY_HOVER, SKY_PERSPECTIVE,
   type Habitat, type RoamBox,
 } from '@/assets/manifest'
 
@@ -140,16 +141,23 @@ export class AnimalAgent implements AgentView {
     return clamp(Math.hypot(this.vx, this.vy) / this.maxSpeed, 0, 1)
   }
 
-  /** 원근 보정을 반영한 렌더 상태. y 가 클수록 카메라에 가까우니 크게 그린다. */
+  /**
+   * 원근 보정을 반영한 렌더 상태. y 가 클수록 카메라에 가까우니 크게 그린다.
+   *
+   * 하늘도 이제 원근을 탄다 — 우리 전체를 날게 된 이상 안 그러면 화면을 가로질러도
+   * 크기가 그대로라 배경에 붙은 스티커로 보인다. 다만 **폭이 좁고 발밑이 떠 있다.**
+   * 물가까지 내려온 새가 물고기만큼 커지면서 같은 선에 발을 딛으면 나는 게 아니다.
+   */
   toRenderState(): AnimalRenderState {
     const box = this.roam
+    const sky = this.habitat === 'SKY'
     const depth = inverseLerp(box.y0, box.y1, this.y)
-    const perspective =
-      this.habitat === 'SKY' ? 1 : lerp(PERSPECTIVE_SCALE.far, PERSPECTIVE_SCALE.near, depth)
+    const scale = sky ? SKY_PERSPECTIVE : PERSPECTIVE_SCALE
+    const perspective = lerp(scale.far, scale.near, depth)
 
     return {
       x: this.x,
-      y: this.y,
+      y: sky ? this.y - SKY_HOVER : this.y,
       facing: this.facing,
       motion: this.motion,
       motionTime: this.motionTime,
