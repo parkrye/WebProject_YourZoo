@@ -87,6 +87,9 @@ export function FrameStudio({ rows, frames, onChange, guide }: FrameStudioProps)
       {editing !== null && (
         <DrawModal
           title={`FRAME ${editing + 1}`}
+          // 칸이 바뀌면 캔버스도 새로 시작한다. 어니언 스킨은 뒤 레이어라
+          // 이것 없이는 앞 칸 그림이 캔버스에 그대로 남아 PNG 에 섞인다.
+          sessionKey={editing}
           guide={guide}
           {...(onionFor(editing) && { onion: onionFor(editing)!.blob })}
           {...(frames[editing] && { initial: frames[editing]!.blob })}

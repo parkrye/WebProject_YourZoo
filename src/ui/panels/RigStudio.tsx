@@ -91,6 +91,9 @@ export function RigStudio({ spec, parts, onChange }: RigStudioProps) {
       {editing && (
         <DrawModal
           title={`DRAW ${editing.label}`}
+          // 파츠가 바뀌면 캔버스도 새로 시작한다. 창을 닫지 않고 넘어가므로
+          // 이걸 주지 않으면 앞 파츠 그림이 남은 채로 다음 밑그림이 뜬다.
+          sessionKey={editing.id}
           guide={editing.guide}
           {...(parts[editing.id] && { initial: parts[editing.id]!.blob })}
           onClose={() => setEditing(null)}

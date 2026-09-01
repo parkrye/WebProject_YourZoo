@@ -17,6 +17,14 @@ const POPUP_HEIGHT = 700
 interface DrawModalProps {
   /** 바탕에 옅게 깔릴 밑그림. 없으면 빈 캔버스다. */
   guide: readonly GuideShape[]
+  /**
+   * 무엇을 그리는 중인가. 값이 바뀌면 캔버스를 **새로 시작한다.**
+   *
+   * 창을 닫지 않고 다음 파츠(칸)로 넘어가면 React 는 같은 자리의 같은 컴포넌트로 보고
+   * 캔버스를 그대로 둔다. 그러면 앞 그림이 남은 채로 다음 밑그림이 뜨고,
+   * 그 상태로 DONE 을 누르면 앞 그림이 섞인 PNG 가 나간다.
+   */
+  sessionKey?: string | number
   /** 창 제목. 동물인지 프롭인지 알려 준다. */
   title?: string
   /** 앞 칸. 옅게 깔아 이어 그리게 한다. */
@@ -36,7 +44,9 @@ const FIRST_COLOR = PALETTE_COLORS[0].hex
  * 도구가 하나 늘 때마다 아래쪽이 화면 밖으로 밀렸고, 어떤 버튼이 무슨 갈래인지도 읽히지 않았다.
  * 그리기 / 색 / 편집 세 묶음으로 나누고 완료는 따로 떼어 둔다.
  */
-export function DrawModal({ guide, title = 'DRAW ANIMAL', onion, initial, onDone, onClose }: DrawModalProps) {
+export function DrawModal({
+  guide, title = 'DRAW ANIMAL', sessionKey, onion, initial, onDone, onClose,
+}: DrawModalProps) {
   // Blob 은 <img> 에 바로 못 넣는다. 객체 URL 로 감싸고 바뀌면 이전 것을 놓아 준다.
   const onionUrl = useMemo(() => (onion ? URL.createObjectURL(onion) : undefined), [onion])
   useEffect(() => {
@@ -124,6 +134,7 @@ export function DrawModal({ guide, title = 'DRAW ANIMAL', onion, initial, onDone
 
         <div className="draw-stage">
           <DrawingCanvas
+            key={sessionKey}
             ref={boardRef}
             tool={tool}
             color={color}
