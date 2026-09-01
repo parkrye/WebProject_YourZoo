@@ -17,6 +17,20 @@ export interface AnimalRenderState {
   motionTime: number
   /** 현재 속도 / 최대 속도 */
   speed01: number
+  /**
+   * 습성 활동성 (0..1). 쉬고 있을 때 얼마나 꼼지락거리는가.
+   * 없으면 보통 값으로 움직인다 - 시트를 구울 때처럼 개체가 없는 자리가 있다.
+   */
+  activity?: number
+  /** 습성 겁 (0..1). 클수록 잔떨림이 붙는다. */
+  timidity?: number
+  /**
+   * 개체마다 다른 위상 씨앗 (0..1).
+   *
+   * 없으면 같은 종 여러 마리가 한 몸처럼 붙어 흔들린다.
+   * 무리 지어 있을 때 이게 가장 먼저 눈에 띈다.
+   */
+  seed?: number
   /** 원근을 반영한 최종 높이(정규화) */
   scale: number
 }

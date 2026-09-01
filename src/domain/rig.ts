@@ -28,6 +28,14 @@ export interface RigPart {
   /** 그리는 순서. 작을수록 뒤. */
   readonly z: number
   /**
+   * 몸통의 움직임을 얼마나 따라가는가 (0..1). 기본은 1 이다.
+   *
+   * 파츠가 각자 돌기만 하면 다섯 장이 따로 흔들리는 것으로 읽힌다. 머리와 꼬리는
+   * 몸에 붙어 있으니 몸이 기울면 함께 기울어야 한다. 다만 **다리는 조금만 따라간다** -
+   * 몸이 오르내릴 때 발까지 그만큼 뜨면 땅에서 미끄러지는 것으로 보인다.
+   */
+  readonly follow?: number
+  /**
    * 이 부위의 밑그림. 좌표는 **파츠 상자를 꽉 채우도록** 잡혀 있다 —
    * 규격과 이유는 `rigGuides.ts` 에 적어 두었다.
    */
@@ -56,7 +64,25 @@ export interface RigMotion {
   readonly idle: number
 }
 
+/**
+ * 걸음의 종류.
+ *
+ * 진폭이 아니라 **파형의 모양**을 정한다. sin 하나로 전부 굴리면 깡충 뛰는 것과
+ * 뒤뚱거리는 것과 헤엄치는 것이 '빠르기만 다른 같은 움직임' 이 된다.
+ * 실제 파형은 `RigRenderer` 에 있다.
+ */
+export type Gait = 'WALK' | 'HOP' | 'WADDLE' | 'SWIM' | 'FLAP' | 'CRAWL'
+
+/**
+ * 몸통 파츠의 id.
+ *
+ * 리그마다 부위 구성은 달라도 몸통은 늘 있고, 나머지는 전부 여기에 붙는다.
+ * 이 하나를 부모로 삼아 한 마리처럼 움직이게 한다.
+ */
+export const RIG_ROOT = 'BODY'
+
 export interface RigSpec {
+  readonly gait: Gait
   readonly parts: readonly RigPart[]
 }
 
@@ -70,14 +96,15 @@ const still = (idle = 0.15): RigMotion => ({ swing: 0, bob: 0.01, sway: 0, beats
  */
 export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   TALL_QUADRUPED: {
+    gait: 'WALK',
     parts: [
-      { id: 'BACK_LEG', label: 'BACK LEGS', cx: 0.38, cy: 0.76, w: 0.26, h: 0.42, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, z: 0,
+      { id: 'BACK_LEG', label: 'BACK LEGS', cx: 0.38, cy: 0.76, w: 0.26, h: 0.42, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, follow: 0.3, z: 0,
         motion: { swing: 0.55, bob: 0, sway: 0, beats: 1, phase: 0.5, idle: 0.06 } },
       { id: 'BODY', label: 'BODY', cx: 0.46, cy: 0.46, w: 0.62, h: 0.4, px: 0.5, py: 0.5, guide: G.BODY_BARREL, z: 1,
         motion: { swing: 0.03, bob: 0.02, sway: 0, beats: 2, phase: 0, idle: 0.35 } },
       { id: 'TAIL', label: 'TAIL', cx: 0.14, cy: 0.42, w: 0.2, h: 0.24, px: 0.9, py: 0.3, guide: G.TAIL_CURVE, z: 1,
         motion: { swing: 0.3, bob: 0, sway: 0, beats: 1, phase: 0.25, idle: 0.5 } },
-      { id: 'FRONT_LEG', label: 'FRONT LEGS', cx: 0.6, cy: 0.76, w: 0.26, h: 0.42, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, z: 2,
+      { id: 'FRONT_LEG', label: 'FRONT LEGS', cx: 0.6, cy: 0.76, w: 0.26, h: 0.42, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, follow: 0.3, z: 2,
         motion: { swing: 0.55, bob: 0, sway: 0, beats: 1, phase: 0, idle: 0.06 } },
       { id: 'HEAD', label: 'HEAD AND NECK', cx: 0.76, cy: 0.24, w: 0.34, h: 0.4, px: 0.35, py: 0.9, guide: G.HEAD_MUZZLE, z: 3,
         motion: { swing: 0.09, bob: 0.02, sway: 0, beats: 1, phase: 0.15, idle: 0.4 } },
@@ -85,14 +112,15 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   HEAVY_QUADRUPED: {
+    gait: 'WALK',
     parts: [
-      { id: 'BACK_LEG', label: 'BACK LEGS', cx: 0.35, cy: 0.79, w: 0.26, h: 0.34, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, z: 0,
+      { id: 'BACK_LEG', label: 'BACK LEGS', cx: 0.35, cy: 0.79, w: 0.26, h: 0.34, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, follow: 0.3, z: 0,
         motion: { swing: 0.45, bob: 0, sway: 0, beats: 1, phase: 0.5, idle: 0.06 } },
       { id: 'BODY', label: 'BODY', cx: 0.44, cy: 0.52, w: 0.66, h: 0.4, px: 0.5, py: 0.5, guide: G.BODY_BARREL, z: 1,
         motion: { swing: 0.04, bob: 0.024, sway: 0.008, beats: 2, phase: 0, idle: 0.35 } },
       { id: 'TAIL', label: 'TAIL', cx: 0.1, cy: 0.46, w: 0.2, h: 0.22, px: 0.9, py: 0.3, guide: G.TAIL_CURVE, z: 1,
         motion: { swing: 0.26, bob: 0, sway: 0, beats: 1, phase: 0.3, idle: 0.5 } },
-      { id: 'FRONT_LEG', label: 'FRONT LEGS', cx: 0.6, cy: 0.79, w: 0.26, h: 0.34, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, z: 2,
+      { id: 'FRONT_LEG', label: 'FRONT LEGS', cx: 0.6, cy: 0.79, w: 0.26, h: 0.34, px: 0.5, py: 0.05, guide: G.LEGS_PAIR, follow: 0.3, z: 2,
         motion: { swing: 0.45, bob: 0, sway: 0, beats: 1, phase: 0, idle: 0.06 } },
       { id: 'HEAD', label: 'HEAD AND MANE', cx: 0.76, cy: 0.4, w: 0.38, h: 0.42, px: 0.3, py: 0.7, guide: G.HEAD_MANE, z: 3,
         motion: { swing: 0.07, bob: 0.02, sway: 0, beats: 1, phase: 0.2, idle: 0.4 } },
@@ -100,10 +128,11 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   UPRIGHT_BIPED: {
+    gait: 'WALK',
     parts: [
       { id: 'BACK_ARM', label: 'FAR ARM', cx: 0.36, cy: 0.5, w: 0.2, h: 0.4, px: 0.5, py: 0.1, guide: G.ARM_LIMB, z: 0,
         motion: { swing: 0.5, bob: 0, sway: 0, beats: 1, phase: 0, idle: 0.1 } },
-      { id: 'LEG', label: 'LEGS', cx: 0.5, cy: 0.8, w: 0.3, h: 0.36, px: 0.5, py: 0.08, guide: G.LEGS_PAIR, z: 1,
+      { id: 'LEG', label: 'LEGS', cx: 0.5, cy: 0.8, w: 0.3, h: 0.36, px: 0.5, py: 0.08, guide: G.LEGS_PAIR, follow: 0.3, z: 1,
         motion: { swing: 0.45, bob: 0, sway: 0, beats: 1, phase: 0.5, idle: 0.06 } },
       { id: 'BODY', label: 'BODY', cx: 0.5, cy: 0.5, w: 0.34, h: 0.42, px: 0.5, py: 0.9, guide: G.BODY_UPRIGHT, z: 2,
         motion: { swing: 0.04, bob: 0.03, sway: 0.01, beats: 2, phase: 0, idle: 0.4 } },
@@ -115,10 +144,11 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   WADDLER: {
+    gait: 'WADDLE',
     parts: [
       { id: 'BACK_WING', label: 'FAR WING', cx: 0.3, cy: 0.54, w: 0.16, h: 0.34, px: 0.6, py: 0.1, guide: G.WING_FAN, z: 0,
         motion: { swing: 0.34, bob: 0, sway: 0, beats: 2, phase: 0, idle: 0.3 } },
-      { id: 'LEG', label: 'FEET', cx: 0.5, cy: 0.9, w: 0.32, h: 0.14, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, z: 1,
+      { id: 'LEG', label: 'FEET', cx: 0.5, cy: 0.9, w: 0.32, h: 0.14, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, follow: 0.3, z: 1,
         motion: { swing: 0.16, bob: 0, sway: 0.01, beats: 1, phase: 0.5, idle: 0.06 } },
       { id: 'BODY', label: 'BODY', cx: 0.5, cy: 0.55, w: 0.44, h: 0.56, px: 0.5, py: 0.95, guide: G.BODY_UPRIGHT, z: 2,
         // 뒤뚱거림은 몸통이 통째로 기우는 것이다. 다리가 아니라 여기가 크게 돈다.
@@ -131,19 +161,21 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   SMALL_HOPPER: {
+    gait: 'HOP',
     parts: [
-      { id: 'BACK_LEG', label: 'BACK LEGS', cx: 0.36, cy: 0.8, w: 0.28, h: 0.3, px: 0.5, py: 0.1, guide: G.LEGS_PAIR, z: 0,
+      { id: 'BACK_LEG', label: 'BACK LEGS', cx: 0.36, cy: 0.8, w: 0.28, h: 0.3, px: 0.5, py: 0.1, guide: G.LEGS_PAIR, follow: 0.3, z: 0,
         motion: { swing: 0.4, bob: 0.03, sway: 0, beats: 1, phase: 0, idle: 0.08 } },
       { id: 'BODY', label: 'BODY', cx: 0.46, cy: 0.58, w: 0.46, h: 0.42, px: 0.5, py: 0.8, guide: G.BODY_ROUND, z: 1,
         motion: { swing: 0.05, bob: 0.06, sway: 0, beats: 1, phase: 0.1, idle: 0.3 } },
       { id: 'HEAD', label: 'HEAD AND EARS', cx: 0.68, cy: 0.28, w: 0.36, h: 0.46, px: 0.4, py: 0.9, guide: G.HEAD_EARS, z: 2,
         motion: { swing: 0.12, bob: 0.05, sway: 0, beats: 1, phase: 0.16, idle: 0.35 } },
-      { id: 'FRONT_LEG', label: 'FRONT PAWS', cx: 0.62, cy: 0.82, w: 0.2, h: 0.24, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, z: 3,
+      { id: 'FRONT_LEG', label: 'FRONT PAWS', cx: 0.62, cy: 0.82, w: 0.2, h: 0.24, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, follow: 0.3, z: 3,
         motion: { swing: 0.3, bob: 0.03, sway: 0, beats: 1, phase: 0.4, idle: 0.08 } },
     ],
   },
 
   BROAD_WING: {
+    gait: 'FLAP',
     parts: [
       { id: 'BACK_WING', label: 'FAR WING', cx: 0.36, cy: 0.4, w: 0.4, h: 0.36, px: 0.85, py: 0.4, guide: G.WING_FAN, z: 0,
         motion: { swing: 0.9, bob: 0.02, sway: 0, beats: 1, phase: 0.06, idle: 0.5 } },
@@ -159,6 +191,7 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   ROUND_BIRD: {
+    gait: 'FLAP',
     parts: [
       { id: 'BACK_WING', label: 'FAR WING', cx: 0.34, cy: 0.5, w: 0.3, h: 0.34, px: 0.85, py: 0.3, guide: G.WING_FAN, z: 0,
         motion: { swing: 0.6, bob: 0.02, sway: 0, beats: 1, phase: 0.06, idle: 0.45 } },
@@ -172,6 +205,7 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   STREAMLINED: {
+    gait: 'SWIM',
     parts: [
       { id: 'TAIL', label: 'TAIL FIN', cx: 0.14, cy: 0.5, w: 0.26, h: 0.42, px: 0.95, py: 0.5, guide: G.TAIL_FIN, z: 0,
         motion: { swing: 0.45, bob: 0, sway: 0, beats: 1, phase: 0.35, idle: 0.6 } },
@@ -185,8 +219,9 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   LOW_CRAWLER: {
+    gait: 'CRAWL',
     parts: [
-      { id: 'LEG', label: 'LEGS', cx: 0.44, cy: 0.78, w: 0.5, h: 0.2, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, z: 0,
+      { id: 'LEG', label: 'LEGS', cx: 0.44, cy: 0.78, w: 0.5, h: 0.2, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, follow: 0.3, z: 0,
         motion: { swing: 0.3, bob: 0, sway: 0, beats: 1, phase: 0.5, idle: 0.08 } },
       { id: 'TAIL', label: 'TAIL', cx: 0.12, cy: 0.6, w: 0.26, h: 0.2, px: 0.95, py: 0.5, guide: G.TAIL_CURVE, z: 1,
         motion: { swing: 0.34, bob: 0, sway: 0, beats: 1, phase: 0.3, idle: 0.5 } },
@@ -198,12 +233,13 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
   },
 
   SHELLED: {
+    gait: 'CRAWL',
     parts: [
-      { id: 'BACK_LEG', label: 'BACK FEET', cx: 0.34, cy: 0.8, w: 0.22, h: 0.2, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, z: 0,
+      { id: 'BACK_LEG', label: 'BACK FEET', cx: 0.34, cy: 0.8, w: 0.22, h: 0.2, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, follow: 0.3, z: 0,
         motion: { swing: 0.34, bob: 0, sway: 0, beats: 1, phase: 0.5, idle: 0.1 } },
       { id: 'BODY', label: 'SHELL', cx: 0.46, cy: 0.5, w: 0.58, h: 0.42, px: 0.5, py: 0.6, guide: G.SHELL_DOME, z: 1,
         motion: { swing: 0.02, bob: 0.014, sway: 0, beats: 1, phase: 0, idle: 0.3 } },
-      { id: 'FRONT_LEG', label: 'FRONT FEET', cx: 0.6, cy: 0.8, w: 0.22, h: 0.2, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, z: 2,
+      { id: 'FRONT_LEG', label: 'FRONT FEET', cx: 0.6, cy: 0.8, w: 0.22, h: 0.2, px: 0.5, py: 0.1, guide: G.LEGS_SHORT, follow: 0.3, z: 2,
         motion: { swing: 0.34, bob: 0, sway: 0, beats: 1, phase: 0, idle: 0.1 } },
       { id: 'HEAD', label: 'HEAD AND NECK', cx: 0.82, cy: 0.6, w: 0.26, h: 0.24, px: 0.15, py: 0.6, guide: G.HEAD_NECK, z: 3,
         motion: { swing: 0.1, bob: 0.02, sway: 0.01, beats: 1, phase: 0.2, idle: 0.4 } },
@@ -212,8 +248,9 @@ export const RIG_SPECS: Partial<Record<MotionArchetype, RigSpec>> = {
 
   /** 템플릿 없이 리그를 고른 경우. 몸과 머리, 다리만 나눈다. */
   FREE: {
+    gait: 'WALK',
     parts: [
-      { id: 'LEG', label: 'LEGS', cx: 0.5, cy: 0.82, w: 0.44, h: 0.3, px: 0.5, py: 0.1, guide: G.LEGS_PAIR, z: 0,
+      { id: 'LEG', label: 'LEGS', cx: 0.5, cy: 0.82, w: 0.44, h: 0.3, px: 0.5, py: 0.1, guide: G.LEGS_PAIR, follow: 0.3, z: 0,
         motion: { swing: 0.34, bob: 0, sway: 0, beats: 1, phase: 0.5, idle: 0.08 } },
       { id: 'BODY', label: 'BODY', cx: 0.5, cy: 0.52, w: 0.56, h: 0.5, px: 0.5, py: 0.8, guide: G.BODY_ROUND, z: 1,
         motion: { swing: 0.04, bob: 0.025, sway: 0, beats: 2, phase: 0, idle: 0.35 } },
