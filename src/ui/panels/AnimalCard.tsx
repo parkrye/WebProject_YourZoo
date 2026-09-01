@@ -19,6 +19,11 @@ const CARD_HEIGHT = 560
 interface AnimalCardProps {
   animal: Animal
   onClose: () => void
+  /**
+   * 카메라가 이 동물을 따라다니는 전용 뷰로 들어간다.
+   * 상세보기에서 배치된 동물을 골랐을 때만 온다 — 창고 안의 동물은 따라갈 데가 없다.
+   */
+  onFollow?: () => void
   /** 우리에 배치된 동물을 창고로 되돌린다. */
   onStore?: () => void
   /** 창고에 있는 동물을 판매한다. */
@@ -31,7 +36,9 @@ interface AnimalCardProps {
  * 동물 정보 카드. 팝업이 아니라 화면 한쪽에 붙는 인라인 패널이다.
  * 관찰 화면을 가리지 않아야 하므로 backdrop 을 두지 않는다.
  */
-export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false }: AnimalCardProps) {
+export function AnimalCard({
+  animal, onClose, onFollow, onStore, onSell, readOnly = false,
+}: AnimalCardProps) {
   const [confirmSell, setConfirmSell] = useState(false)
   const [confirmAnimate, setConfirmAnimate] = useState(false)
   const [baking, setBaking] = useState(false)
@@ -140,6 +147,17 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
             <button type="button" className="labeled-button" onClick={() => setConfirmAnimate(true)}>
               <IconButton icon={GUI.COIN_LARGE} size={40} />
               <BitmapLabel text={`ANIMATE ${SHEET_COST}`} size={17} />
+            </button>
+          )}
+
+          {/*
+            따라가기는 남의 동물원에서도 된다. 구경하러 온 사람이 가장 하고 싶은 일이
+            남이 그린 동물을 가까이서 보는 것이다.
+          */}
+          {onFollow && (
+            <button type="button" className="labeled-button" onClick={onFollow}>
+              <IconButton icon={GUI.BINOCULARS} size={40} />
+              <BitmapLabel text="FOLLOW" size={17} />
             </button>
           )}
 

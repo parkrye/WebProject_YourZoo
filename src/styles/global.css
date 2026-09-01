@@ -204,15 +204,7 @@ html, body, #root {
   border: 2px solid rgba(138, 90, 43, 0.7);
   border-radius: 10px;
   text-align: center;
-  cursor: pointer;
-  transition: filter 0.12s ease, border-color 0.12s ease;
 }
-.hud-enclosure-name:hover:not(:disabled) {
-  filter: brightness(1.15);
-  border-color: #d9a441;
-}
-/* 남의 동물원이나 잠긴 우리에서는 그냥 이름표다. */
-.hud-enclosure-name:disabled { cursor: default; }
 
 .enclosure-head { display: flex; flex-direction: column; gap: 2px; }
 
@@ -1072,6 +1064,19 @@ html, body, #root {
 .review-row:last-child { border-bottom: 0; }
 
 /* 칭찬과 불평의 수. 목록 맨 위에서 오늘의 분위기를 한눈에 알려 준다. */
+/*
+  따라가는 중의 아래 띠는 칸이 하나뿐이다.
+  평소의 `1fr auto 1fr` 을 그대로 두면 가운데 그룹이 첫 칸에 놓여 왼쪽에 붙는다.
+*/
+.hud-bottom-bar.is-follow {
+  grid-template-columns: 1fr;
+}
+.hud-bottom-bar.is-follow .bar-center {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
 .review-tally {
   display: flex;
   justify-content: center;
