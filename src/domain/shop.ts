@@ -3,7 +3,8 @@ import {
   PROP_LAND_INDICES, PROP_WATER_INDICES,
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
-import { SHOP_ANIMAL_PRICE } from './balance'
+import { ANIMAL_SELL_RATIO, SHOP_ANIMAL_PRICE } from './balance'
+import { ANIMAL_CRAFTS } from './craft'
 import { propPrice } from './prop'
 import type { AnimalTraits } from './traits'
 
@@ -55,7 +56,7 @@ export interface ShopAnimal {
 export const SHOP_ANIMALS: readonly ShopAnimal[] = ANIMAL_SHEETS.map((sheet) => ({
   catalogId: sheet.id,
   habitat: sheet.habitat,
-  price: SHOP_ANIMAL_PRICE[sheet.habitat],
+  price: SHOP_ANIMAL_PRICE,
   sheet,
 }))
 
@@ -90,6 +91,37 @@ const OMNIVORES = new Set(['BEAR', 'POLARBEAR', 'CROW', 'MONKEY', 'ORANGUTAN', '
 /** 상점 동물의 매력도. 값이 비쌀수록 손님을 더 부른다. */
 export function shopAnimalAppeal(item: ShopAnimal): number {
   return Math.round(item.price / 5)
+}
+
+/**
+ * 이 동물을 만드는 데 든 값.
+ *
+ * 값을 동물에 적어 두지 않는다 — 대신 **남아 있는 흔적으로 되짚는다.** 시트가
+ * 구워져 있으면 칸을 그린 것이고, 리그가 있으면 파츠를 그린 것이고, 템플릿이
+ * `FREE` 면 빈 도화지에서 시작한 것이다. 흔적과 값을 따로 저장하면 언젠가
+ * 둘이 어긋나고, 어긋난 쪽이 어느 쪽인지 알 길이 없어진다.
+ */
+export function animalCost(animal: {
+  readonly imageId: string
+  readonly templateId: string
+  readonly spriteSheet: unknown
+  readonly rig: unknown
+}): number {
+  if (isShopAnimal(animal)) return SHOP_ANIMAL_PRICE
+  if (animal.spriteSheet) return ANIMAL_CRAFTS.FRAMES.coins
+  if (animal.rig) return ANIMAL_CRAFTS.RIG.coins
+  return animal.templateId === 'FREE' ? ANIMAL_CRAFTS.SIMPLE.coins : ANIMAL_CRAFTS.TEMPLATE.coins
+}
+
+/**
+ * 팔 때 돌려받는 값.
+ *
+ * 예전에는 무엇을 팔든 한 값이었다. 방식마다 값이 갈리는 지금 그렇게 두면
+ * 가장 싼 방식으로 그려 파는 것이 돈을 찍는 일이 되거나, 손이 가장 많이 간
+ * 동물을 팔았는데 푼돈이 돌아오거나 — 둘 중 하나가 반드시 일어난다.
+ */
+export function sellRefund(animal: Parameters<typeof animalCost>[0]): number {
+  return Math.floor(animalCost(animal) * ANIMAL_SELL_RATIO)
 }
 
 // ─────────────────────────────────────────────────────────────

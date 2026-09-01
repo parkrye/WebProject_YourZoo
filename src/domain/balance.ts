@@ -57,8 +57,8 @@ export const productTotal = (product: CashProduct): number => product.cash + pro
  * **한 방향뿐이다.** 코인으로 캐시를 살 수 있으면 캐시로만 되는 것(프레임 애니메이션)이
  * 시간만 들이면 공짜가 되고, 그러면 유료 재화라는 구분 자체가 사라진다.
  *
- * 1000 은 동물 한 마리 제작비(50)의 스무 배다. 캐시를 코인으로 쓰는 사람이
- * 손해 봤다고 느끼지 않을 만큼 넉넉하되, 캐시 본래 쓰임을 덮을 만큼은 아니다.
+ * 1000 은 가장 비싸게 그리는 동물 한 마리(90) 의 열 배쯤이다. 캐시를 코인으로 쓰는
+ * 사람이 손해 봤다고 느끼지 않을 만큼 넉넉하되, 캐시 본래 쓰임을 덮을 만큼은 아니다.
  */
 export const CASH_TO_GOLD = 1000
 
@@ -73,9 +73,20 @@ export const SHOP_MAX_QUANTITY = 10
 /** 동물 한 마리의 8x3 스프라이트 시트를 만드는 데 드는 캐시. */
 export const SHEET_COST = 1
 
-export const ANIMAL_CREATE_COST = 50
-/** 동물을 판매할 때 제작비의 절반을 돌려준다. 잘못 만든 동물을 되돌릴 수 있어야 한다. */
-export const ANIMAL_SELL_REFUND = Math.floor(ANIMAL_CREATE_COST / 2)
+/**
+ * 요청서를 열 수 있는지 보는 기준이자 값을 따로 주지 않았을 때의 기본값.
+ * 가장 싼 방식(`ANIMAL_CRAFTS.SIMPLE`)과 같아야 한다 — 이보다 높으면
+ * 정작 그릴 수 있는 값을 들고도 요청서가 열리지 않는다.
+ */
+export const ANIMAL_CREATE_COST = 20
+
+/**
+ * 팔 때 돌려받는 비율.
+ *
+ * **절반을 넘길 수 없다.** 넘기면 싼 방식으로 그려 파는 것이 그대로 돈을 찍는 일이 된다.
+ * 얼마를 돌려주는지는 그 동물을 만든 방식에서 나온다 — `domain/shop` 의 `sellRefund`.
+ */
+export const ANIMAL_SELL_RATIO = 0.5
 
 /**
  * 창고에 도착하기까지 걸리는 일수.
@@ -90,11 +101,17 @@ export const SHIPPING_DAYS = { SHOP: 1, DRAWN: 2 } as const
 // 상점 가격 (무료 재화)
 // ─────────────────────────────────────────────────────────────
 
-/** 상점 동물 가격. 서식지마다 다르다 — 물은 우리가 좁아 귀하게 매긴다. */
-export const SHOP_ANIMAL_PRICE = { SKY: 120, LAND: 100, WATER: 150 } as const
+/**
+ * 상점 동물 가격. 서식지를 가리지 않고 하나다.
+ *
+ * 예전에는 하늘 120 / 땅 100 / 물 150 으로 갈라 두었는데, 값의 차이가
+ * "물이 귀하다"로 읽히지 않고 **어느 우리를 먼저 채울지 정해 주는 지시**로 읽혔다.
+ * 어느 우리를 채울지는 값이 아니라 주인이 정하는 것이다.
+ */
+export const SHOP_ANIMAL_PRICE = 100
 
-/** 상점 프롭 가격. 물에 뜨는 프롭이 더 비싸다. */
-export const SHOP_PROP_PRICE = { LAND: 40, WATER: 60 } as const
+/** 상점 프롭 가격. 동물과 같은 이유로 층을 가리지 않는다. */
+export const SHOP_PROP_PRICE = 50
 
 /** 프롭을 팔 때 돌려받는 비율. 동물과 같이 절반이다. */
 export const PROP_SELL_RATIO = 0.5
@@ -102,8 +119,11 @@ export const PROP_SELL_RATIO = 0.5
 /** 우리 하나에 놓을 수 있는 프롭 수. 더 놓으면 동물이 다닐 자리가 없다. */
 export const MAX_PROPS_PER_ENCLOSURE = 10
 
-/** 직접 그린 프롭의 제작비. */
-export const PROP_CREATE_COST = 30
+/**
+ * 직접 그린 프롭의 제작비. 가장 싼 방식(`PROP_CRAFTS.SIMPLE`)과 같다.
+ * 동물과 같은 이유로, 이 값이 실제 제작비보다 높으면 만들 수 있는데 못 만들게 된다.
+ */
+export const PROP_CREATE_COST = 8
 
 export const PROP_NAME_MAX_LENGTH = 10
 

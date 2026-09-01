@@ -1,5 +1,6 @@
 import type { BiomeId, Habitat } from '@/assets/manifest'
-import { MAX_PROPS_PER_ENCLOSURE, SHOP_PROP_PRICE } from './balance'
+import { MAX_PROPS_PER_ENCLOSURE, PROP_SELL_RATIO, SHOP_PROP_PRICE } from './balance'
+import { PROP_CRAFTS } from './craft'
 
 /**
  * 프롭의 생애 단계. 동물과 같다.
@@ -53,8 +54,26 @@ export interface OwnedProp {
   readonly arrivalDay: number
 }
 
-export function propPrice(layer: Habitat): number {
-  return layer === 'WATER' ? SHOP_PROP_PRICE.WATER : SHOP_PROP_PRICE.LAND
+/** 상점 프롭 값. 층을 가리지 않고 하나다 — 인자는 부르는 쪽의 읽기 편의로 남긴다. */
+export function propPrice(_layer: Habitat): number {
+  return SHOP_PROP_PRICE
+}
+
+/**
+ * 이 프롭에 든 값. 동물과 같이 남아 있는 흔적으로 되짚는다.
+ *
+ * 다만 동물만큼 정확하지는 않다 — 프롭에는 템플릿을 썼는지가 남지 않아
+ * 띠가 없는 그린 프롭은 전부 가장 싼 방식으로 본다. **낮은 쪽으로 틀리는 편이
+ * 안전하다**: 실제보다 높게 잡으면 싸게 그려 비싸게 파는 길이 열린다.
+ */
+export function propCost(prop: OwnedProp): number {
+  if (!prop.imageId) return SHOP_PROP_PRICE
+  return prop.strip ? PROP_CRAFTS.DETAILED.coins : PROP_CRAFTS.SIMPLE.coins
+}
+
+/** 팔 때 돌려받는 값. */
+export function propRefund(prop: OwnedProp): number {
+  return Math.floor(propCost(prop) * PROP_SELL_RATIO)
 }
 
 export function placedProps(props: readonly OwnedProp[], enclosureId: BiomeId): OwnedProp[] {

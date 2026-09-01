@@ -2,16 +2,16 @@ import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
 import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
 import {
-  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, CASH_TO_GOLD, DAY_DURATION_SEC,
+  ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, CASH_TO_GOLD, DAY_DURATION_SEC,
   ENCLOSURE_EXPAND_STEP, ENCLOSURE_NAME_MAX_LENGTH, MAX_ANIMALS_PER_ENCLOSURE, MAX_ENCLOSURE_CAPACITY,
   expandCost,
-  PROP_CREATE_COST, PROP_SELL_RATIO, SHEET_COST, SHIPPING_DAYS,
+  PROP_CREATE_COST, SHEET_COST, SHIPPING_DAYS,
   START_CASH, START_GOLD, START_REPUTATION, UNLOCK_COST, UNLOCK_REPUTATION,
   productTotal, type CashProduct,
 } from '@/domain/balance'
-import { canPlaceProp, createPropId, propPrice, type OwnedProp } from '@/domain/prop'
+import { canPlaceProp, createPropId, propRefund, type OwnedProp } from '@/domain/prop'
 import {
-  isShopAnimal, shopAnimalAppeal, shopAnimalTraits, sheetImageId, shopPropName,
+  isShopAnimal, sellRefund, shopAnimalAppeal, shopAnimalTraits, sheetImageId, shopPropName,
   type ShopAnimal, type ShopProp,
 } from '@/domain/shop'
 import { MOTION_PROFILES } from '@/domain/motion'
@@ -640,7 +640,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     forgetBitmap(target.imageId)
 
     set((s) => ({
-      gold: s.gold + ANIMAL_SELL_REFUND,
+      gold: s.gold + sellRefund(target),
       animals: s.animals.filter((a) => a.id !== id),
     }))
     return true
@@ -773,10 +773,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       forgetBitmap(target.imageId)
     }
 
-    const refund = Math.floor(
-      (target.imageId ? PROP_CREATE_COST : propPrice(target.layer)) * PROP_SELL_RATIO,
-    )
-    set((s) => ({ gold: s.gold + refund, props: s.props.filter((p) => p.id !== id) }))
+    set((s) => ({
+      gold: s.gold + propRefund(target),
+      props: s.props.filter((p) => p.id !== id),
+    }))
     return true
   },
 

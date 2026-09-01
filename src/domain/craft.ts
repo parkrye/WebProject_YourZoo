@@ -4,6 +4,11 @@
  * 값이 클수록 손이 많이 가고, 그만큼 화면에서 살아 움직인다.
  * 값싼 쪽을 없애지 않는 이유는 **그림 한 장으로도 놀 수 있어야** 하기 때문이다 —
  * 24프레임을 그려야만 동물을 가질 수 있다면 대부분은 시작조차 못 한다.
+ *
+ * 값은 전부 **상점 동물 한 마리(100)보다 아래**다. 이 놀이의 중심은 그리는 것인데
+ * 예전에는 템플릿 한 장이 90, 리그가 150 이라 직접 그리는 쪽이 사 오는 것보다
+ * 비쌌다. 그러면 그리기는 값을 치르고 고르는 별미가 되고, 상점이 본길이 된다.
+ * 손이 많이 갈수록 값이 오르는 순서만 지키고 눈금은 전부 아래로 내렸다.
  */
 export type AnimalCraft = 'SIMPLE' | 'TEMPLATE' | 'RIG' | 'FRAMES' | 'COMMISSION'
 export type PropCraft = 'SIMPLE' | 'TEMPLATE' | 'DETAILED'
@@ -33,14 +38,14 @@ export const ANIMAL_CRAFTS: Record<AnimalCraft, CraftSpec> = {
   SIMPLE: {
     label: 'SIMPLE',
     hint: 'BLANK CANVAS',
-    coins: 40,
+    coins: 20,
     cash: 0,
     frames: 1,
   },
   TEMPLATE: {
     label: 'TEMPLATE',
     hint: 'DRAW OVER A SHAPE',
-    coins: 90,
+    coins: 45,
     cash: 0,
     frames: 1,
   },
@@ -53,14 +58,14 @@ export const ANIMAL_CRAFTS: Record<AnimalCraft, CraftSpec> = {
   RIG: {
     label: 'RIGGED',
     hint: 'PARTS  JOINTS MOVE THEM',
-    coins: 150,
+    coins: 75,
     cash: 0,
     frames: 5,
   },
   FRAMES: {
     label: 'FRAME BY FRAME',
     hint: 'EVERY POSE BY HAND',
-    coins: 240,
+    coins: 90,
     cash: 0,
     frames: DETAIL_COLS * DETAIL_ROWS,
   },
@@ -80,21 +85,21 @@ export const PROP_CRAFTS: Record<PropCraft, CraftSpec> = {
   SIMPLE: {
     label: 'SIMPLE',
     hint: 'STANDS STILL',
-    coins: 15,
+    coins: 8,
     cash: 0,
     frames: 1,
   },
   TEMPLATE: {
     label: 'TEMPLATE',
     hint: 'DRAW OVER A SHAPE',
-    coins: 35,
+    coins: 20,
     cash: 0,
     frames: 1,
   },
   DETAILED: {
     label: 'DETAILED',
     hint: '8 FRAMES  IT MOVES',
-    coins: 90,
+    coins: 40,
     cash: 0,
     frames: PROP_DETAIL_FRAMES,
   },
