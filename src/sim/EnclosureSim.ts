@@ -6,7 +6,7 @@ import type { Animal } from '@/domain/animal'
 import { visitorCount } from '@/domain/economy'
 import { createAnimalRenderer, createRigRenderer } from '@/render/animal'
 import { AnimalAgent } from './AnimalAgent'
-import { ensureBitmap, getBitmap } from './imageCache'
+import { ensureBitmap, ensureStillBitmap, getBitmap } from './imageCache'
 import { placedProps, type OwnedProp } from '@/domain/prop'
 import { toPlacedProps, type PlacedProp } from './props'
 import { pruneVisitors, stayingCount, trimVisitors, VisitorAgent } from './VisitorAgent'
@@ -231,6 +231,10 @@ export class EnclosureSim {
         if (part) parts.set(partId, part)
       }
       if (parts.size > 0) {
+        // 집기 판정 상자는 **합쳐 놓은 한 마리**의 비율이어야 한다.
+        // 대표 그림에서 뽑으면 몸통 한 조각의 비율이 나와 상자가 실제와 어긋난다.
+        const still = await ensureStillBitmap(animal)
+        if (still) agent.aspect = still.width / still.height
         agent.renderer = createRigRenderer(animal, parts)
         return
       }

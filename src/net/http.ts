@@ -76,6 +76,6 @@ async function request<T>(path: string, init: RequestInit, token?: string): Prom
 }
 
 /** 그림은 봉투 없이 바이너리로 온다. 주소만 만들어 준다. */
-export function imageUrl(imageId: string): string {
-  return `${API}/images/${encodeURIComponent(imageId)}`
+export function imageUrl(userId: string, imageId: string): string {
+  return `${API}/users/${encodeURIComponent(userId)}/images/${encodeURIComponent(imageId)}`
 }

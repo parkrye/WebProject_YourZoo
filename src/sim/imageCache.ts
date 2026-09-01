@@ -1,6 +1,10 @@
 import { loadImageBitmap } from '@/store/imageDb'
 import { remoteImageUrl } from '@/net/zooApi'
+import type { Animal } from '@/domain/animal'
+import { rigOf } from '@/domain/rig'
 import { findSheet, SHEET_KEY_PREFIX } from '@/domain/shop'
+import { templateOf } from '@/domain/templates'
+import { composeRig } from '@/render/animal/composeRig'
 
 /**
  * 동물 그림 비트맵 캐시.
@@ -17,8 +21,62 @@ export function getBitmap(id: string): ImageBitmap | null {
 
 /** 동물을 방출했을 때 호출한다. 메모리에 남겨둘 이유가 없다. */
 export function forgetBitmap(id: string): void {
-  bitmaps.get(id)?.close()
-  bitmaps.delete(id)
+  for (const key of [id, stillKey(id)]) {
+    bitmaps.get(key)?.close()
+    bitmaps.delete(key)
+  }
+}
+
+/** 합성한 정지 자세가 앉는 자리. 파츠 그림들과 같은 캐시를 쓰되 id 는 겹치지 않는다. */
+const stillKey = (imageId: string): string => `${imageId}#still`
+
+/**
+ * 목록에 띄울 동물 그림 한 장.
+ *
+ * 리그 동물은 대표 그림 한 장으로 끝나지 않는다 — 파츠를 정지 자세로 합쳐야
+ * 비로소 그 동물이 된다. 합친 결과는 같은 캐시에 두어 한 번만 굽는다.
+ * 옛 세이브의 대표 그림은 몸통 조각이므로 **여기서 늘 다시 합친다.**
+ */
+export async function ensureStillBitmap(animal: Animal): Promise<ImageBitmap | null> {
+  const rig = animal.rig
+  if (!rig) return ensureBitmap(animal.imageId)
+
+  const key = stillKey(animal.imageId)
+  const cached = bitmaps.get(key)
+  if (cached) return cached
+  const inFlight = pending.get(key)
+  if (inFlight) return inFlight
+
+  const task = composeStill(animal, rig)
+    .then((bitmap) => {
+      if (bitmap) bitmaps.set(key, bitmap)
+      return bitmap
+    })
+    .catch(() => null)
+    .finally(() => pending.delete(key))
+
+  pending.set(key, task)
+  return task
+}
+
+/** 이미 구워 둔 정지 자세. 없으면 null — 첫 프레임의 깜빡임을 줄이는 데만 쓴다. */
+export function getStillBitmap(animal: Animal): ImageBitmap | null {
+  if (!animal.rig) return getBitmap(animal.imageId)
+  return bitmaps.get(stillKey(animal.imageId)) ?? null
+}
+
+/** 파츠를 모두 읽어 한 장으로 굽는다. 하나도 못 읽으면 대표 그림으로 물러난다. */
+async function composeStill(animal: Animal, rig: Record<string, string>): Promise<ImageBitmap | null> {
+  const parts = new Map<string, ImageBitmap>()
+  for (const [partId, imageId] of Object.entries(rig)) {
+    const part = getBitmap(imageId) ?? (await ensureBitmap(imageId))
+    if (part) parts.set(partId, part)
+  }
+  if (parts.size === 0) return ensureBitmap(animal.imageId)
+
+  const blob = await composeRig(rigOf(templateOf(animal.templateId).archetype), parts)
+  if (!blob) return ensureBitmap(animal.imageId)
+  return createImageBitmap(blob)
 }
 
 /** 이미 Blob 을 손에 들고 있을 때(방금 그린 직후) 디코드를 앞당긴다. */
@@ -74,7 +132,7 @@ async function loadCatalogSheet(id: string): Promise<ImageBitmap | null> {
  * 실패할 때마다 서버를 찔러 보게 하면, 방금 판 동물의 그림을 찾다가도 네트워크를 탄다.
  * **구경에 들어갈 때 명시적으로** 미리 받아 둔다.
  */
-export async function preloadRemote(ids: readonly string[]): Promise<void> {
+export async function preloadRemote(userId: string, ids: readonly string[]): Promise<void> {
   await Promise.all(
     ids.map(async (id) => {
       if (bitmaps.has(id)) return
@@ -84,7 +142,7 @@ export async function preloadRemote(ids: readonly string[]): Promise<void> {
         return
       }
       try {
-        const res = await fetch(remoteImageUrl(id))
+        const res = await fetch(remoteImageUrl(userId, id))
         if (!res.ok) return
         bitmaps.set(id, await createImageBitmap(await res.blob()))
       } catch {

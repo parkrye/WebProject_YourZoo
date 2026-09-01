@@ -180,6 +180,17 @@ html, body, #root {
   border-radius: 10px;
 }
 
+/* 상세보기에서는 이 판이 곧 우리를 손보는 문이다. 생김새는 그대로 두고 손맛만 준다. */
+.hud-top-right.is-button {
+  cursor: pointer;
+  transition: filter 0.12s ease, border-color 0.12s ease;
+}
+.hud-top-right.is-button:hover:not(:disabled) {
+  filter: brightness(1.15);
+  border-color: #d9a441;
+}
+.hud-top-right.is-button:disabled { cursor: default; }
+
 .hud-purse { display: flex; align-items: center; gap: 8px; }
 
 /* 이름표는 그 우리를 손보는 문이기도 하다. 눌러서 이름과 정원을 고친다. */

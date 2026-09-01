@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { GUI } from '@/assets/manifest'
-import { ANIMAL_NAME_MAX_LENGTH, ANIMAL_SELL_REFUND, SHEET_COST } from '@/domain/balance'
+import { ANIMAL_NAME_MAX_LENGTH, SHEET_COST } from '@/domain/balance'
 import type { Animal } from '@/domain/animal'
+import { sellRefund } from '@/domain/shop'
 import { TRAIT_KEYS, TRAIT_LABELS } from '@/domain/traits'
 import { AnimalItemThumb } from '@/ui/components/ItemThumb'
 import { BitmapInput } from '@/ui/components/BitmapInput'
@@ -126,7 +127,7 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
           {onSell && !confirmSell && (
             <button type="button" className="labeled-button" onClick={() => setConfirmSell(true)}>
               <IconButton icon={GUI.TRASH} size={40} />
-              <BitmapLabel text={`SELL ${ANIMAL_SELL_REFUND}`} size={17} />
+              <BitmapLabel text={`SELL ${sellRefund(animal)}`} size={17} />
             </button>
           )}
 

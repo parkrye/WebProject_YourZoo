@@ -1,4 +1,4 @@
-import { RIG_ROOT, type Gait, type RigPart, type RigSpec } from '@/domain/rig'
+import { orderedParts, partPivot, RIG_ROOT, type Gait, type RigPart, type RigSpec } from '@/domain/rig'
 import type { AnimalRenderer, AnimalRenderState, ViewBox } from './AnimalRenderer'
 
 const TAU = Math.PI * 2
@@ -108,7 +108,7 @@ export class RigRenderer implements AnimalRenderer {
     private readonly spec: RigSpec,
     private readonly parts: ReadonlyMap<string, ImageBitmap>,
   ) {
-    this.ordered = [...spec.parts].sort((a, b) => a.z - b.z)
+    this.ordered = orderedParts(spec)
     this.root = spec.parts.find((p) => p.id === RIG_ROOT)
   }
 
@@ -159,13 +159,13 @@ export class RigRenderer implements AnimalRenderer {
     const root = this.root
     const follow = part.follow ?? 1
     if (rootOffset && root && follow > 0) {
-      const [rx, ry] = pivotOf(root, width, height)
+      const [rx, ry] = partPivot(root, width, height)
       ctx.translate(rx + rootOffset.dx * follow, ry + rootOffset.dy * follow)
       ctx.rotate(rootOffset.spin * follow)
       ctx.translate(-rx, -ry)
     }
 
-    const [px, py] = pivotOf(part, width, height)
+    const [px, py] = partPivot(part, width, height)
     ctx.translate(px + own.dx, py + own.dy)
     ctx.rotate(own.spin)
     // 숨은 몸통에서만 부피로 나타난다. 늘어난 만큼 가로가 줄어야 부풀지 않는다.
@@ -255,14 +255,6 @@ export class RigRenderer implements AnimalRenderer {
   get isEmpty(): boolean {
     return this.spec.parts.every((p) => !this.parts.has(p.id))
   }
-}
-
-/** 회전축을 상자 안 좌표에서 그림 상자 좌표로 옮긴다. */
-function pivotOf(part: RigPart, width: number, height: number): [number, number] {
-  return [
-    (part.cx - part.w / 2 + part.w * part.px) * width,
-    (part.cy - part.h / 2 + part.h * part.py) * height,
-  ]
 }
 
 /** 걸음이 몸을 들어 올리는 모양. 땅을 딛는 걸음은 아래로 내려가지 않는다. */

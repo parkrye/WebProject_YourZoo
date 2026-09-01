@@ -445,13 +445,23 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             여기서는 걷어내고, 지금 이 우리에 몇 마리가 있는지만 남긴다.
           */}
           {detail ? (
-            <div className="hud-top-right">
+            /*
+              상세보기의 이름표도 그 우리를 손보는 문이다. 우리를 들여다보는
+              중에 이름이 마음에 안 들면 바깥으로 나갔다 오는 것이 아니라
+              **보고 있는 그 자리에서** 고칠 수 있어야 한다.
+            */
+            <button
+              type="button"
+              className="hud-top-right is-button"
+              disabled={!!visiting}
+              onClick={() => openModal('ENCLOSURE')}
+            >
               <BitmapLabel text={enclosureLabel(enclosure, names)} size={24} align="right" />
               <div className="hud-purse">
                 <IconGlyph icon={GUI.PAW} size={26} />
                 <BitmapLabel text={`${here} / ${room}`} size={22} />
               </div>
-            </div>
+            </button>
           ) : (
             <>
               {/*
