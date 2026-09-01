@@ -297,3 +297,48 @@ export function partPivot(part: RigPart, width: number, height: number): [number
 export function orderedParts(spec: RigSpec): readonly RigPart[] {
   return [...spec.parts].sort((a, b) => a.z - b.z)
 }
+
+/** 파츠 상자를 전부 감싸는 사각형. 좌표는 그림 상자 대비 비율이다. */
+export interface RigBounds {
+  readonly x0: number
+  readonly x1: number
+  readonly y0: number
+  readonly y1: number
+  /** 가로 가운데. 동물의 x 는 여기에 맞춘다. */
+  readonly cx: number
+  /** 세로 크기. 동물의 높이가 이만큼이 되도록 상자를 키운다. */
+  readonly h: number
+}
+
+const boundsCache = new WeakMap<RigSpec, RigBounds>()
+
+/**
+ * 이 리그가 그림 상자 안에서 실제로 차지하는 자리.
+ *
+ * **유형마다 이게 크게 다르다.** 네발짐승은 상자 세로의 93% 를 쓰는데 물고기는 54%,
+ * 악어는 43% 다. 상자를 그대로 동물 크기로 삼으면 같은 값을 주고도 물고기가 사슴의
+ * 절반 크기로 나오고, 남는 아래 여백(물고기는 29%)만큼 바닥에서 떠 보인다.
+ *
+ * 그래서 상자가 아니라 **이 사각형**을 동물의 몸으로 삼는다. 높이를 여기에 맞추고
+ * 아래변을 발밑에 놓으면 어느 유형이든 같은 크기로 서고, 물에 뜬 채로 그려지지 않는다.
+ */
+export function rigBounds(spec: RigSpec): RigBounds {
+  const cached = boundsCache.get(spec)
+  if (cached) return cached
+
+  let x0 = 1
+  let x1 = 0
+  let y0 = 1
+  let y1 = 0
+  for (const part of spec.parts) {
+    x0 = Math.min(x0, part.cx - part.w / 2)
+    x1 = Math.max(x1, part.cx + part.w / 2)
+    y0 = Math.min(y0, part.cy - part.h / 2)
+    y1 = Math.max(y1, part.cy + part.h / 2)
+  }
+
+  // 파츠가 없는 리그는 없지만, 0 으로 나누는 일만은 막아 둔다.
+  const bounds: RigBounds = { x0, x1, y0, y1, cx: (x0 + x1) / 2, h: Math.max(0.01, y1 - y0) }
+  boundsCache.set(spec, bounds)
+  return bounds
+}

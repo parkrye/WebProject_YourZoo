@@ -1,4 +1,7 @@
-import { orderedParts, partPivot, RIG_ROOT, type Gait, type RigPart, type RigSpec } from '@/domain/rig'
+import {
+  orderedParts, partPivot, rigBounds, RIG_ROOT,
+  type Gait, type RigBounds, type RigPart, type RigSpec,
+} from '@/domain/rig'
 import type { AnimalRenderer, AnimalRenderState, ViewBox } from './AnimalRenderer'
 
 const TAU = Math.PI * 2
@@ -103,6 +106,8 @@ export class RigRenderer implements AnimalRenderer {
   private readonly ordered: readonly RigPart[]
   /** 나머지 파츠가 매달리는 몸통. 없는 리그는 없지만 방어해 둔다. */
   private readonly root: RigPart | undefined
+  /** 파츠가 실제로 차지하는 사각형. 이게 동물의 몸이다. */
+  private readonly bounds: RigBounds
 
   constructor(
     private readonly spec: RigSpec,
@@ -110,20 +115,29 @@ export class RigRenderer implements AnimalRenderer {
   ) {
     this.ordered = orderedParts(spec)
     this.root = spec.parts.find((p) => p.id === RIG_ROOT)
+    this.bounds = rigBounds(spec)
   }
 
   draw(ctx: CanvasRenderingContext2D, state: AnimalRenderState, view: ViewBox): void {
-    const height = state.scale * view.height
+    /*
+      동물의 높이는 **파츠가 실제로 차지하는 사각형**의 높이다. 그림 상자가 아니다.
+
+      상자를 그대로 몸으로 삼으면 유형마다 크기가 제멋대로가 된다 — 네발짐승은
+      상자의 93% 를 쓰는데 물고기는 54%, 악어는 43% 라 같은 값을 주고도 물고기가
+      사슴의 절반으로 나왔고, 남는 아래 여백만큼 바닥에서 떠 있었다.
+    */
+    const bounds = this.bounds
     // 그림 상자는 정사각으로 잡는다. 파츠 좌표가 모두 그 안의 비율이기 때문이다.
-    const width = height
+    const width = (state.scale * view.height) / bounds.h
+    const height = width
     const frame = this.frameParams(state, height)
 
     ctx.save()
     ctx.translate(state.x * view.width, state.y * view.height - frame.lift)
     if (frame.spin !== 0) ctx.rotate(frame.spin)
     ctx.scale(state.facing, 1)
-    // 발밑이 기준점이다. 상자를 위로 올려 바닥에 세운다.
-    ctx.translate(-width / 2, -height)
+    // 발밑이 기준점이다. 사각형의 아래변이 거기 오도록 상자를 옮긴다.
+    ctx.translate(-bounds.cx * width, -bounds.y1 * height)
 
     // 부모 변환을 먼저 구한다. 몸이 기울면 머리도 꼬리도 함께 기운다.
     const root = this.root
