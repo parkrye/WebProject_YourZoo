@@ -266,3 +266,34 @@ export function rigOf(archetype: MotionArchetype): RigSpec {
 }
 
 export { still as STILL_MOTION }
+
+/**
+ * 파츠 상자가 그림 상자 안에서 차지하는 자리(px).
+ *
+ * **정지 자세의 기준이다.** 움직이는 렌더러도, 썸네일로 굽는 합성도 여기서 시작한다.
+ * 예전에는 이 계산이 렌더러 안에만 있어서, 굽는 쪽이 제 나름대로 자리를 잡았고
+ * 그 결과 창고에서 본 모습과 우리 안에서 본 모습이 서로 달랐다.
+ */
+export function partRect(
+  part: RigPart,
+  width: number,
+  height: number,
+): { x: number; y: number; w: number; h: number } {
+  return {
+    x: (part.cx - part.w / 2) * width,
+    y: (part.cy - part.h / 2) * height,
+    w: part.w * width,
+    h: part.h * height,
+  }
+}
+
+/** 회전축을 상자 안 좌표(0..1)에서 그림 상자 좌표(px)로 옮긴다. */
+export function partPivot(part: RigPart, width: number, height: number): [number, number] {
+  const box = partRect(part, width, height)
+  return [box.x + box.w * part.px, box.y + box.h * part.py]
+}
+
+/** z 순으로 정렬한 파츠. 작을수록 뒤에 그린다. */
+export function orderedParts(spec: RigSpec): readonly RigPart[] {
+  return [...spec.parts].sort((a, b) => a.z - b.z)
+}

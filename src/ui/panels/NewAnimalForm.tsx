@@ -17,8 +17,9 @@ import {
   type AnimalTraits,
 } from '@/domain/traits'
 import { createRng } from '@/core/rng'
+import { composeRig } from '@/render/animal/composeRig'
 import { composeSheet } from '@/render/animal/composeSheet'
-import { registerFromBlob } from '@/sim/imageCache'
+import { getBitmap, registerFromBlob } from '@/sim/imageCache'
 import { putImage } from '@/store/imageDb'
 import { useGameStore } from '@/store/gameStore'
 import { BitmapInput } from '@/ui/components/BitmapInput'
@@ -146,18 +147,28 @@ export function NewAnimalForm({ onDone }: NewAnimalFormProps) {
     } else if (rigged) {
       // 파츠는 각자 따로 저장한다. 렌더러가 부위별로 돌려야 하기 때문이다.
       rigIds = {}
+      const drawnParts = new Map<string, ImageBitmap>()
       for (const [partId, drawing] of Object.entries(rigParts)) {
         const partImageId = `${imageId}-${partId}`
         rigIds[partId] = partImageId
         await registerFromBlob(partImageId, drawing.blob)
+        const decoded = getBitmap(partImageId)
+        if (decoded) drawnParts.set(partId, decoded)
         try {
           await putImage(partImageId, drawing.blob)
         } catch {
           // 저장 실패는 세이브 단계에서 다시 드러난다.
         }
       }
-      // 대표 그림은 몸통이다. 썸네일과 창고 목록에 쓴다.
-      blob = (rigParts.BODY ?? Object.values(rigParts)[0]!).blob
+      /*
+        대표 그림은 파츠를 **정지 자세로 합쳐** 굽는다. 썸네일·창고·도착 알림·
+        드래그 고스트가 전부 이 한 장을 쓴다. 예전에는 몸통 조각을 그대로 썼는데,
+        그래서 사슴을 그린 사람이 어디서도 사슴을 못 보고 노란 덩어리만 봤다.
+        합성이 실패하면 그때만 몸통으로 물러난다 — 아무것도 없는 것보다는 낫다.
+      */
+      blob =
+        (await composeRig(rig, drawnParts))
+        ?? (rigParts.BODY ?? Object.values(rigParts)[0]!).blob
     } else {
       blob = single!.blob
     }

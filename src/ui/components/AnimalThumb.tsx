@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import type { SheetMeta } from '@/domain/animal'
-import { ensureBitmap, getBitmap } from '@/sim/imageCache'
+import type { Animal, SheetMeta } from '@/domain/animal'
+import { ensureBitmap, ensureStillBitmap, getBitmap, getStillBitmap } from '@/sim/imageCache'
 
 interface AnimalThumbProps {
   imageId: string
@@ -13,6 +13,13 @@ interface AnimalThumbProps {
    * **IDLE 첫 칸만** 잘라 그린다 — 목록에서 보고 싶은 건 서 있는 모습 하나다.
    */
   sheet?: SheetMeta | null
+  /**
+   * 리그 동물이면 그 동물 자체.
+   *
+   * 리그는 대표 그림 한 장으로 끝나지 않는다 — 파츠를 합쳐야 그 동물이 된다.
+   * 이걸 주지 않으면 창고에도 도착 알림에도 몸통 한 조각만 뜬다.
+   */
+  rigged?: Animal | null
 }
 
 /**
@@ -21,7 +28,7 @@ interface AnimalThumbProps {
  * 그림은 `ImageBitmap` 으로 캐시되어 있어 `<img>` 로는 못 쓴다.
  * 캔버스에 비율을 유지해 중앙 정렬로 그린다.
  */
-export function AnimalThumb({ imageId, size, className, sheet }: AnimalThumbProps) {
+export function AnimalThumb({ imageId, size, className, sheet, rigged }: AnimalThumbProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -51,20 +58,21 @@ export function AnimalThumb({ imageId, size, className, sheet }: AnimalThumbProp
       ctx.drawImage(bitmap, 0, row * sh, sw, sh, (size - w) / 2, (size - h) / 2, w, h)
     }
 
-    const cached = getBitmap(imageId)
+    const rig = rigged?.rig ? rigged : null
+    const cached = rig ? getStillBitmap(rig) : getBitmap(imageId)
     if (cached) {
       paint(cached)
       return
     }
 
-    void ensureBitmap(imageId).then((bitmap) => {
+    void (rig ? ensureStillBitmap(rig) : ensureBitmap(imageId)).then((bitmap) => {
       if (bitmap) paint(bitmap)
     })
 
     return () => {
       cancelled = true
     }
-  }, [imageId, size, sheet])
+  }, [imageId, size, sheet, rigged])
 
   return <canvas ref={canvasRef} className={className} style={{ width: size, height: size }} />
 }

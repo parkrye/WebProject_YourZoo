@@ -23,7 +23,8 @@ export function AnimalItemThumb({ animal, size }: AnimalItemThumbProps) {
   if (catalog) return <SheetThumb sheet={catalog} size={size} />
   // 직접 구운 시트는 IndexedDB 비트맵이다. 캔버스에서 첫 칸을 잘라 그린다.
   if (meta) return <AnimalThumb imageId={meta.imageId} size={size} sheet={meta} />
-  return <AnimalThumb imageId={animal.imageId} size={size} />
+  // 리그 동물은 파츠를 합쳐야 한 마리가 된다. 동물째로 넘긴다.
+  return <AnimalThumb imageId={animal.imageId} size={size} rigged={animal} />
 }
 
 interface PropItemThumbProps {
