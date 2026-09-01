@@ -31,6 +31,8 @@ import type { Connect, Plugin, ViteDevServer, PreviewServer } from 'vite'
  * | GET | `/api/v1/zoos/random` | — | 본인 제외 랜덤 |
  * | GET | `/api/v1/zoos/:id` | — | 동물원 한 채 |
  * | PUT | `/api/v1/zoos/:id` | 계정이면 토큰 | 공개 |
+ * | GET | `/api/v1/species` | — | 공개된 종 목록 |
+ * | PUT | `/api/v1/species/:id` | 계정이면 토큰 | 내 종 목록 올리기 |
  * | GET | `/api/v1/users/:id/images/:imageId` | — | 그림 |
  */
 /**
@@ -41,8 +43,10 @@ import type { Connect, Plugin, ViteDevServer, PreviewServer } from 'vite'
  *   users/<ID>/account.json      계정 (비회원에게는 없다)
  *   users/<ID>/save.json         이어하기에 필요한 전부
  *   users/<ID>/zoo.json          남에게 보이는 동물원
+ *   users/<ID>/species.json      이 사람이 등록한 종
  *   users/<ID>/images/*.png      그 사람이 그린 것
  *   _index/zoos.json             검색용 요약 캐시
+ *   _index/species.json          공개된 종 목록 캐시
  *   _orphans/*.png               주인을 못 찾은 옛 그림
  * ```
  *
@@ -60,6 +64,8 @@ const USERS = join(ROOT, 'users')
 /** 검색용 요약 캐시. 원본은 늘 각 유저 폴더의 `zoo.json` 이다. */
 const INDEX_DIR = join(ROOT, '_index')
 const ZOO_INDEX = join(INDEX_DIR, 'zoos.json')
+/** 공개된 종만 모아 둔 목록 캐시. 비공개 종은 여기 들어오지 않는다. */
+const SPECIES_INDEX = join(INDEX_DIR, 'species.json')
 /** 옛 평면 저장소에서 주인을 못 찾은 그림. 지우지 않고 여기 모아 둔다. */
 const ORPHANS = join(ROOT, '_orphans')
 
@@ -67,6 +73,7 @@ const userDir = (userId: string): string => join(USERS, userId)
 const accountFile = (userId: string): string => join(userDir(userId), 'account.json')
 const saveFile = (userId: string): string => join(userDir(userId), 'save.json')
 const zooFile = (userId: string): string => join(userDir(userId), 'zoo.json')
+const speciesFile = (userId: string): string => join(userDir(userId), 'species.json')
 const imageDir = (userId: string): string => join(userDir(userId), 'images')
 const imageFile = (userId: string, imageId: string): string =>
   join(imageDir(userId), `${imageId}.png`)
@@ -87,6 +94,8 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024
 const MAX_IMAGES = 120
 const MAX_ANIMALS = 60
 const MAX_PROPS = 120
+/** 한 사람이 등록할 수 있는 종. 그린 동물 하나가 종 하나라 동물 상한과 같이 간다. */
+const MAX_SPECIES = 60
 const MAX_NAME = 32
 
 /** 파일명이 되는 아이디. 대문자와 숫자뿐이라 경로 구분자가 낄 자리가 없다. */
@@ -123,6 +132,22 @@ interface Account {
   token: string
   tokenIssuedAt: number
   createdAt: number
+}
+
+/**
+ * 등록된 종 하나.
+ *
+ * 동물과 달리 **그림 키가 곧 아이디**다. 그래야 이 종에서 나온 개체들이
+ * 클라이언트에서 한 무리로 묶인다. 서버는 그 규칙을 알 필요 없이 아이디만 지킨다.
+ */
+interface SpeciesDoc {
+  id: string
+  ownerId: string
+  name: string
+  visibility: string
+  price: number
+  updatedAt: number
+  [key: string]: unknown
 }
 
 interface ZooDoc {
@@ -183,6 +208,16 @@ const handle: Connect.NextHandleFunction = (req, res, next) => {
     if (!SAFE_ID.test(id)) return void fail(res, 400, 'BAD_ID', 'BAD ID')
     if (req.method === 'GET') return void readSave(id, req, res)
     if (req.method === 'PUT') return void writeSave(id, req, res)
+    return void fail(res, 405, 'BAD_METHOD', 'METHOD NOT ALLOWED')
+  }
+
+  if (route === '/species' && req.method === 'GET') return void listSpecies(url, res)
+
+  const species = /^\/species\/([^/]+)$/.exec(route)
+  if (species) {
+    const id = decodeURIComponent(species[1] ?? '')
+    if (!SAFE_ID.test(id)) return void fail(res, 400, 'BAD_ID', 'BAD ID')
+    if (req.method === 'PUT') return void writeSpecies(id, req, res)
     return void fail(res, 405, 'BAD_METHOD', 'METHOD NOT ALLOWED')
   }
 
@@ -377,6 +412,110 @@ function writeSave(userId: string, req: IncomingMessage, res: ServerResponse): v
     pruneImages(userId)
     ok(res, {})
   })
+}
+
+// ─────────────────────────────────────────────────────────────
+// 종
+//
+// 그린 동물은 한 마리로 끝나지 않는다. 등록해 두면 같은 값에 다시 데려오고,
+// 공개하면 남도 데려간다. 여기 올라오는 건 **공개 여부까지 포함한 목록 전체**다 —
+// 비공개로 되돌린 종은 목록에서 빠져야 하는데, 하나씩 올리면 빠진 걸 알 수 없다.
+// ─────────────────────────────────────────────────────────────
+
+function listSpecies(url: URL, res: ServerResponse): void {
+  const exclude = text(url.searchParams.get('exclude'))
+  const species = readSpeciesIndex()
+    .filter((doc) => doc.ownerId !== exclude)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .slice(0, MAX_SPECIES)
+
+  ok(res, { species })
+}
+
+function writeSpecies(id: string, req: IncomingMessage, res: ServerResponse): void {
+  if (!authorized(id, req)) return void fail(res, 403, 'FORBIDDEN', 'NOT YOUR SPECIES')
+
+  void readJson(req, res).then((body) => {
+    if (!body) return
+    if (!storeImages(id, body.images, res)) return
+
+    const list = asSpeciesList(id, body.species)
+    if (!list) return void fail(res, 400, 'BAD_SPECIES', 'BAD SPECIES DATA')
+
+    ensureUser(id)
+    writeFileSync(speciesFile(id), JSON.stringify(list), 'utf8')
+    updateSpeciesIndex(id, list)
+    pruneImages(id)
+    ok(res, {})
+  })
+}
+
+/**
+ * 들어온 목록을 받아들일지 정한다.
+ *
+ * 아이디와 주인은 **경로에서 받은 값으로 덮어쓴다.** 본문이 뭐라고 하든
+ * 이 목록은 이 사람의 것이고, 남의 이름을 달고 종을 올릴 자리를 만들 이유가 없다.
+ */
+function asSpeciesList(userId: string, value: unknown): SpeciesDoc[] | null {
+  if (!Array.isArray(value) || value.length > MAX_SPECIES) return null
+
+  const out: SpeciesDoc[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+    const doc = item as Record<string, unknown>
+    const id = text(doc.id)
+    if (!SAFE_IMAGE_ID.test(id)) return null
+
+    out.push({
+      ...doc,
+      id,
+      ownerId: userId,
+      name: text(doc.name).slice(0, MAX_NAME),
+      visibility: doc.visibility === 'PUBLIC' ? 'PUBLIC' : 'PRIVATE',
+      price: count(doc.price),
+      updatedAt: Date.now(),
+    })
+  }
+  return out
+}
+
+/**
+ * 공개된 종만 모은 목록.
+ *
+ * 동물원 목록과 달리 요약을 따로 만들지 않는다 — 종 하나는 습성과 리그 표까지
+ * 다 합쳐도 몇 줄이고, 상점에서 고르려면 어차피 그게 전부 필요하다.
+ */
+function readSpeciesIndex(): SpeciesDoc[] {
+  const cached = parseFile<SpeciesDoc[]>(SPECIES_INDEX)
+  if (Array.isArray(cached)) return cached
+  return rebuildSpeciesIndex()
+}
+
+function rebuildSpeciesIndex(): SpeciesDoc[] {
+  const list: SpeciesDoc[] = []
+  for (const id of userIds()) list.push(...publicOnly(loadSpecies(id)))
+  writeSpeciesIndex(list)
+  return list
+}
+
+/** 한 사람의 목록이 바뀌었다. 그 사람 몫만 갈아 끼운다. */
+function updateSpeciesIndex(userId: string, list: readonly SpeciesDoc[]): void {
+  const kept = readSpeciesIndex().filter((doc) => doc.ownerId !== userId)
+  writeSpeciesIndex([...kept, ...publicOnly(list)])
+}
+
+function writeSpeciesIndex(list: readonly SpeciesDoc[]): void {
+  ensureRoot()
+  writeFileSync(SPECIES_INDEX, JSON.stringify(list), 'utf8')
+}
+
+const publicOnly = (list: readonly SpeciesDoc[]): SpeciesDoc[] =>
+  list.filter((doc) => doc.visibility === 'PUBLIC')
+
+function loadSpecies(userId: string): SpeciesDoc[] {
+  ensureRoot()
+  const list = parseFile<SpeciesDoc[]>(speciesFile(userId))
+  return Array.isArray(list) ? list : []
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -668,7 +807,7 @@ function referencedImages(userId: string): Set<string> | null {
   const ids = new Set<string>()
   let read = 0
 
-  for (const file of [saveFile(userId), zooFile(userId)]) {
+  for (const file of [saveFile(userId), zooFile(userId), speciesFile(userId)]) {
     if (!existsSync(file)) continue
     const doc = parseFile<unknown>(file)
     if (doc === null) return null

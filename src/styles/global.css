@@ -204,15 +204,7 @@ html, body, #root {
   border: 2px solid rgba(138, 90, 43, 0.7);
   border-radius: 10px;
   text-align: center;
-  cursor: pointer;
-  transition: filter 0.12s ease, border-color 0.12s ease;
 }
-.hud-enclosure-name:hover:not(:disabled) {
-  filter: brightness(1.15);
-  border-color: #d9a441;
-}
-/* 남의 동물원이나 잠긴 우리에서는 그냥 이름표다. */
-.hud-enclosure-name:disabled { cursor: default; }
 
 .enclosure-head { display: flex; flex-direction: column; gap: 2px; }
 
@@ -1056,6 +1048,55 @@ html, body, #root {
   background: rgba(120, 92, 52, 0.12);
 }
 
+/*
+  손님이 남긴 말 한 줄.
+  아이콘 · 문장 · 날짜 세 칸이다. 문장만 늘어나고 양옆은 폭이 고정이라
+  아이콘 줄이 위아래로 곧게 선다 — 목록을 훑을 때 부호가 먼저 읽혀야 한다.
+*/
+.review-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 2px solid rgba(183, 154, 107, 0.4);
+}
+.review-row:last-child { border-bottom: 0; }
+
+/* 칭찬과 불평의 수. 목록 맨 위에서 오늘의 분위기를 한눈에 알려 준다. */
+/*
+  따라가는 중의 아래 띠는 칸이 하나뿐이다.
+  평소의 `1fr auto 1fr` 을 그대로 두면 가운데 그룹이 첫 칸에 놓여 왼쪽에 붙는다.
+*/
+.hud-bottom-bar.is-follow {
+  grid-template-columns: 1fr;
+}
+.hud-bottom-bar.is-follow .bar-center {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.review-tally {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  padding: 4px 0 10px;
+}
+
+.review-tally-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.review-tally-side.is-minus { opacity: 0.75; }
+
+.animal-card-voices {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
 .order-head {
   display: grid;
   grid-template-columns: 1fr auto auto auto auto;
@@ -1287,6 +1328,7 @@ html, body, #root {
   transition: transform 0.08s ease, filter 0.12s ease;
 }
 .shop-card:hover:not(:disabled) { transform: translateY(-3px); filter: brightness(1.05); }
+.shop-card:has(.shop-card-body:hover:not(:disabled)) { transform: translateY(-3px); filter: brightness(1.05); }
 /* 살 수 없는 상품은 흐리게. 목록에서 빼면 무엇이 있는지 자체를 알 수 없다. */
 .shop-card:disabled { opacity: 0.42; cursor: default; }
 
@@ -1295,6 +1337,42 @@ html, body, #root {
   align-items: center;
   gap: 5px;
 }
+
+/*
+  종 카드는 안에 단추가 하나 더 있다 — 데려오기와 공개하기는 다른 일이라
+  같은 판을 나눠 쓰되 누르는 자리는 갈라야 한다. 그래서 카드 자체는 단추가 아니고,
+  그림과 값을 담은 위쪽만 눌러서 고른다.
+*/
+.shop-card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+}
+.shop-card-body:disabled { opacity: 0.42; cursor: default; }
+
+.species-toggle,
+.species-owner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 100%;
+  padding: 4px 0 2px;
+  border: 0;
+  border-top: 2px solid rgba(200, 168, 106, 0.85);
+  background: none;
+}
+.species-toggle { cursor: pointer; }
+.species-toggle:hover { filter: brightness(1.08); }
+/* 남의 종에는 주인만 적는다. 누를 데가 아니므로 흐리게 둔다. */
+.species-owner { opacity: 0.7; }
 
 /* 시트와 프롭 썸네일. 배경 위치로 한 칸만 잘라 쓴다. */
 .sprite-thumb {

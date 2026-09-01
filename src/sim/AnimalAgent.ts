@@ -1,5 +1,6 @@
 import {
   ANIMAL_HEIGHT, LOGICAL_HEIGHT, LOGICAL_WIDTH, PERSPECTIVE_SCALE, ROAM_BOX,
+  SKY_HOVER, SKY_PERSPECTIVE,
   type Habitat, type RoamBox,
 } from '@/assets/manifest'
 
@@ -9,6 +10,7 @@ import type { AgentView, AnimalBlackboard, Vec2 } from '@/ai/types'
 import { clamp, inverseLerp, lerp } from '@/core/math'
 import { randRange, type Rng } from '@/core/rng'
 import type { Animal, AnimalMotion } from '@/domain/animal'
+import { speciesKeyOf } from '@/domain/species'
 import type { AnimalRenderer, AnimalRenderState } from '@/render/animal/AnimalRenderer'
 import type { PlacedProp } from './props'
 
@@ -25,6 +27,7 @@ export class AnimalAgent implements AgentView {
   motion: AnimalMotion = 'IDLE'
   motionTime = 0
   restCooldown = 0
+  drinkCooldown = 0
   facing: 1 | -1 = 1
   /** 비트맵 로드가 끝나면 EnclosureSim 이 채운다. 그 전까지는 그리지 않는다. */
   renderer: AnimalRenderer | null = null
@@ -61,6 +64,10 @@ export class AnimalAgent implements AgentView {
 
   get habitat(): Habitat {
     return this.animal.traits.habitat
+  }
+
+  get speciesKey(): string {
+    return speciesKeyOf(this.animal)
   }
 
   get roam(): RoamBox {
@@ -102,6 +109,7 @@ export class AnimalAgent implements AgentView {
   integrate(dt: number, props: readonly PlacedProp[]): void {
     this.motionTime += dt
     if (this.restCooldown > 0) this.restCooldown -= dt
+    if (this.drinkCooldown > 0) this.drinkCooldown -= dt
 
     const desired = this.desiredVelocity()
     this.vx += (desired.x - this.vx) * Math.min(1, dt * STEER_RESPONSE)
@@ -140,16 +148,23 @@ export class AnimalAgent implements AgentView {
     return clamp(Math.hypot(this.vx, this.vy) / this.maxSpeed, 0, 1)
   }
 
-  /** 원근 보정을 반영한 렌더 상태. y 가 클수록 카메라에 가까우니 크게 그린다. */
+  /**
+   * 원근 보정을 반영한 렌더 상태. y 가 클수록 카메라에 가까우니 크게 그린다.
+   *
+   * 하늘도 이제 원근을 탄다 — 우리 전체를 날게 된 이상 안 그러면 화면을 가로질러도
+   * 크기가 그대로라 배경에 붙은 스티커로 보인다. 다만 **폭이 좁고 발밑이 떠 있다.**
+   * 물가까지 내려온 새가 물고기만큼 커지면서 같은 선에 발을 딛으면 나는 게 아니다.
+   */
   toRenderState(): AnimalRenderState {
     const box = this.roam
+    const sky = this.habitat === 'SKY'
     const depth = inverseLerp(box.y0, box.y1, this.y)
-    const perspective =
-      this.habitat === 'SKY' ? 1 : lerp(PERSPECTIVE_SCALE.far, PERSPECTIVE_SCALE.near, depth)
+    const scale = sky ? SKY_PERSPECTIVE : PERSPECTIVE_SCALE
+    const perspective = lerp(scale.far, scale.near, depth)
 
     return {
       x: this.x,
-      y: this.y,
+      y: sky ? this.y - SKY_HOVER : this.y,
       facing: this.facing,
       motion: this.motion,
       motionTime: this.motionTime,

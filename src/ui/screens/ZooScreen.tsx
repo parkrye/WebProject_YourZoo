@@ -26,6 +26,7 @@ import { AnimalCard } from '@/ui/panels/AnimalCard'
 import { StorageTray, type DragState } from '@/ui/panels/StorageTray'
 import { TutorialOverlay } from '@/ui/panels/TutorialOverlay'
 import { TUTORIAL_HINTS } from '@/domain/tutorial'
+import type { Review } from '@/domain/review'
 
 interface ZooScreenProps {
   detail: boolean
@@ -44,6 +45,19 @@ const SLIDE_DURATION = 0.42
  * 다만 완전히 치우지는 않는다 — 울타리가 사라지면 우리 경계도 함께 사라진다.
  */
 const FENCE_OFFSET_DRAGGING = 0.46
+/**
+ * 동물을 따라가는 전용 뷰의 배율.
+ * 한 마리가 화면을 채우되 여기가 어느 우리인지는 남을 만큼만 당긴다.
+ */
+const FOLLOW_ZOOM = 2.5
+/**
+ * 카메라가 동물을 쫓는 속도.
+ *
+ * 좌표를 그대로 따라 붙이면 동물이 화면 한복판에 못 박히고, 대신 **배경이 흔들린다** —
+ * 걸음마다 좌우로 미세하게 떨리는 것이 전부 카메라로 옮겨 붙는다.
+ * 조금 뒤처지게 두면 사람이 카메라를 잡고 따라가는 것처럼 보인다.
+ */
+const FOLLOW_RESPONSE = 4
 
 export function ZooScreen({ detail }: ZooScreenProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -65,6 +79,14 @@ export function ZooScreen({ detail }: ZooScreenProps) {
   /** 관찰 전용 모드. HUD 를 전부 걷고 화면만 남긴다. */
   const [hudHidden, setHudHidden] = useState(false)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  /**
+   * 카메라가 따라다니는 동물.
+   *
+   * ref 가 진짜 소유자다 — 매 프레임 카메라를 옮기는 것은 틱 루프이고,
+   * state 로만 두면 그 루프가 한 박자 늦은 값을 본다.
+   */
+  const followRef = useRef<string | null>(null)
+  const [following, setFollowing] = useState<string | null>(null)
   /** 커서로 집은 배치된 프롭. 창고로 되돌릴 때만 쓴다. */
   const [pickedProp, setPickedProp] = useState<OwnedProp | null>(null)
   const selectedIdRef = useRef<string | null>(null)
@@ -143,6 +165,11 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     () => animals.find((a) => a.id === selectedId) ?? null,
     [animals, selectedId],
   )
+  /** 따라가는 중에 띠에 적는 이름. 목록에서 빠진 사이라면 빈 문자열이다. */
+  const followName = useMemo(
+    () => (following ? (animals.find((a) => a.id === following)?.name ?? '') : ''),
+    [animals, following],
+  )
 
   const select = useCallback((id: string | null) => {
     selectedIdRef.current = id
@@ -154,16 +181,30 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     setCamera(next)
   }, [])
 
+  const stopFollow = useCallback(() => {
+    followRef.current = null
+    setFollowing(null)
+    applyCameraState(createCamera())
+  }, [applyCameraState])
+
+  /** 이 동물을 따라간다. 손 도구와 창고는 여기서 할 일이 없으므로 걷는다. */
+  const startFollow = useCallback((id: string) => {
+    followRef.current = id
+    setFollowing(id)
+    setTool('CURSOR')
+    setTrayOpen(false)
+  }, [])
+
   // 상세보기를 벗어나면 카메라·선택·트레이를 원위치시킨다.
   useEffect(() => {
     if (detail) return
-    applyCameraState(createCamera())
+    stopFollow()
     setTool('CURSOR')
     setTrayOpen(false)
     setHudHidden(false)
     select(null)
     setPickedProp(null)
-  }, [detail, applyCameraState, select])
+  }, [detail, stopFollow, select])
 
   useEffect(() => {
     for (const sim of sims.values()) sim.syncAnimals(animals)
@@ -204,13 +245,45 @@ export function ZooScreen({ detail }: ZooScreenProps) {
 
         const phase = phaseOf(store.clock.elapsed)
         const shown = store.visiting ? store.visitEnclosure : store.currentEnclosure
+        const fresh: Review[] = []
         for (const [id, sim] of sims) {
           sim.update(step, {
             // 손님 수는 보고 있는 동물원의 명성을 따른다. 구경 중에 내 명성으로 세면 안 된다.
             reputation: store.visiting ? store.visiting.reputation : store.reputation,
             phase,
             active: id === shown,
+            day: store.clock.day,
+            capacity: store.capacity[id],
+            // 남의 동물원에서 나온 말은 그 사람의 평가다. 내 목록에 담지 않는다.
+            collectReviews: !store.visiting,
           })
+          fresh.push(...sim.drainReviews())
+        }
+        // 우리 셋의 몫을 모아 한 번에 넘긴다. 우리마다 밀어 넣으면 한 프레임에 세 번 리렌더한다.
+        store.pushReviews(fresh)
+
+        /*
+          따라가는 중이면 카메라가 그 동물을 쫓는다.
+
+          동물이 사라졌으면(창고로 넣었거나 팔았거나) 스스로 그만둔다 —
+          빈 자리를 계속 비추고 있으면 화면이 고장 난 것으로 보인다.
+        */
+        const followId = followRef.current
+        if (followId) {
+          const agent = sims.get(shown)?.findAnimal(followId) ?? null
+          if (!agent) {
+            followRef.current = null
+            setFollowing(null)
+            applyCameraState(createCamera())
+          } else {
+            const cam = cameraRef.current
+            const k = Math.min(1, step * FOLLOW_RESPONSE)
+            cameraRef.current = clampCamera({
+              zoom: FOLLOW_ZOOM,
+              x: cam.x + (agent.x - cam.x) * k,
+              y: cam.y + (agent.y - cam.y) * k,
+            })
+          }
         }
 
         // 드래그 중 시야를 비우는 것도 같은 트윈을 탄다. 뚝 끊기면 놓을 자리를 놓친다.
@@ -237,12 +310,17 @@ export function ZooScreen({ detail }: ZooScreenProps) {
           fenceOffset: fenceRef.current,
           dropGuide: dropGuideRef.current,
           camera: cameraRef.current,
-          selectedId: selectedIdRef.current,
+          /*
+            따라가는 중에는 발밑 링을 그리지 않는다.
+            누구를 보고 있는지는 카메라가 이미 말하고 있고, 배율을 당긴 화면에서
+            그 링은 동물보다 커져 한복판에 커다란 타원이 걸린다.
+          */
+          selectedId: followRef.current ? null : selectedIdRef.current,
           transition: transitionRef.current,
         })
       },
     })
-  }, [detail, renderer, sims])
+  }, [detail, renderer, sims, applyCameraState])
 
   /**
    * 뷰포트 좌표를 Stage 안쪽의 논리 좌표로 바꾼다.
@@ -302,6 +380,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     if (picked) {
       select(picked.id)
       setPickedProp(null)
+      // 따라가는 중이라면 대상을 갈아탄다. 한 번 멈췄다 다시 고를 이유가 없다.
+      if (followRef.current) startFollow(picked.id)
       return
     }
 
@@ -345,6 +425,8 @@ export function ZooScreen({ detail }: ZooScreenProps) {
     if (transitionRef.current) return
     const from = sims.get(enclosure)
     if (from) transitionRef.current = { from, direction, progress: 0 }
+    // 따라가던 동물은 저 우리에 있다. 넘어가면 쫓을 대상이 없다.
+    stopFollow()
     select(null)
     moveEnclosure(direction)
   }
@@ -511,27 +593,23 @@ export function ZooScreen({ detail }: ZooScreenProps) {
               </div>
 
               {/*
-                이름표를 누르면 그 우리를 손본다. 아래 띠에 단추를 하나 더 두는 것보다
-                **고칠 대상 위에서** 여는 편이 무엇을 고치는지 분명하다.
+                여기서는 이름을 읽기만 한다. 고치는 것은 상세보기 안에서만 한다 —
+                우리를 손보는 일은 그 우리에 **들어가서** 하는 것이고,
+                무엇보다 밖에서는 지금 그 우리가 어떤 상태인지 보이지 않는다.
               */}
-              <button
-                type="button"
-                className="hud-enclosure-name"
-                disabled={!!visiting || !isOpen}
-                onClick={() => openModal('ENCLOSURE')}
-              >
+              <div className="hud-enclosure-name">
                 <BitmapLabel text={enclosureLabel(enclosure, names)} size={38} align="center" />
                 <BitmapLabel
                   text={isOpen ? `ANIMALS ${here} / ${room}` : 'LOCKED'}
                   size={22}
                   align="center"
                 />
-              </button>
+              </div>
             </>
           )}
 
           {/* 구경 중에 연 우리가 하나뿐이면 화살표 자체를 띄우지 않는다. 눌러도 갈 데가 없다. */}
-          {canMove && (
+          {canMove && !following && (
             <>
               <div className="hud-arrow hud-arrow-left">
                 <IconButton icon={GUI.BACK} size={72} title="PREV" onClick={() => slideTo(-1)} />
@@ -566,11 +644,14 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             </div>
           )}
 
-          {selected && (
+          {selected && !following && (
             <AnimalCard
               animal={selected}
               onClose={() => select(null)}
               readOnly={visiting !== null}
+              {...(detail && selected.status === 'PLACED' && {
+                onFollow: () => startFollow(selected.id),
+              })}
               {...(!visiting && selected.status === 'PLACED' && {
                 onStore: () => {
                   storeAnimal(selected.id)
@@ -586,6 +667,21 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             />
           )}
 
+          {/*
+            따라가는 중에는 화면에 그 동물만 남긴다. 전용 뷰라는 말이 그 뜻이다 —
+            창고도 요청서도 여기서 할 일이 아니고, 띠가 남아 있으면 여전히
+            우리를 둘러보는 화면으로 읽힌다. 이름과 나가는 문만 남긴다.
+          */}
+          {following && (
+            <div className="hud-bottom-bar is-follow">
+              <div className="bar-group bar-center">
+                <BitmapLabel text={`FOLLOWING ${followName}`} size={26} />
+                <BarButton icon={GUI.BACK} label="STOP" onClick={stopFollow} />
+              </div>
+            </div>
+          )}
+
+          {!following && (
           <div className="hud-bottom-bar">
             <div className="bar-group bar-left">
               {detail ? (
@@ -681,6 +777,7 @@ export function ZooScreen({ detail }: ZooScreenProps) {
               />
             </div>
           </div>
+          )}
         </>
       )}
 

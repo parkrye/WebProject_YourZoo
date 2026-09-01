@@ -1,14 +1,15 @@
 import { getAssets } from '@/assets/AssetStore'
 import {
-  LOGICAL_HEIGHT, LOGICAL_WIDTH, PLACE_BOX, VISITOR_HEIGHT,
+  GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH, PLACE_BOX, VISITOR_HEIGHT,
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
+import { guiSheet } from '@/assets/guiSheet'
 import { easeInOutCubic } from '@/core/math'
 import { phaseBlend, timeLighting, type AreaLight, type FenceLight } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
 import type { EnclosureSim } from '@/sim/EnclosureSim'
 import { ensureBitmap, getBitmap } from '@/sim/imageCache'
-import { propBand, PROP_BOB, PROP_SWAY, type PlacedProp } from '@/sim/props'
+import { PROP_BOB, PROP_SWAY, type PlacedProp } from '@/sim/props'
 import type { VisitorAgent } from '@/sim/VisitorAgent'
 import type { ViewBox } from './animal'
 import { applyCamera, type Camera } from './camera'
@@ -60,13 +61,13 @@ type Drawable =
 /**
  * 우리 화면의 레이어 합성.
  *
- * z0 하늘 → z1 바이옴 → z2 하늘동물 → z3 땅프롭+땅동물 → z4 물프롭+물동물
- * → z5 펜스 → z6 손님   (docs/01-assets.md §3)
+ * z0 하늘 → z1 바이옴 → z2 우리 안의 모든 것 → z3 펜스 → z4 손님
+ * (docs/01-assets.md §3)
  *
  * **손님은 펜스보다 앞이다.** 뒤에 그리면 펜스 안쪽에 서 있는 꼴이 되어
  * 관람객이 우리에 갇힌 것처럼 보인다. 관람객은 난간 이쪽 편에 서 있어야 한다.
  *
- * z3·z4 는 프롭과 동물을 **하나의 목록으로 합쳐 y 오름차순 정렬**해 그린다.
+ * z2 는 프롭과 동물을 **하나의 목록으로 합쳐 y 오름차순 정렬**해 그린다.
  * 그래야 동물이 프롭 뒤로 지나갈 때 프롭에 가려진다.
  */
 export class SceneRenderer {
@@ -117,10 +118,8 @@ export class SceneRenderer {
     dim(ctx, view, light.sky.brightness)
 
     ctx.drawImage(getAssets().area[sim.biome], 0, 0, view.width, view.height)
-    // 하늘도 같은 패스를 쓴다. 예전에는 동물만 그려서 **하늘에 매단 프롭이 사라졌다.**
-    this.drawSortedLayer(ctx, sim, 'SKY', view)
-    this.drawSortedLayer(ctx, sim, 'LAND', view)
-    this.drawSortedLayer(ctx, sim, 'WATER', view)
+    // 동물도 프롭도 한 패스에서 깊이순으로 그린다. 하늘에 매단 프롭도 여기 낀다.
+    this.drawSortedScene(ctx, sim, view)
     this.drawAreaLight(ctx, light.area, view)
 
     // 안내선은 조명 뒤에 그린다. 밤에 같이 어두워지면 알려 주는 구실을 못 한다.
@@ -287,23 +286,22 @@ export class SceneRenderer {
     ctx.globalAlpha = 1
   }
 
-  private drawSortedLayer(
-    ctx: CanvasRenderingContext2D,
-    sim: EnclosureSim,
-    layer: Habitat,
-    view: ViewBox,
-  ): void {
+  /**
+   * 우리 안의 모든 것을 **깊이 한 줄로 세워** 그린다.
+   *
+   * 예전에는 하늘 → 땅 → 물 순으로 세 번 나눠 그렸다. 그때는 세 서식지의 y 범위가
+   * 겹치지 않아서 그 순서가 곧 깊이 순서였다. 하늘이 우리 전체를 날게 된 지금은
+   * 아니다 — 물 위를 나는 새가 하늘 패스에서 먼저 그려져 **물고기 뒤로 숨었다.**
+   *
+   * y 는 서식지와 무관하게 바닥에 비친 깊이다. 그걸로 한 번에 정렬하면 맞다.
+   * 범위가 겹치지 않던 시절의 결과와도 같다.
+   */
+  private drawSortedScene(ctx: CanvasRenderingContext2D, sim: EnclosureSim, view: ViewBox): void {
     // 프레임마다 배열을 새로 만들면 GC 압력이 커진다. 하나를 비워 재사용한다.
     this.buffer.length = 0
 
-    // 프롭은 만들 때 고른 거동과 무관하게 **놓인 높이**로 층이 정해진다.
-    // 하늘에 매단 통나무가 땅 동물보다 앞에 오면 안 된다.
-    for (const prop of sim.props) {
-      if (propBand(prop.y) === layer) this.buffer.push({ kind: 'PROP', y: prop.y, prop })
-    }
-    for (const agent of sim.animals) {
-      if (agent.habitat === layer) this.buffer.push({ kind: 'ANIMAL', y: agent.y, agent })
-    }
+    for (const prop of sim.props) this.buffer.push({ kind: 'PROP', y: prop.y, prop })
+    for (const agent of sim.animals) this.buffer.push({ kind: 'ANIMAL', y: agent.y, agent })
 
     this.buffer.sort(byDepth)
 
@@ -451,10 +449,84 @@ export class SceneRenderer {
       const sq = v.squash
       const vh = own * sq
       const vw = (own * (frame.sw / frame.sh)) / sq
-      visitor.draw(ctx, v.spriteIndex, v.x * view.width - vw / 2, footY - vh, vw, vh)
+      const headY = footY - vh
+      visitor.draw(ctx, v.spriteIndex, v.x * view.width - vw / 2, headY, vw, vh)
+      if (v.bubble !== null) this.drawBubble(ctx, v.x * view.width, headY, own, v.bubble)
     }
   }
+
+  /**
+   * 손님 머리 위의 한마디.
+   *
+   * 글자가 아니라 아이콘 하나다. 관람로에 스무 명이 서 있고 저마다 문장을 띄우면
+   * 우리 안이 글자에 덮인다. 좋았는지 아쉬웠는지는 부호 하나로 충분하고,
+   * 문장은 평가 목록에서 천천히 읽는다.
+   *
+   * 크기는 **그 손님의 키에 견주어** 정한다. 앞뒤로 흩어 세운 만큼 사람마다
+   * 크기가 다른데 풍선만 같은 크기면 뒷사람 머리 위에 남의 풍선이 뜬 것처럼 보인다.
+   */
+  private drawBubble(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    headY: number,
+    ownHeight: number,
+    sentiment: 1 | -1,
+  ): void {
+    const size = ownHeight * BUBBLE_SIZE
+    const pad = size * BUBBLE_PAD
+    const box = size + pad * 2
+    const top = headY - box - size * BUBBLE_GAP
+    const left = x - box / 2
+
+    ctx.save()
+    ctx.fillStyle = BUBBLE_FILL
+    ctx.strokeStyle = BUBBLE_LINE
+    ctx.lineWidth = Math.max(1, size * 0.06)
+
+    ctx.beginPath()
+    ctx.roundRect(left, top, box, box, box * 0.28)
+    ctx.fill()
+    ctx.stroke()
+
+    // 꼬리. 누가 한 말인지는 이것으로만 읽힌다.
+    const tail = box * 0.22
+    ctx.beginPath()
+    ctx.moveTo(x - tail, top + box - ctx.lineWidth / 2)
+    ctx.lineTo(x, top + box + tail)
+    ctx.lineTo(x + tail, top + box - ctx.lineWidth / 2)
+    ctx.closePath()
+    ctx.fill()
+
+    const { atlas, index } = guiSheet(sentiment === 1 ? REVIEW_ICON.GOOD : REVIEW_ICON.BAD)
+    atlas.drawContained(ctx, index, left + pad, top + pad, size, size)
+    ctx.restore()
+  }
 }
+
+/**
+ * 감상을 나타내는 아이콘.
+ *
+ * 좋은 쪽은 두 번째 시트의 하트다 — 배경 없는 픽셀 아트라 풍선 안에 그대로 들어간다.
+ * 아쉬운 쪽은 **짝이 맞는 그림이 아직 없다.** 첫 시트의 X 는 나무 판때기에
+ * 월계수까지 두른 단추라 풍선 안에서 혼자 튄다. 깨진 하트가 들어오면
+ * 여기 한 줄만 바꾸면 된다.
+ */
+const REVIEW_ICON = { GOOD: GUI.HEART, BAD: GUI.CLOSE } as const
+
+/**
+ * 풍선 안 아이콘의 크기. 손님 키에 대한 비율이다.
+ *
+ * 작게 잡는다. 이건 읽는 것이 아니라 **눈에 띄기만 하면 되는** 표시다 —
+ * 관람로에 열댓 명이 서 있고 그중 몇이 동시에 말하는데, 하나가 크면
+ * 우리의 한 귀퉁이가 통째로 가린다. 문장은 어차피 평가 목록에서 읽는다.
+ */
+const BUBBLE_SIZE = 0.11
+/** 아이콘 둘레의 여백. 아이콘 크기에 대한 비율이다. */
+const BUBBLE_PAD = 0.22
+/** 머리 꼭대기와 풍선 사이. 붙여 놓으면 모자처럼 보인다. */
+const BUBBLE_GAP = 0.2
+const BUBBLE_FILL = '#fbf3e0'
+const BUBBLE_LINE = '#8a5a2b'
 
 const byDepth = (a: Drawable, b: Drawable): number => a.y - b.y
 const byVisitorDepth = (a: VisitorAgent, b: VisitorAgent): number => a.depth - b.depth

@@ -14,6 +14,10 @@ import {
   isShopAnimal, sellRefund, shopAnimalAppeal, shopAnimalTraits, sheetImageId, shopPropName,
   type ShopAnimal, type ShopProp,
 } from '@/domain/shop'
+import {
+  animalFromSpecies, speciesFromAnimal, speciesImageIds, upsertSpecies,
+  type SpeciesDoc, type SpeciesVisibility,
+} from '@/domain/species'
 import { MOTION_PROFILES } from '@/domain/motion'
 import { templateOf } from '@/domain/templates'
 import { bakeSheet } from '@/render/animal/bakeSheet'
@@ -26,17 +30,18 @@ import {
   emptyAnimalDraft, emptyPropDraft, emptyRequestDraft,
   type AnimalDraft, type PropDraft, type RequestDraft, type RequestTab,
 } from '@/domain/requestDraft'
+import { reviewBalance, type Review } from '@/domain/review'
 import { type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
 import { ensureBitmap, forgetBitmap, getBitmap, preloadRemote, registerFromBlob } from '@/sim/imageCache'
-import { deleteImage, putImage } from './imageDb'
+import { deleteImage, getImage, putImage } from './imageDb'
 import { clearSave, loadSave, writeSave, type SaveV2 } from './save'
-import { publishZoo, type ZooDoc } from '@/net/zooApi'
+import { publishZoo, remoteImageUrl, type ZooDoc } from '@/net/zooApi'
+import { publishSpecies } from '@/net/speciesApi'
 import {
   fetchCloudSave, logIn, pushCloudSave, signUp, type Account,
 } from '@/net/authApi'
-import { getImage } from './imageDb'
 
 export type ScreenId = 'TITLE' | 'AUTH' | 'NAMING' | 'ZOO' | 'ZOO_DETAIL'
 export type ModalId =
@@ -112,9 +117,23 @@ interface GameState {
   /** 우리마다의 정원. 골드를 들여 늘린다. */
   capacity: Record<BiomeId, number>
   animals: Animal[]
+  /**
+   * 내가 등록한 종. 그린 동물 하나가 종 하나다.
+   *
+   * 동물 목록과 따로 산다 — 마지막 한 마리를 팔아도 종은 남아야
+   * "다시 데려온다"는 말이 성립한다.
+   */
+  species: SpeciesDoc[]
   /** 소유한 프롭. 동물과 같은 배송 -> 창고 -> 배치 흐름을 탄다. */
   props: OwnedProp[]
   orders: Order[]
+  /**
+   * 손님이 남긴 한마디. 최근 것부터 쌓인다.
+   *
+   * 오래된 것은 버린다 — 하루에 수십 줄이 나오는데 전부 들고 있으면 세이브가
+   * 평가로 가득 찬다. 어제 누가 뭐라 했는지는 오늘의 판단에 쓰이지 않는다.
+   */
+  reviews: Review[]
   /** 작성 중인 요청서. 세션 동안만 유지되고 세이브에는 넣지 않는다. */
   draft: RequestDraft
   lastReport: DailyReport | null
@@ -189,6 +208,15 @@ interface GameState {
   renameAnimal(id: string, name: string): void
   /** 상점에서 동물을 산다. 코인을 내고 배송을 건다. */
   buyShopAnimal(item: ShopAnimal): boolean
+  /** 등록한 종을 공개하거나 도로 감춘다. */
+  setSpeciesVisibility(id: string, visibility: SpeciesVisibility): void
+  /**
+   * 등록된 종에서 한 마리를 데려온다. 원본을 그리는 데 든 값과 같은 값을 낸다.
+   *
+   * 남의 종이면 그림을 먼저 받아 와야 해서 비동기다 — 그림 없이 만들면
+   * 창고에 이름만 있는 빈 칸이 생긴다.
+   */
+  buySpecies(species: SpeciesDoc): Promise<boolean>
   /** 상점에서 프롭을 산다. 코인을 내고 배송을 건다. */
   buyShopProp(item: ShopProp): boolean
   /** 직접 그린 프롭을 주문한다. 값은 만드는 방식이 정한다. */
@@ -199,6 +227,8 @@ interface GameState {
   storeProp(id: string): boolean
   /** 창고에서 판매. 값의 절반을 돌려받는다. */
   sellProp(id: string): boolean
+  /** 손님이 남긴 말을 받아 둔다. 화면 쪽이 프레임마다 모아 한 번에 넘긴다. */
+  pushReviews(list: readonly Review[]): void
   /** 의뢰를 이행한다. 동물을 넘기고 보상을 받는다. */
   fulfillOrder(orderId: string, animalId: string): boolean
   canPlaceIn(enclosureId: BiomeId): boolean
@@ -247,8 +277,10 @@ const initial = {
     ICE: MAX_ANIMALS_PER_ENCLOSURE,
   } as Record<BiomeId, number>,
   animals: [] as Animal[],
+  species: [] as SpeciesDoc[],
   props: [] as OwnedProp[],
   orders: [] as Order[],
+  reviews: [] as Review[],
   draft: emptyRequestDraft(),
   lastReport: null as DailyReport | null,
   reports: [] as DailyReport[],
@@ -401,6 +433,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         unlocked: state.unlocked,
         reputation,
         arrivedCount: arriving.length,
+        /*
+          평가는 **첫날치에만** 반영한다. 탭이 꺼진 채로 사흘이 지나면 여기서
+          사흘을 한꺼번에 정산하는데, 그동안 손님은 한 명도 오지 않았다.
+          같은 몇 줄을 사흘에 걸쳐 다시 세면 없던 명성이 세 배로 생긴다.
+        */
+        reviewBalance: i === 0 ? reviewBalance(state.reviews) : 0,
       })
       // 오늘치는 이미 조금씩 줬다. 그만큼 빼야 두 번 주지 않는다.
       // 탭이 오래 꺼져 여러 날이 한 번에 넘어가면 첫날만 뺀다 — 나머지 날은 준 적이 없다.
@@ -571,12 +609,51 @@ export const useGameStore = create<GameState>((set, get) => ({
     const first = !state.animals.some((a) => !isShopAnimal(a))
     const placed = first ? { ...animal, status: 'STORED' as const } : animal
 
+    /*
+      그린 동물은 그 자리에서 **종으로도 남는다.**
+
+      따로 등록하는 단추를 두지 않는다 — 그리는 데 값을 치른 사람이 나중에
+      한 번 더 눌러야 다시 데려올 수 있다면, 그 단추를 모르고 지나친 사람의
+      그림만 한 마리로 끝난다. 공개는 스스로 누르는 일이지만 등록은 아니다.
+    */
+    const species = speciesFromAnimal(placed, state.userId)
+
     set((s) => ({
       gold: s.gold - cost,
       animals: [...s.animals, placed],
+      species: species ? upsertSpecies(s.species, species) : s.species,
       tutorial: s.tutorial === 'DRAW' ? 'INSPECT' : s.tutorial,
       // 초안은 여기서만 비운다. 제출이 성공한 순간이 유일하게 안전한 시점이다.
       draft: { ...s.draft, animal: emptyAnimalDraft() },
+    }))
+    if (species) void publishCurrentSpecies()
+    return true
+  },
+
+  setSpeciesVisibility: (id, visibility) => {
+    set((s) => ({
+      species: s.species.map((doc) => (doc.id === id ? { ...doc, visibility } : doc)),
+    }))
+    // 공개 여부는 남에게 보이는 사실이다. 다음 주기까지 미루지 않는다.
+    void publishCurrentSpecies()
+  },
+
+  buySpecies: async (species) => {
+    const { gold, clock, userId } = get()
+    if (gold < species.price) return false
+
+    /*
+      남의 종이면 그림을 **내 저장소로 복사한다.**
+
+      주소만 들고 있다가 그릴 때 서버를 찌르게 하면, 그린 사람이 종을 내리거나
+      서버가 없는 자리(정적 호스팅)에서 그 동물만 통째로 사라진다. 한 번 데려온
+      동물은 내 것이고, 내 것은 내 저장소에 있어야 한다.
+    */
+    if (species.ownerId !== userId && !(await copyRemoteImages(species))) return false
+
+    set((s) => ({
+      gold: s.gold - species.price,
+      animals: [...s.animals, animalFromSpecies(species, clock.day)],
     }))
     return true
   },
@@ -636,11 +713,17 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!target || target.status !== 'STORED') return false
 
     /*
-      그림은 더 이상 참조되지 않는다. 저장소와 메모리 양쪽에서 지운다.
-      **파츠까지 지운다** — 대표 그림 하나만 지우면 부위 다섯 장이 IndexedDB 에
-      영영 남는다. 판 동물이 자리만 차지하지 않고 용량까지 물고 있었다.
+      쓰는 데가 없어진 그림만 지운다. 파츠까지 본다 — 대표 그림 하나만 지우면
+      부위 다섯 장이 IndexedDB 에 영영 남는다.
+
+      **아직 쓰는 데가 있는지 반드시 확인한다.** 그림 키가 곧 종이 된 뒤로
+      같은 종의 형제들과 등록된 종이 같은 키를 가리킨다. 예전처럼 판 동물의
+      그림을 무조건 지우면 한 마리를 팔았을 뿐인데 남은 형제들이 통째로
+      사라지고, 다시 데려올 종도 함께 없어진다.
     */
+    const keep = imagesInUse(get(), id)
     for (const imageId of [target.imageId, ...Object.values(target.rig ?? {})]) {
+      if (keep.has(imageId)) continue
       void deleteImage(imageId)
       forgetBitmap(imageId)
     }
@@ -650,6 +733,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       animals: s.animals.filter((a) => a.id !== id),
     }))
     return true
+  },
+
+  pushReviews: (list) => {
+    if (list.length === 0) return
+    // 새것이 앞에 온다. 목록에서 위부터 읽는 순서가 곧 최근 순이다.
+    set((s) => ({ reviews: [...list, ...s.reviews].slice(0, REVIEW_HISTORY) }))
   },
 
   buyCash: (product) => set((s) => ({ cash: s.cash + productTotal(product) })),
@@ -814,12 +903,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       await putImage(imageId, blob)
       await registerFromBlob(imageId, blob)
 
+      const animated = { ...target, spriteSheet: { imageId, ...meta } }
+      // 종에도 시트를 물려준다. 안 그러면 같은 종을 다시 데려왔을 때 움직이지 않는다.
+      const species = speciesFromAnimal(animated, get().userId)
+
       set((s) => ({
         cash: s.cash - SHEET_COST,
-        animals: s.animals.map((a) =>
-          a.id === id ? { ...a, spriteSheet: { imageId, ...meta } } : a,
-        ),
+        animals: s.animals.map((a) => (a.id === id ? animated : a)),
+        species: species ? upsertSpecies(s.species, species) : s.species,
       }))
+      // 공개해 둔 종이라면 남이 보는 것도 함께 움직여야 한다.
+      if (species) void publishCurrentSpecies()
       return true
     } catch {
       // 캔버스나 저장소가 막힌 경우. 캐시는 아직 그대로다.
@@ -944,6 +1038,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       // 구버전 세이브에는 정원이 없다. 빠진 우리는 처음 값으로 채운다.
       capacity: { ...initial.capacity, ...(save.capacity ?? {}) },
       animals: save.animals,
+      // 종은 나중에 생겼다. 옛 세이브에는 없고, 그때는 그린 동물이 곧 마지막 한 마리다.
+      species: save.species ?? [],
+      reviews: save.reviews ?? [],
       props: save.props ?? [],
       orders: save.orders ?? [],
       lastReport: save.lastReport,
@@ -971,8 +1068,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       enclosureNames: s.enclosureNames,
       capacity: s.capacity,
       animals: s.animals,
+      species: s.species,
       props: s.props,
       orders: s.orders,
+      reviews: s.reviews,
       lastReport: s.lastReport,
       reports: s.reports,
       options: s.options,
@@ -984,6 +1083,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 function capacityOf(capacity: Partial<Record<BiomeId, number>>, id: BiomeId): number {
   return capacity[id] ?? MAX_ANIMALS_PER_ENCLOSURE
 }
+
+/**
+ * 들고 있는 평가 수.
+ *
+ * 화면 한 판에 열 줄쯤 들어가고, 그 위로는 스크롤이다. 마흔이면 어제 오늘의
+ * 분위기를 읽기에 충분하고 세이브에 실려도 부담이 없다.
+ */
+const REVIEW_HISTORY = 40
 
 /** 운영 현황에 남겨 두는 정산 기록 수. */
 const REPORT_HISTORY = 7
@@ -1014,6 +1121,9 @@ function saveKey(state: GameState): string {
     // 프롭도 코인을 주고 산 것이다. 사고 나서 탭을 닫아도 남아 있어야 한다.
     state.props.length,
     state.props.filter((p) => p.status === 'PLACED').length,
+    // 등록한 종과 그중 공개한 수. 둘 다 그리거나 눌러서 만든 결과라 미룰 수 없다.
+    state.species.length,
+    state.species.filter((doc) => doc.visibility === 'PUBLIC').length,
     state.orders.length,
     state.tutorial,
     state.unlocked.length,
@@ -1224,6 +1334,53 @@ async function publishCurrentZoo(force = false): Promise<void> {
   )
 }
 
+/**
+ * 내 종 목록을 서버에 올린다.
+ *
+ * 동물원과 달리 간격 제한을 두지 않는다. 종이 바뀌는 일은 그리거나 공개를
+ * 누를 때뿐이라 몇 초에 한 번씩 쏟아질 일이 없다.
+ *
+ * 공개한 것이 하나도 없으면 그림도 싣지 않는다 — 비공개 종의 그림을 남의
+ * 서버에 올려 둘 이유가 없다. 목록 자체는 그대로 올린다. 방금 비공개로
+ * 되돌린 종이 목록에서 빠졌다는 사실도 서버가 알아야 한다.
+ */
+async function publishCurrentSpecies(): Promise<void> {
+  const s = useGameStore.getState()
+  if (!s.userId) return
+
+  const images: Record<string, string> = {}
+  for (const doc of s.species) {
+    if (doc.visibility !== 'PUBLIC') continue
+    for (const id of speciesImageIds(doc)) await collectImage(images, id)
+  }
+
+  await publishSpecies(s.userId, s.species, images, s.account?.token)
+}
+
+/**
+ * 남이 그린 종의 그림을 받아 내 저장소에 넣는다.
+ *
+ * 그림 키는 **그대로 쓴다.** 새 키를 발급하면 같은 종에서 나온 개체들이
+ * 서로 다른 종이 되어 무리를 짓지 못한다. 키가 UUID 라 남의 것과 부딪힐 일도 없다.
+ *
+ * 한 장이라도 못 받으면 실패로 본다. 반쯤 받아 놓고 만들면 다리 없는 동물이 나온다.
+ */
+async function copyRemoteImages(species: SpeciesDoc): Promise<boolean> {
+  try {
+    for (const id of speciesImageIds(species)) {
+      if (await getImage(id)) continue
+      const res = await fetch(remoteImageUrl(species.ownerId, id))
+      if (!res.ok) return false
+      const blob = await res.blob()
+      await putImage(id, blob)
+      await registerFromBlob(id, blob)
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function collectImage(into: Record<string, string>, id: string): Promise<void> {
   if (into[id]) return
   const blob = await getImage(id)
@@ -1270,6 +1427,31 @@ function clearAccount(): void {
   }
 }
 
+/**
+ * 지금 무언가가 가리키고 있는 그림들.
+ *
+ * `exceptAnimalId` 는 방금 파는 동물이다. 그 동물을 뺀 나머지가 여전히 그 그림을
+ * 쓰고 있는지 묻는 자리이므로, 자기 자신은 세지 않는다.
+ */
+function imagesInUse(state: GameState, exceptAnimalId: string): Set<string> {
+  const ids = new Set<string>()
+  const add = (id: string | null | undefined): void => {
+    if (id) ids.add(id)
+  }
+
+  for (const animal of state.animals) {
+    if (animal.id === exceptAnimalId) continue
+    add(animal.imageId)
+    add(animal.spriteSheet?.imageId)
+    for (const partId of Object.values(animal.rig ?? {})) add(partId)
+  }
+  // 등록해 둔 종도 그림을 붙들고 있다. 마지막 한 마리를 팔아도 종은 남는다.
+  for (const doc of state.species) for (const id of speciesImageIds(doc)) add(id)
+  for (const prop of state.props) add(prop.imageId)
+
+  return ids
+}
+
 /** 세이브가 참조하는 모든 그림. 배치된 것뿐 아니라 창고와 배송 중인 것까지. */
 function imageIdsOf(save: SaveV2): string[] {
   const ids = new Set<string>()
@@ -1279,6 +1461,9 @@ function imageIdsOf(save: SaveV2): string[] {
     // 파츠도 그림이다. 이게 빠져 있어서 다른 기기에서 이어하면 리그 동물이 몸통만 남았다.
     for (const partId of Object.values(animal.rig ?? {})) ids.add(partId)
   }
+  // 등록한 종의 그림도 담는다. 마지막 한 마리를 판 뒤 다른 기기에서 이어하면
+  // 종은 목록에 있는데 그림이 없어, 다시 데려온 동물이 빈 칸으로 온다.
+  for (const doc of save.species ?? []) for (const id of speciesImageIds(doc)) ids.add(id)
   for (const prop of save.props ?? []) {
     if (prop.imageId) ids.add(prop.imageId)
   }

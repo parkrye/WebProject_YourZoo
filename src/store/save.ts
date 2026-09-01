@@ -1,8 +1,10 @@
 import type { BiomeId } from '@/assets/manifest'
 import type { Animal } from '@/domain/animal'
+import type { SpeciesDoc } from '@/domain/species'
 import type { OwnedProp } from '@/domain/prop'
 import type { DailyReport } from '@/domain/economy'
 import type { Order } from '@/domain/orders'
+import type { Review } from '@/domain/review'
 import type { TutorialStep } from '@/domain/tutorial'
 import type { ClockState } from '@/domain/clock'
 
@@ -39,9 +41,13 @@ export interface SaveV2 {
   capacity?: Partial<Record<BiomeId, number>>
   /** 그림 픽셀은 IndexedDB 에 있고 여기에는 imageId 만 남는다. */
   animals: Animal[]
+  /** 등록한 종. 종이 생기기 전 세이브에는 없다 — 그때는 빈 목록으로 읽는다. */
+  species?: SpeciesDoc[]
   /** 소유한 프롭. 구버전 세이브에는 없다 — 그때는 빈 배열로 읽는다. */
   props: OwnedProp[]
   orders: Order[]
+  /** 손님이 남긴 말. 평가가 생기기 전 세이브에는 없다 — 그때는 빈 목록으로 읽는다. */
+  reviews?: Review[]
   lastReport: DailyReport | null
   reports: DailyReport[]
   options: { bgm: number; sfx: number }

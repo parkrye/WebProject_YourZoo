@@ -1,6 +1,14 @@
 import { loadImageBitmap } from '@/store/imageDb'
 import { remoteImageUrl } from '@/net/zooApi'
 import type { Animal } from '@/domain/animal'
+
+/**
+ * 정지 자세를 합치는 데 필요한 최소한.
+ *
+ * 동물 한 마리를 통째로 받지 않는다 — 등록된 종에도 같은 파츠 표가 있고,
+ * 상점 목록에서 그것을 그리자고 개체를 하나 지어내는 건 앞뒤가 바뀐 일이다.
+ */
+type RigSource = Pick<Animal, 'rig' | 'imageId' | 'templateId'>
 import { rigOf } from '@/domain/rig'
 import { findSheet, SHEET_KEY_PREFIX } from '@/domain/shop'
 import { templateOf } from '@/domain/templates'
@@ -37,7 +45,7 @@ const stillKey = (imageId: string): string => `${imageId}#still`
  * 비로소 그 동물이 된다. 합친 결과는 같은 캐시에 두어 한 번만 굽는다.
  * 옛 세이브의 대표 그림은 몸통 조각이므로 **여기서 늘 다시 합친다.**
  */
-export async function ensureStillBitmap(animal: Animal): Promise<ImageBitmap | null> {
+export async function ensureStillBitmap(animal: RigSource): Promise<ImageBitmap | null> {
   const rig = animal.rig
   if (!rig) return ensureBitmap(animal.imageId)
 
@@ -60,13 +68,13 @@ export async function ensureStillBitmap(animal: Animal): Promise<ImageBitmap | n
 }
 
 /** 이미 구워 둔 정지 자세. 없으면 null — 첫 프레임의 깜빡임을 줄이는 데만 쓴다. */
-export function getStillBitmap(animal: Animal): ImageBitmap | null {
+export function getStillBitmap(animal: RigSource): ImageBitmap | null {
   if (!animal.rig) return getBitmap(animal.imageId)
   return bitmaps.get(stillKey(animal.imageId)) ?? null
 }
 
 /** 파츠를 모두 읽어 한 장으로 굽는다. 하나도 못 읽으면 대표 그림으로 물러난다. */
-async function composeStill(animal: Animal, rig: Record<string, string>): Promise<ImageBitmap | null> {
+async function composeStill(animal: RigSource, rig: Record<string, string>): Promise<ImageBitmap | null> {
   const parts = new Map<string, ImageBitmap>()
   for (const [partId, imageId] of Object.entries(rig)) {
     const part = getBitmap(imageId) ?? (await ensureBitmap(imageId))

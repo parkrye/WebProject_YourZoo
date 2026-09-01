@@ -1,4 +1,4 @@
-import { LOGICAL_HEIGHT, LOGICAL_WIDTH, PROP_HEIGHT, ROAM_BOX, type BiomeId, type Habitat } from '@/assets/manifest'
+import { LOGICAL_HEIGHT, LOGICAL_WIDTH, PROP_HEIGHT, type BiomeId, type Habitat } from '@/assets/manifest'
 import type { OwnedProp } from '@/domain/prop'
 
 export interface PlacedProp {
@@ -68,15 +68,3 @@ export const PROP_BOB = { amplitude: 0.006, speed: 1.5, tilt: 0.035 } as const
 
 /** 하늘에 매단 프롭의 좌우 진폭(정규화 x)과 주기. 바람에 천천히 밀리는 정도. */
 export const PROP_SWAY = { amplitude: 0.008, speed: 0.9, tilt: 0.05 } as const
-
-/**
- * 프롭이 그려질 깊이 층.
- *
- * 예전에는 만들 때 고른 `layer` 로 정했지만, 이제 프롭은 어디에나 놓을 수 있다.
- * 하늘에 놓은 통나무가 땅 동물보다 앞에 그려지면 안 되므로 **놓인 높이**로 정한다.
- */
-export function propBand(y: number): Habitat {
-  if (y <= ROAM_BOX.LAND.y0) return 'SKY'
-  if (y <= ROAM_BOX.WATER.y0) return 'LAND'
-  return 'WATER'
-}

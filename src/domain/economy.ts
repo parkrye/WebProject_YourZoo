@@ -4,7 +4,7 @@ import { placedIn, type Animal } from './animal'
 import {
   ANIMAL_UPKEEP_PER_DAY, DAY_DURATION_SEC, MAX_VISITORS_PER_ENCLOSURE, OVERCROWD_PENALTY,
   OVERCROWD_THRESHOLD, PHASE_END, REPUTATION_PER_APPEAL, REPUTATION_PER_VISITOR,
-  MIN_VISITORS,
+  MIN_VISITORS, REVIEW_REPUTATION_WEIGHT,
   STORED_UPKEEP_PER_DAY, TICKET_PRICE, VIEW_INCOME_PER_APPEAL, VISITOR_PHASE_MULTIPLIER,
 } from './balance'
 
@@ -51,6 +51,8 @@ export interface DailyReport {
   /** 수입 − 지출 */
   net: number
   reputationDelta: number
+  /** 그중 손님 평가에서 온 몫. 정산 화면에서 따로 읽는다. */
+  reviewReputation: number
   /** 하루 평균 관람객 합계 */
   visitors: number
   /** 우리에 배치된 동물 수 */
@@ -90,6 +92,11 @@ export interface SettleInput {
   reputation: number
   /** 이 정산에서 배송이 완료된 동물 수. 리포트 표시용. */
   arrivedCount?: number
+  /**
+   * 손님 평가의 균형. -1 이 전부 불평, 1 이 전부 칭찬, 0 이 한마디도 없음.
+   * @see reviewBalance
+   */
+  reviewBalance?: number
 }
 
 /**
@@ -97,7 +104,7 @@ export interface SettleInput {
  * @see docs/00-overview.md §4.3
  */
 export function settleDay({
-  day, animals, unlocked, reputation, arrivedCount = 0,
+  day, animals, unlocked, reputation, arrivedCount = 0, reviewBalance = 0,
 }: SettleInput): DailyReport {
   const multiplier = averageVisitorMultiplier()
 
@@ -129,7 +136,15 @@ export function settleDay({
   const viewIncome = Math.round(totalAppeal * VIEW_INCOME_PER_APPEAL)
   // 배송 중인 동물은 아직 우리 것이 아니므로 사육비를 물리지 않는다.
   const upkeep = placed.length * ANIMAL_UPKEEP_PER_DAY + stored.length * STORED_UPKEEP_PER_DAY
-  const reputationDelta = Math.round(totalAppeal * REPUTATION_PER_APPEAL) - overcrowdPenalty
+  /*
+    손님이 뭐라고 했는지도 명성에 조금 얹는다.
+
+    같은 매력도의 동물을 붐비는 우리에 몰아넣으면 불평이 늘고 명성이 덜 오른다 —
+    과밀 벌점이 이미 하는 일이지만, 저쪽은 마릿수만 세고 이쪽은 실제로 나온 말을 센다.
+  */
+  const reviewReputation = Math.round(reviewBalance * REVIEW_REPUTATION_WEIGHT)
+  const reputationDelta =
+    Math.round(totalAppeal * REPUTATION_PER_APPEAL) - overcrowdPenalty + reviewReputation
 
   return {
     day,
@@ -138,6 +153,7 @@ export function settleDay({
     upkeep,
     net: ticketIncome + viewIncome - upkeep,
     reputationDelta,
+    reviewReputation,
     visitors,
     animalCount: placed.length,
     storedCount: stored.length,
