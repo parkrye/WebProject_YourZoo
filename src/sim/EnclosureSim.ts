@@ -160,11 +160,18 @@ export class EnclosureSim {
   }
 
   private tickBehaviours(dt: number): void {
+    const flocks = this.flocks()
+
     for (const agent of this.animals) {
       const peers = this.animals.filter((other) => other !== agent && other.habitat === agent.habitat)
+      const flock = flocks.get(agent.speciesKey) ?? EMPTY_FLOCK
+      const leader = flock[0]
       const blackboard: AnimalBlackboard = {
         self: agent,
         peers,
+        flock,
+        // 자기가 리더면 따를 상대가 없다. 리더는 평소대로 제 갈 길을 간다.
+        leader: leader && leader !== agent ? leader : null,
         props: this.props,
         roam: ROAM_BOX[agent.habitat],
         visitorDistance: this.nearestVisitorDistance(agent.x, agent.y),
@@ -173,6 +180,25 @@ export class EnclosureSim {
       }
       agent.tickBt(blackboard)
     }
+  }
+
+  /**
+   * 종별 무리. 각 목록의 **첫 번째가 리더**다.
+   *
+   * 리더는 아이디 사전순으로 가장 앞선 개체다. 아무 뜻 없는 규칙이지만
+   * **누가 봐도 같은 답이 나오는** 규칙이라, 매 tick 다시 뽑아도 리더가 바뀌지 않는다.
+   * 가장 가까운 개체나 가장 큰 개체로 뽑았더니 두 마리가 스쳐 지날 때마다
+   * 리더가 뒤집혀, 따라가던 무리가 그 자리에서 방향만 되풀이해 틀었다.
+   */
+  private flocks(): Map<string, AnimalAgent[]> {
+    const map = new Map<string, AnimalAgent[]>()
+    for (const agent of this.animals) {
+      const list = map.get(agent.speciesKey)
+      if (list) list.push(agent)
+      else map.set(agent.speciesKey, [agent])
+    }
+    for (const list of map.values()) list.sort(byId)
+    return map
   }
 
   /** 손님은 펜스 앞 한 줄에 서 있으므로 기준선까지의 거리로 근사한다. */
@@ -256,6 +282,11 @@ export class EnclosureSim {
     agent.renderer = createAnimalRenderer(animal, sheet)
   }
 }
+
+/** 무리가 없는 동물에게 넘기는 빈 목록. 매번 새로 만들 이유가 없다. */
+const EMPTY_FLOCK: AnimalAgent[] = []
+
+const byId = (a: AnimalAgent, b: AnimalAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
 function hashBiome(biome: BiomeId): number {
   let hash = 0x811c9dc5

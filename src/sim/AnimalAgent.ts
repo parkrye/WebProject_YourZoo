@@ -10,6 +10,7 @@ import type { AgentView, AnimalBlackboard, Vec2 } from '@/ai/types'
 import { clamp, inverseLerp, lerp } from '@/core/math'
 import { randRange, type Rng } from '@/core/rng'
 import type { Animal, AnimalMotion } from '@/domain/animal'
+import { speciesKeyOf } from '@/domain/species'
 import type { AnimalRenderer, AnimalRenderState } from '@/render/animal/AnimalRenderer'
 import type { PlacedProp } from './props'
 
@@ -26,6 +27,7 @@ export class AnimalAgent implements AgentView {
   motion: AnimalMotion = 'IDLE'
   motionTime = 0
   restCooldown = 0
+  drinkCooldown = 0
   facing: 1 | -1 = 1
   /** 비트맵 로드가 끝나면 EnclosureSim 이 채운다. 그 전까지는 그리지 않는다. */
   renderer: AnimalRenderer | null = null
@@ -62,6 +64,10 @@ export class AnimalAgent implements AgentView {
 
   get habitat(): Habitat {
     return this.animal.traits.habitat
+  }
+
+  get speciesKey(): string {
+    return speciesKeyOf(this.animal)
   }
 
   get roam(): RoamBox {
@@ -103,6 +109,7 @@ export class AnimalAgent implements AgentView {
   integrate(dt: number, props: readonly PlacedProp[]): void {
     this.motionTime += dt
     if (this.restCooldown > 0) this.restCooldown -= dt
+    if (this.drinkCooldown > 0) this.drinkCooldown -= dt
 
     const desired = this.desiredVelocity()
     this.vx += (desired.x - this.vx) * Math.min(1, dt * STEER_RESPONSE)
