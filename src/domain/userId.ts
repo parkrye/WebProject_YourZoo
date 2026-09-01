@@ -24,7 +24,16 @@ export function createUserId(): string {
   return id
 }
 
-/** 저장된 값이 아이디 꼴인가. 손상된 세이브를 걸러낼 때 쓴다. */
+/**
+ * 아이디로 쓸 수 있는 값인가. 손상된 세이브를 걸러낼 때 쓴다.
+ *
+ * **서버의 가입 규칙과 같은 자를 써야 한다.** 예전에는 길이가 7 인지만 봤는데,
+ * 그러면 계정으로 만든 6자 아이디(`AWEFAW`)가 이어하기에서 통과하지 못하고
+ * 무작위 아이디로 갈아치워진다. 세이브의 주인과 계정의 주인이 갈라지면
+ * 그 계정의 동물원은 영영 게시되지 않는다.
+ */
+const USER_ID = /^[A-Z0-9]{4,16}$/
+
 export function isUserId(value: unknown): value is string {
-  return typeof value === 'string' && value.length === PREFIX.length + ID_LENGTH
+  return typeof value === 'string' && USER_ID.test(value)
 }

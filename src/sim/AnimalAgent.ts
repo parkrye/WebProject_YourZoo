@@ -33,6 +33,8 @@ export class AnimalAgent implements AgentView {
 
   private vx = 0
   private vy = 0
+  /** 개체마다 다른 위상. 같은 종이 한 몸처럼 붙어 흔들리는 걸 막는다. */
+  private readonly seed: number
   private readonly tree: BtNode<AnimalBlackboard>
   private readonly maxSpeed: number
 
@@ -45,6 +47,8 @@ export class AnimalAgent implements AgentView {
     this.y = randRange(rng, box.y0, box.y1)
     this.tree = buildAnimalTree(animal.traits)
     this.maxSpeed = lerp(SPEED_RANGE.min, SPEED_RANGE.max, animal.traits.speed)
+    // 아이디에서 뽑는다. 새로고침해도 같은 개체는 같은 박자로 움직인다.
+    this.seed = phaseSeed(animal.id)
   }
 
   get id(): string {
@@ -150,6 +154,9 @@ export class AnimalAgent implements AgentView {
       motion: this.motion,
       motionTime: this.motionTime,
       speed01: this.speed01,
+      activity: this.traits.activity,
+      timidity: this.traits.timidity,
+      seed: this.seed,
       scale: perspective * ANIMAL_HEIGHT[this.habitat],
     }
   }
@@ -181,4 +188,14 @@ export class AnimalAgent implements AgentView {
       this.y += dy * push * ASPECT
     }
   }
+}
+
+/** 아이디를 0..1 위상으로 접는다. 값 자체에 의미는 없고 개체마다 다르기만 하면 된다. */
+function phaseSeed(id: string): number {
+  let value = 0x811c9dc5
+  for (let i = 0; i < id.length; i++) {
+    value ^= id.charCodeAt(i)
+    value = Math.imul(value, 0x01000193)
+  }
+  return ((value >>> 0) % 1000) / 1000
 }
