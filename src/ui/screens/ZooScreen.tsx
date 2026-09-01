@@ -454,14 +454,24 @@ export function ZooScreen({ detail }: ZooScreenProps) {
             </div>
           ) : (
             <>
+              {/*
+                날짜와 시계는 각자의 판에 둔다. 한 판에 같이 담으면 날짜가 세 자리가
+                될수록 판이 늘어나며 시계가 글자에 붙은 장식처럼 읽힌다.
+              */}
               <div className="hud-top-left">
                 {visiting ? (
-                  <BitmapLabel text={`VISITING DAY ${visiting.day}`} size={26} />
+                  <div className="hud-plate">
+                    <BitmapLabel text={`VISITING DAY ${visiting.day}`} size={26} />
+                  </div>
                 ) : (
                   <>
-                    <BitmapLabel text={`DAY ${day}`} size={34} />
+                    <div className="hud-plate">
+                      <BitmapLabel text={`DAY ${day}`} size={34} />
+                    </div>
                     {/* 숫자는 읽어서 해석해야 하지만 바늘은 한눈에 지금이 어디쯤인지 보여 준다. */}
-                    <ClockDial elapsed={elapsed} size={46} />
+                    <div className="hud-plate is-dial">
+                      <ClockDial elapsed={elapsed} size={46} />
+                    </div>
                   </>
                 )}
               </div>

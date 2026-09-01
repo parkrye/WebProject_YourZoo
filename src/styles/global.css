@@ -140,17 +140,30 @@ html, body, #root {
 
 /* ── HUD ────────────────────────────────────────────────── */
 
+/* 날짜 판과 시계 판을 나란히 놓는 자리. 판 자체의 모양은 .hud-plate 가 갖는다. */
 .hud-top-left {
   position: absolute;
   top: 20px;
   left: 24px;
   display: flex;
-  gap: 20px;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.hud-plate {
+  display: flex;
   align-items: center;
-  padding: 4px 18px 6px;
+  justify-content: center;
+  padding: 6px 18px;
   background: rgba(24, 17, 10, 0.5);
   border: 2px solid rgba(138, 90, 43, 0.7);
   border-radius: 10px;
+}
+
+/* 시계는 둥글다. 판도 정사각에 가깝게 두어야 글자 판에 딸린 칸으로 보이지 않는다. */
+.hud-plate.is-dial {
+  padding: 6px 10px;
+  border-radius: 12px;
 }
 
 .hud-top-right {
