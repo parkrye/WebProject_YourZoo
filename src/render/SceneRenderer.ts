@@ -1,8 +1,9 @@
 import { getAssets } from '@/assets/AssetStore'
 import {
-  LOGICAL_HEIGHT, LOGICAL_WIDTH, PLACE_BOX, VISITOR_HEIGHT,
+  GUI, LOGICAL_HEIGHT, LOGICAL_WIDTH, PLACE_BOX, VISITOR_HEIGHT,
   type BiomeId, type Habitat,
 } from '@/assets/manifest'
+import { guiSheet } from '@/assets/guiSheet'
 import { easeInOutCubic } from '@/core/math'
 import { phaseBlend, timeLighting, type AreaLight, type FenceLight } from '@/domain/clock'
 import type { AnimalAgent } from '@/sim/AnimalAgent'
@@ -448,10 +449,83 @@ export class SceneRenderer {
       const sq = v.squash
       const vh = own * sq
       const vw = (own * (frame.sw / frame.sh)) / sq
-      visitor.draw(ctx, v.spriteIndex, v.x * view.width - vw / 2, footY - vh, vw, vh)
+      const headY = footY - vh
+      visitor.draw(ctx, v.spriteIndex, v.x * view.width - vw / 2, headY, vw, vh)
+      if (v.bubble !== null) this.drawBubble(ctx, v.x * view.width, headY, own, v.bubble)
     }
   }
+
+  /**
+   * 손님 머리 위의 한마디.
+   *
+   * 글자가 아니라 아이콘 하나다. 관람로에 스무 명이 서 있고 저마다 문장을 띄우면
+   * 우리 안이 글자에 덮인다. 좋았는지 아쉬웠는지는 부호 하나로 충분하고,
+   * 문장은 평가 목록에서 천천히 읽는다.
+   *
+   * 크기는 **그 손님의 키에 견주어** 정한다. 앞뒤로 흩어 세운 만큼 사람마다
+   * 크기가 다른데 풍선만 같은 크기면 뒷사람 머리 위에 남의 풍선이 뜬 것처럼 보인다.
+   */
+  private drawBubble(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    headY: number,
+    ownHeight: number,
+    sentiment: 1 | -1,
+  ): void {
+    const size = ownHeight * BUBBLE_SIZE
+    const pad = size * BUBBLE_PAD
+    const box = size + pad * 2
+    const top = headY - box - size * BUBBLE_GAP
+    const left = x - box / 2
+
+    ctx.save()
+    ctx.fillStyle = BUBBLE_FILL
+    ctx.strokeStyle = BUBBLE_LINE
+    ctx.lineWidth = Math.max(1, size * 0.06)
+
+    ctx.beginPath()
+    ctx.roundRect(left, top, box, box, box * 0.28)
+    ctx.fill()
+    ctx.stroke()
+
+    // 꼬리. 누가 한 말인지는 이것으로만 읽힌다.
+    const tail = box * 0.22
+    ctx.beginPath()
+    ctx.moveTo(x - tail, top + box - ctx.lineWidth / 2)
+    ctx.lineTo(x, top + box + tail)
+    ctx.lineTo(x + tail, top + box - ctx.lineWidth / 2)
+    ctx.closePath()
+    ctx.fill()
+
+    const { atlas, index } = guiSheet(sentiment === 1 ? REVIEW_ICON.GOOD : REVIEW_ICON.BAD)
+    atlas.drawContained(ctx, index, left + pad, top + pad, size, size)
+    ctx.restore()
+  }
 }
+
+/**
+ * 감상을 나타내는 아이콘.
+ *
+ * 좋은 쪽은 두 번째 시트의 하트다 — 배경 없는 픽셀 아트라 풍선 안에 그대로 들어간다.
+ * 아쉬운 쪽은 **짝이 맞는 그림이 아직 없다.** 첫 시트의 X 는 나무 판때기에
+ * 월계수까지 두른 단추라 풍선 안에서 혼자 튄다. 깨진 하트가 들어오면
+ * 여기 한 줄만 바꾸면 된다.
+ */
+const REVIEW_ICON = { GOOD: GUI.HEART, BAD: GUI.CLOSE } as const
+
+/**
+ * 풍선 안 아이콘의 크기. 손님 키에 대한 비율이다.
+ *
+ * 크게 잡으면 앞줄 사람 하나가 우리의 한 귀퉁이를 통째로 가린다.
+ * 관람로에 열댓 명이 서 있고 그중 몇이 동시에 말한다는 걸 기준으로 잡았다.
+ */
+const BUBBLE_SIZE = 0.22
+/** 아이콘 둘레의 여백. 아이콘 크기에 대한 비율이다. */
+const BUBBLE_PAD = 0.22
+/** 머리 꼭대기와 풍선 사이. 붙여 놓으면 모자처럼 보인다. */
+const BUBBLE_GAP = 0.2
+const BUBBLE_FILL = '#fbf3e0'
+const BUBBLE_LINE = '#8a5a2b'
 
 const byDepth = (a: Drawable, b: Drawable): number => a.y - b.y
 const byVisitorDepth = (a: VisitorAgent, b: VisitorAgent): number => a.depth - b.depth

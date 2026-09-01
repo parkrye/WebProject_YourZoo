@@ -9,6 +9,7 @@ import { AnimalAgent } from './AnimalAgent'
 import { ensureBitmap, ensureStillBitmap, getBitmap } from './imageCache'
 import { placedProps, type OwnedProp } from '@/domain/prop'
 import { toPlacedProps, type PlacedProp } from './props'
+import { makeReview, type Review } from '@/domain/review'
 import { pruneVisitors, stayingCount, trimVisitors, VisitorAgent } from './VisitorAgent'
 
 /** 화면에 보이는 우리의 BT 주기. 10Hz. */
@@ -24,6 +25,17 @@ export interface SimContext {
   phase: SkyPhase
   /** 지금 화면에 보이는 우리인가 */
   active: boolean
+  /** 손님이 남긴 말에 적히는 날짜. */
+  day: number
+  /** 우리 정원. 붐빌수록 불평이 는다. */
+  capacity: number
+  /**
+   * 손님이 한마디를 남기게 둘 것인가.
+   *
+   * 남의 동물원을 구경하는 중에는 꺼 둔다 — 거기서 나온 말은 그 사람의 평가지
+   * 내 것이 아니다. 시뮬레이션은 그대로 돌아야 하니 말풍선까지 막지는 않는다.
+   */
+  collectReviews: boolean
 }
 
 /**
@@ -39,6 +51,8 @@ export class EnclosureSim {
 
   private readonly rng: Rng
   private readonly spawnHints = new Map<string, { x: number; y: number }>()
+  /** 화면 쪽이 가져갈 때까지 모아 두는 평가. */
+  private pendingReviews: Review[] = []
   private btAccumulator = 0
   private spawnAccumulator = 0
 
@@ -104,6 +118,20 @@ export class EnclosureSim {
     }
   }
 
+  /**
+   * 이번 프레임에 새로 나온 평가를 넘겨주고 비운다.
+   *
+   * 스토어를 여기서 직접 건드리지 않는다 — 시뮬레이션이 화면 상태를 알면
+   * 우리 셋이 저마다 다른 시점에 스토어를 밀어 넣게 되고, 그러면 60Hz 로
+   * 리렌더가 돈다. 모아 두었다가 화면 쪽이 한 번에 가져간다.
+   */
+  drainReviews(): Review[] {
+    if (this.pendingReviews.length === 0) return EMPTY_REVIEWS
+    const out = this.pendingReviews
+    this.pendingReviews = []
+    return out
+  }
+
   update(dt: number, ctx: SimContext): void {
     this.updateVisitors(dt, ctx)
 
@@ -157,6 +185,53 @@ export class EnclosureSim {
     }
 
     for (const visitor of this.visitors) visitor.update(dt)
+    this.updateReviews(ctx)
+  }
+
+  /**
+   * 멈춰 서서 보고 있는 손님에게 감상을 한마디씩 시킨다.
+   *
+   * 무엇을 보고 있는지는 **가장 가까운 동물**로 정한다. 손님은 펜스 앞 한 줄에
+   * 서 있으므로 x 만 견주면 된다 — 관람로에서 정면으로 보이는 것이 그 동물이다.
+   * 동물이 없으면 아무 말도 하지 않는다. 빈 우리를 두고 남길 감상은 없다.
+   */
+  private updateReviews(ctx: SimContext): void {
+    if (this.animals.length === 0) return
+
+    const crowding = ctx.capacity > 0 ? Math.min(1, this.animals.length / ctx.capacity) : 0
+
+    for (const visitor of this.visitors) {
+      if (!visitor.wantsToSpeak) continue
+
+      const agent = this.nearestAnimalTo(visitor.x)
+      if (!agent) continue
+
+      const review = makeReview(
+        {
+          animalId: agent.id,
+          animalName: agent.animal.name,
+          appeal: agent.animal.appeal,
+          crowding,
+          day: ctx.day,
+        },
+        this.rng,
+      )
+      visitor.say(review.sentiment, this.rng)
+      if (ctx.collectReviews) this.pendingReviews.push(review)
+    }
+  }
+
+  /** 관람로의 x 에서 정면으로 보이는 동물. */
+  private nearestAnimalTo(x: number): AnimalAgent | null {
+    let best: AnimalAgent | null = null
+    let bestDistance = Number.POSITIVE_INFINITY
+    for (const agent of this.animals) {
+      const d = Math.abs(agent.x - x)
+      if (d >= bestDistance) continue
+      bestDistance = d
+      best = agent
+    }
+    return best
   }
 
   private tickBehaviours(dt: number): void {
@@ -285,6 +360,8 @@ export class EnclosureSim {
 
 /** 무리가 없는 동물에게 넘기는 빈 목록. 매번 새로 만들 이유가 없다. */
 const EMPTY_FLOCK: AnimalAgent[] = []
+/** 남긴 말이 없을 때 돌려주는 빈 목록. 프레임마다 배열을 새로 만들 이유가 없다. */
+const EMPTY_REVIEWS: Review[] = []
 
 const byId = (a: AnimalAgent, b: AnimalAgent): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 

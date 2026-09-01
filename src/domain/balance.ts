@@ -138,6 +138,14 @@ export const TICKET_PRICE = 5
 export const VIEW_INCOME_PER_APPEAL = 0.5
 
 export const REPUTATION_PER_APPEAL = 0.1
+/**
+ * 손님 평가가 자정 정산의 명성에 더하는 몫.
+ *
+ * **작게 잡는다.** 명성은 여전히 매력도에서 나온다 — 평가가 그만큼 무거우면
+ * 좋은 동물을 들이는 대신 손님 기분을 맞추는 놀이가 되고, 무엇보다 하루치
+ * 표본이 몇 줄뿐이라 운이 명성을 흔든다. 전부 칭찬이어도 하루에 3 이다.
+ */
+export const REVIEW_REPUTATION_WEIGHT = 3
 export const OVERCROWD_THRESHOLD = 8
 export const OVERCROWD_PENALTY = 2
 

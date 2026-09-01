@@ -3,11 +3,13 @@ import { GUI } from '@/assets/manifest'
 import { ANIMAL_NAME_MAX_LENGTH, SHEET_COST } from '@/domain/balance'
 import type { Animal } from '@/domain/animal'
 import { sellRefund } from '@/domain/shop'
+import { countBySentiment, reviewsOf } from '@/domain/review'
 import { TRAIT_KEYS, TRAIT_LABELS } from '@/domain/traits'
 import { AnimalItemThumb } from '@/ui/components/ItemThumb'
 import { BitmapInput } from '@/ui/components/BitmapInput'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { IconButton } from '@/ui/components/IconButton'
+import { IconGlyph } from '@/ui/components/IconGlyph'
 import { ConfirmPopup } from '@/ui/components/ConfirmPopup'
 import { useGameStore } from '@/store/gameStore'
 
@@ -36,6 +38,7 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
   const cash = useGameStore((s) => s.cash)
   const animateAnimal = useGameStore((s) => s.animateAnimal)
   const renameAnimal = useGameStore((s) => s.renameAnimal)
+  const reviews = useGameStore((s) => s.reviews)
   const [renaming, setRenaming] = useState(false)
   const [draftName, setDraftName] = useState(animal.name)
 
@@ -43,6 +46,11 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
     renameAnimal(animal.id, draftName)
     setRenaming(false)
   }
+
+  // 이 동물이 들은 말. 목록은 최근 것이 앞이라 첫 줄이 곧 마지막 한마디다.
+  const mine = reviewsOf(reviews, animal.id)
+  const { good, bad } = countBySentiment(mine)
+  const latest = mine[0]
 
   const animated = animal.spriteSheet !== null
   const canAnimate = !readOnly && !animated && cash >= SHEET_COST
@@ -94,6 +102,24 @@ export function AnimalCard({ animal, onClose, onStore, onSell, readOnly = false 
         <BitmapLabel text={`${animal.traits.habitat} ${animal.traits.diet}`} size={20} />
         <BitmapLabel text={`APPEAL ${animal.appeal}`} size={20} />
         {animated && <BitmapLabel text="ANIMATED" size={18} />}
+
+        {/*
+          이 동물이 들은 말. 매력도는 계산으로 나온 숫자이고 이쪽은 실제로 나온 말이라,
+          같은 자리에 나란히 두면 숫자가 무엇을 뜻하는지 읽힌다.
+        */}
+        {mine.length > 0 && (
+          <div className="animal-card-voices">
+            <span className="review-tally-side is-plus">
+              <IconGlyph icon={GUI.HEART} size={20} />
+              <BitmapLabel text={`${good}`} size={20} />
+            </span>
+            <span className="review-tally-side is-minus">
+              <IconGlyph icon={GUI.CLOSE} size={20} />
+              <BitmapLabel text={`${bad}`} size={20} />
+            </span>
+          </div>
+        )}
+        {latest && <BitmapLabel text={latest.text} size={15} align="center" />}
 
         <div className="animal-card-traits">
           {TRAIT_KEYS.map((key) => (

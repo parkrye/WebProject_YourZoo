@@ -54,6 +54,17 @@ export function ReportModal() {
           tone={report.reputationDelta < 0 ? 'minus' : 'plus'}
           big
         />
+        {/*
+          명성 중 손님의 말에서 온 몫. 옛 정산 기록에는 이 값이 없다 — 그때는
+          평가 자체가 없었으므로 0 이 아니라 **줄을 띄우지 않는** 것이 맞다.
+        */}
+        {!!report.reviewReputation && (
+          <ReportRow
+            label="VOICES"
+            value={report.reviewReputation}
+            tone={report.reviewReputation < 0 ? 'minus' : 'plus'}
+          />
+        )}
 
         <div className="report-divider" />
 

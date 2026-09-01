@@ -1056,6 +1056,42 @@ html, body, #root {
   background: rgba(120, 92, 52, 0.12);
 }
 
+/*
+  손님이 남긴 말 한 줄.
+  아이콘 · 문장 · 날짜 세 칸이다. 문장만 늘어나고 양옆은 폭이 고정이라
+  아이콘 줄이 위아래로 곧게 선다 — 목록을 훑을 때 부호가 먼저 읽혀야 한다.
+*/
+.review-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  border-bottom: 2px solid rgba(183, 154, 107, 0.4);
+}
+.review-row:last-child { border-bottom: 0; }
+
+/* 칭찬과 불평의 수. 목록 맨 위에서 오늘의 분위기를 한눈에 알려 준다. */
+.review-tally {
+  display: flex;
+  justify-content: center;
+  gap: 28px;
+  padding: 4px 0 10px;
+}
+
+.review-tally-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.review-tally-side.is-minus { opacity: 0.75; }
+
+.animal-card-voices {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
 .order-head {
   display: grid;
   grid-template-columns: 1fr auto auto auto auto;

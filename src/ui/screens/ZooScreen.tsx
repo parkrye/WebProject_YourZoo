@@ -26,6 +26,7 @@ import { AnimalCard } from '@/ui/panels/AnimalCard'
 import { StorageTray, type DragState } from '@/ui/panels/StorageTray'
 import { TutorialOverlay } from '@/ui/panels/TutorialOverlay'
 import { TUTORIAL_HINTS } from '@/domain/tutorial'
+import type { Review } from '@/domain/review'
 
 interface ZooScreenProps {
   detail: boolean
@@ -204,14 +205,22 @@ export function ZooScreen({ detail }: ZooScreenProps) {
 
         const phase = phaseOf(store.clock.elapsed)
         const shown = store.visiting ? store.visitEnclosure : store.currentEnclosure
+        const fresh: Review[] = []
         for (const [id, sim] of sims) {
           sim.update(step, {
             // 손님 수는 보고 있는 동물원의 명성을 따른다. 구경 중에 내 명성으로 세면 안 된다.
             reputation: store.visiting ? store.visiting.reputation : store.reputation,
             phase,
             active: id === shown,
+            day: store.clock.day,
+            capacity: store.capacity[id],
+            // 남의 동물원에서 나온 말은 그 사람의 평가다. 내 목록에 담지 않는다.
+            collectReviews: !store.visiting,
           })
+          fresh.push(...sim.drainReviews())
         }
+        // 우리 셋의 몫을 모아 한 번에 넘긴다. 우리마다 밀어 넣으면 한 프레임에 세 번 리렌더한다.
+        store.pushReviews(fresh)
 
         // 드래그 중 시야를 비우는 것도 같은 트윈을 탄다. 뚝 끊기면 놓을 자리를 놓친다.
         const targetFence = loweringRef.current

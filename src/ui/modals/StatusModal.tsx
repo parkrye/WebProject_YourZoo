@@ -3,6 +3,7 @@ import { averageVisitorMultiplier, settleDay } from '@/domain/economy'
 import { ENCLOSURE_ORDER, enclosureLabel } from '@/domain/enclosure'
 import { UNLOCK_COST, UNLOCK_REPUTATION } from '@/domain/balance'
 import { useState } from 'react'
+import { countBySentiment, type Review } from '@/domain/review'
 import { BitmapLabel } from '@/ui/components/BitmapLabel'
 import { signed } from '@/ui/signed'
 import { IconGlyph } from '@/ui/components/IconGlyph'
@@ -11,11 +12,12 @@ import { Popup } from '@/ui/components/Popup'
 import { Tabs, type TabItem } from '@/ui/components/Tabs'
 import { useGameStore } from '@/store/gameStore'
 
-type StatusTab = 'NOW' | 'REPORTS'
+type StatusTab = 'NOW' | 'REPORTS' | 'REVIEWS'
 
 const TABS: readonly TabItem<StatusTab>[] = [
   { id: 'NOW', label: 'OVERVIEW' },
   { id: 'REPORTS', label: 'REPORTS' },
+  { id: 'REVIEWS', label: 'VOICES' },
 ]
 
 export function StatusModal() {
@@ -29,6 +31,7 @@ export function StatusModal() {
   const day = useGameStore((s) => s.clock.day)
   const zooName = useGameStore((s) => s.zooName)
   const enclosureNames = useGameStore((s) => s.enclosureNames)
+  const reviews = useGameStore((s) => s.reviews)
 
   const placed = animals.filter((a) => a.status === 'PLACED').length
   const storedCount = animals.filter((a) => a.status === 'STORED').length
@@ -41,7 +44,9 @@ export function StatusModal() {
     <Popup title={zooName || 'ZOO STATUS'} width={1000} height={800} onClose={closeModal}>
       <Tabs items={TABS} active={tab} onChange={setTab} />
 
-      {tab === 'REPORTS' ? (
+      {tab === 'REVIEWS' ? (
+        <ReviewList reviews={reviews} />
+      ) : tab === 'REPORTS' ? (
         <div className="orders-list">
           {reports.length === 0 && <BitmapLabel text="NO REPORTS YET" size={26} />}
           {reports.map((r) => (
@@ -140,5 +145,47 @@ export function StatusModal() {
       </div>
       )}
     </Popup>
+  )
+}
+
+/**
+ * 손님이 남긴 말.
+ *
+ * 화면에서는 부호 하나로 스쳐 지나가고, 여기서 문장으로 읽는다.
+ * 최근 것이 위다 — 오늘 우리 동물원이 어떻게 보였는지가 먼저 궁금한 것이다.
+ */
+function ReviewList({ reviews }: { reviews: readonly Review[] }) {
+  const { good, bad } = countBySentiment(reviews)
+
+  if (reviews.length === 0) {
+    return (
+      <div className="orders-list">
+        <BitmapLabel text="NOBODY HAS SAID ANYTHING YET" size={26} />
+        <BitmapLabel text="PLACE AN ANIMAL AND LET THEM LOOK" size={18} />
+      </div>
+    )
+  }
+
+  return (
+    <div className="orders-list">
+      <div className="review-tally">
+        <span className="review-tally-side is-plus">
+          <IconGlyph icon={GUI.HEART} size={26} />
+          <BitmapLabel text={`${good}`} size={26} />
+        </span>
+        <span className="review-tally-side is-minus">
+          <IconGlyph icon={GUI.CLOSE} size={26} />
+          <BitmapLabel text={`${bad}`} size={26} />
+        </span>
+      </div>
+
+      {reviews.map((review) => (
+        <div key={review.id} className="review-row">
+          <IconGlyph icon={review.sentiment === 1 ? GUI.HEART : GUI.CLOSE} size={24} />
+          <BitmapLabel text={review.text} size={20} />
+          <BitmapLabel text={`DAY ${review.day}`} size={15} align="right" />
+        </div>
+      ))}
+    </div>
   )
 }

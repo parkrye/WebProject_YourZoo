@@ -29,6 +29,16 @@ const ENTER_SPEED = 0.1
  */
 const HEIGHT_SCALE = { min: 0.94, max: 1.06 } as const
 
+/** 말풍선이 떠 있는 시간(초). 짧으면 못 보고, 길면 관람로가 아이콘으로 덮인다. */
+const BUBBLE_SEC = 3.5
+/**
+ * 한마디를 남기고 다음까지 쉬는 시간의 범위(초).
+ *
+ * 한 사람이 쉴 새 없이 떠들면 평가가 아니라 잡음이 된다. 체류 시간(22~65초)에
+ * 견주어 잡아, 한 번 다녀가는 동안 많아야 두어 마디를 남긴다.
+ */
+const SPEAK_GAP_SEC = { min: 9, max: 22 } as const
+
 export class VisitorAgent {
   readonly spriteIndex: number
   /** 이 손님의 키 배율. 스프라이트마다 원래 비율이 달라 그 위에 곱한다. */
@@ -58,6 +68,7 @@ export class VisitorAgent {
     this.idleTimer = randRange(rng, 1, 6)
     this.bobPhase = rng() * Math.PI * 2
     this.bobSpeed = randRange(rng, 3.4, 4.8)
+    this.speakTimer = randRange(rng, SPEAK_GAP_SEC.min, SPEAK_GAP_SEC.max)
   }
 
   /** 아직 관람로까지 걸어 들어오는 중인가. */
@@ -68,6 +79,14 @@ export class VisitorAgent {
   private leaving = false
   /** 남은 체류 시간. 다 되면 스스로 돌아간다. */
   private stayTimer = 0
+  /**
+   * 지금 머리 위에 떠 있는 말풍선. 아이콘 하나뿐이라 부호만 들고 있다.
+   * `null` 이면 아무 말도 하고 있지 않다.
+   */
+  private bubbleSentiment: 1 | -1 | null = null
+  private bubbleTimer = 0
+  /** 다음 한마디까지 남은 시간. 들어오자마자 떠들지 않도록 처음부터 걸어 둔다. */
+  private speakTimer = 0
 
   /**
    * 자기 키의 몇 배만큼 화면 아래로 잠기는가.
@@ -90,6 +109,28 @@ export class VisitorAgent {
   /** 관람 중(정지) 여부. 정지 상태에서는 보빙 진폭이 줄어든다. */
   get isWatching(): boolean {
     return this.vx === 0
+  }
+
+  /** 지금 띄우고 있는 말풍선의 부호. 없으면 null. */
+  get bubble(): 1 | -1 | null {
+    return this.bubbleSentiment
+  }
+
+  /**
+   * 한마디 할 준비가 됐는가.
+   *
+   * 걸어가면서 감상을 말하지는 않는다 — 멈춰 서서 보고 있을 때만이다.
+   * 무엇을 볼지는 우리가 정하므로(`EnclosureSim`) 여기서는 때가 됐는지만 답한다.
+   */
+  get wantsToSpeak(): boolean {
+    return this.isWatching && !this.leaving && !this.entering && this.speakTimer <= 0
+  }
+
+  /** 한마디를 띄운다. 무엇에 대한 말인지는 부르는 쪽이 안다. */
+  say(sentiment: 1 | -1, rng: Rng): void {
+    this.bubbleSentiment = sentiment
+    this.bubbleTimer = BUBBLE_SEC
+    this.speakTimer = randRange(rng, SPEAK_GAP_SEC.min, SPEAK_GAP_SEC.max)
   }
 
   /** 화면 안에 들어와 있는가. 밖에서 걸어오는 동안에는 그리지 않아도 된다. */
@@ -126,6 +167,12 @@ export class VisitorAgent {
 
   update(dt: number): void {
     this.bobPhase += dt * this.bobSpeed
+
+    if (this.speakTimer > 0) this.speakTimer -= dt
+    if (this.bubbleTimer > 0) {
+      this.bubbleTimer -= dt
+      if (this.bubbleTimer <= 0) this.bubbleSentiment = null
+    }
 
     // 들어오는 동안에는 체류 시간이 줄지 않는다. 관람로에 서야 관람이 시작된다.
     if (this.entering) {

@@ -30,6 +30,7 @@ import {
   emptyAnimalDraft, emptyPropDraft, emptyRequestDraft,
   type AnimalDraft, type PropDraft, type RequestDraft, type RequestTab,
 } from '@/domain/requestDraft'
+import { reviewBalance, type Review } from '@/domain/review'
 import { type TutorialStep } from '@/domain/tutorial'
 import { createRng } from '@/core/rng'
 import { audio } from '@/audio/AudioManager'
@@ -126,6 +127,13 @@ interface GameState {
   /** 소유한 프롭. 동물과 같은 배송 -> 창고 -> 배치 흐름을 탄다. */
   props: OwnedProp[]
   orders: Order[]
+  /**
+   * 손님이 남긴 한마디. 최근 것부터 쌓인다.
+   *
+   * 오래된 것은 버린다 — 하루에 수십 줄이 나오는데 전부 들고 있으면 세이브가
+   * 평가로 가득 찬다. 어제 누가 뭐라 했는지는 오늘의 판단에 쓰이지 않는다.
+   */
+  reviews: Review[]
   /** 작성 중인 요청서. 세션 동안만 유지되고 세이브에는 넣지 않는다. */
   draft: RequestDraft
   lastReport: DailyReport | null
@@ -219,6 +227,8 @@ interface GameState {
   storeProp(id: string): boolean
   /** 창고에서 판매. 값의 절반을 돌려받는다. */
   sellProp(id: string): boolean
+  /** 손님이 남긴 말을 받아 둔다. 화면 쪽이 프레임마다 모아 한 번에 넘긴다. */
+  pushReviews(list: readonly Review[]): void
   /** 의뢰를 이행한다. 동물을 넘기고 보상을 받는다. */
   fulfillOrder(orderId: string, animalId: string): boolean
   canPlaceIn(enclosureId: BiomeId): boolean
@@ -270,6 +280,7 @@ const initial = {
   species: [] as SpeciesDoc[],
   props: [] as OwnedProp[],
   orders: [] as Order[],
+  reviews: [] as Review[],
   draft: emptyRequestDraft(),
   lastReport: null as DailyReport | null,
   reports: [] as DailyReport[],
@@ -422,6 +433,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         unlocked: state.unlocked,
         reputation,
         arrivedCount: arriving.length,
+        /*
+          평가는 **첫날치에만** 반영한다. 탭이 꺼진 채로 사흘이 지나면 여기서
+          사흘을 한꺼번에 정산하는데, 그동안 손님은 한 명도 오지 않았다.
+          같은 몇 줄을 사흘에 걸쳐 다시 세면 없던 명성이 세 배로 생긴다.
+        */
+        reviewBalance: i === 0 ? reviewBalance(state.reviews) : 0,
       })
       // 오늘치는 이미 조금씩 줬다. 그만큼 빼야 두 번 주지 않는다.
       // 탭이 오래 꺼져 여러 날이 한 번에 넘어가면 첫날만 뺀다 — 나머지 날은 준 적이 없다.
@@ -716,6 +733,12 @@ export const useGameStore = create<GameState>((set, get) => ({
       animals: s.animals.filter((a) => a.id !== id),
     }))
     return true
+  },
+
+  pushReviews: (list) => {
+    if (list.length === 0) return
+    // 새것이 앞에 온다. 목록에서 위부터 읽는 순서가 곧 최근 순이다.
+    set((s) => ({ reviews: [...list, ...s.reviews].slice(0, REVIEW_HISTORY) }))
   },
 
   buyCash: (product) => set((s) => ({ cash: s.cash + productTotal(product) })),
@@ -1017,6 +1040,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       animals: save.animals,
       // 종은 나중에 생겼다. 옛 세이브에는 없고, 그때는 그린 동물이 곧 마지막 한 마리다.
       species: save.species ?? [],
+      reviews: save.reviews ?? [],
       props: save.props ?? [],
       orders: save.orders ?? [],
       lastReport: save.lastReport,
@@ -1047,6 +1071,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       species: s.species,
       props: s.props,
       orders: s.orders,
+      reviews: s.reviews,
       lastReport: s.lastReport,
       reports: s.reports,
       options: s.options,
@@ -1058,6 +1083,14 @@ export const useGameStore = create<GameState>((set, get) => ({
 function capacityOf(capacity: Partial<Record<BiomeId, number>>, id: BiomeId): number {
   return capacity[id] ?? MAX_ANIMALS_PER_ENCLOSURE
 }
+
+/**
+ * 들고 있는 평가 수.
+ *
+ * 화면 한 판에 열 줄쯤 들어가고, 그 위로는 스크롤이다. 마흔이면 어제 오늘의
+ * 분위기를 읽기에 충분하고 세이브에 실려도 부담이 없다.
+ */
+const REVIEW_HISTORY = 40
 
 /** 운영 현황에 남겨 두는 정산 기록 수. */
 const REPORT_HISTORY = 7
