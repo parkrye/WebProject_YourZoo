@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import type { BiomeId } from '@/assets/manifest'
-import { createAnimalId, placedIn, type Animal } from '@/domain/animal'
+import { createAnimalId, isPlaced, placedIn, type Animal } from '@/domain/animal'
 import {
   ANIMAL_CREATE_COST, ANIMAL_NAME_MAX_LENGTH, CASH_TO_GOLD, DAY_DURATION_SEC,
   ENCLOSURE_EXPAND_STEP, ENCLOSURE_NAME_MAX_LENGTH, MAX_ANIMALS_PER_ENCLOSURE, MAX_ENCLOSURE_CAPACITY,
@@ -435,8 +435,8 @@ export const useGameStore = create<GameState>((set, get) => ({
           : null,
     }))
 
-    // 하루가 끝날 때 한 번만 올린다. 구경하는 사람이 보는 건 '어제 자정의 동물원'이다.
-    void publishCurrentZoo()
+    // 정산 직후는 반드시 올린다. 간격 제한을 건너뛴다.
+    void publishCurrentZoo(true)
     // 정산 직후는 반드시 올린다. 오토세이브의 간격 제한을 건너뛴다.
     void pushCurrentSave(true)
   },
@@ -909,6 +909,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     const save = loadSave()
     if (!save) return false
 
+    /*
+      배치된 동물이 있는 세이브라면 이 동물원은 이미 서버에 한 번 올라가 있다.
+      그걸 알아 둬야 마지막 한 마리를 창고에 넣었을 때 **빈 동물원을 올려**
+      구경하는 쪽의 옛 모습을 지울 수 있다.
+    */
+    if (save.animals.some(isPlaced)) publishedEver = true
+
     set({
       screen: 'ZOO',
       modal: null,
@@ -1005,6 +1012,35 @@ function saveKey(state: GameState): string {
     state.tutorial,
     state.unlocked.length,
     state.currentEnclosure,
+    // 우리 이름과 정원. 정원은 골드가 나간 결과라 다음 주기까지 미룰 수 없다.
+    Object.values(state.enclosureNames).join(','),
+    Object.values(state.capacity).join(','),
+    state.zooName,
+    // 소리 크기를 맞춰 놓고 바로 닫으면 되돌아가 있었다.
+    state.options.bgm,
+    state.options.sfx,
+  ].join('|')
+}
+
+/**
+ * **남에게 보이는 것들**의 지문. 이게 바뀌면 동물원 문서를 다시 올려야 한다.
+ *
+ * 세이브 지문과 따로 두는 이유는 담기는 것이 다르기 때문이다 — 소지금이 늘어도
+ * 구경하는 화면은 그대로이고, 동물을 창고에서 우리로 옮기면 세이브의 마릿수는
+ * 그대로인데 구경하는 화면은 완전히 달라진다.
+ */
+function zooKey(state: GameState): string {
+  const placed = state.animals.filter(isPlaced)
+  return [
+    state.zooName,
+    state.reputation,
+    state.clock.day,
+    state.unlocked.join(','),
+    Object.values(state.enclosureNames).join(','),
+    Object.values(state.capacity).join(','),
+    // 어느 동물이 어느 우리에 있는지까지 본다. 마릿수만 보면 우리를 옮겨도 안 올라간다.
+    placed.map((a) => `${a.id}@${a.enclosureId}`).join(','),
+    state.props.filter((p) => p.status === 'PLACED').map((p) => `${p.id}@${p.enclosureId}`).join(','),
   ].join('|')
 }
 
@@ -1016,9 +1052,13 @@ function saveKey(state: GameState): string {
  * 세이브가 탭을 떠날 때만 기록됐다.
  *
  * 그래서 세 갈래로 쓴다.
- *   1. 의미 있는 변화(정산·동물 추가·해금·우리 이동) 직후 즉시
+ *   1. 의미 있는 변화(정산·동물 추가·해금·우리 이동·우리 이름·정원·옵션) 직후 즉시
  *   2. 15초 주기 — 시계 진행을 흘려보내지 않기 위해
  *   3. 탭을 떠나거나 페이지가 사라질 때
+ *
+ * 남에게 보이는 동물원 문서도 같은 자리에서 함께 올린다. 담기는 것이 달라
+ * 지문은 따로 본다(`zooKey`) — 소지금이 늘어도 구경하는 화면은 그대로이고,
+ * 동물을 창고에서 우리로 옮기면 세이브의 마릿수는 그대로인데 화면은 달라진다.
  *
  * 타이틀 화면에서는 쓰지 않는다 — 새 게임 초기 상태로 기존 세이브를 덮으면 안 된다.
  */
@@ -1044,10 +1084,25 @@ export function startAutosave(): () => void {
     writeSave(state.snapshot())
     // 계정이 있으면 서버에도 올린다. 하루 정산까지 기다리면 짧게 놀고 닫은 진행이 날아간다.
     void pushCurrentSave(urgent)
+    /*
+      배치가 바뀌었으면 남에게 보이는 문서도 다시 올린다.
+
+      예전에는 자정 정산 때만 올렸다. 구경하는 사람이 보는 건 '어제 자정의 동물원'
+      이라는 규칙이었는데, 실제로는 방금 놓은 동물이 하루 내내 안 보인다는 뜻이었다.
+      정작 자랑하고 싶은 순간이 바로 놓은 직후다.
+    */
+    if (zooDirty) void publishCurrentZoo(urgent)
   }
 
   let lastKey = saveKey(useGameStore.getState())
+  let lastZoo = zooKey(useGameStore.getState())
   const unsubscribe = useGameStore.subscribe((state) => {
+    const zoo = zooKey(state)
+    if (zoo !== lastZoo) {
+      lastZoo = zoo
+      markZooDirty()
+    }
+
     const key = saveKey(state)
     if (key === lastKey) return
     lastKey = key
@@ -1078,19 +1133,56 @@ function firstUnlocked(unlocked: readonly BiomeId[]): BiomeId {
 }
 
 /**
- * 내 동물원을 서버에 올린다. 하루 정산 때 한 번.
+ * 아직 올리지 못한 변화가 있는가. 간격 제한에 걸려 건너뛴 것을 잊지 않으려고 둔다.
+ */
+let zooDirty = false
+let lastPublishAt = Number.NEGATIVE_INFINITY
+/**
+ * 동물원을 올리는 최소 간격.
+ *
+ * 배치가 바뀔 때마다 곧바로 올리면 트레이에서 다섯 마리를 옮기는 사이에
+ * 그림 전부가 다섯 번 나간다. 미뤄 둔 것은 `zooDirty` 가 기억하고 있다가
+ * 다음 주기 저장에서 함께 나간다.
+ */
+const PUBLISH_INTERVAL_MS = 20_000
+/**
+ * 한 번이라도 올린 적이 있는가.
+ *
+ * 처음에는 배치된 동물이 없으면 올리지 않는다 — 아무것도 없는 동물원을
+ * 검색 목록에 세워 둘 이유가 없다. 하지만 **이미 올린 뒤라면 비어도 올려야 한다.**
+ * 마지막 한 마리를 창고에 넣었는데 구경하는 쪽에는 그대로 있으면 거짓말이 된다.
+ */
+let publishedEver = false
+
+/** 배치가 바뀌었다고 표시해 둔다. 실제로 올리는 건 `publishCurrentZoo` 가 정한다. */
+function markZooDirty(): void {
+  zooDirty = true
+}
+
+/**
+ * 내 동물원을 서버에 올린다.
  *
  * 배치된 동물만 올린다 — 창고에 쌓아 둔 건 구경하는 사람에게 보이지 않는다.
  * 소지금도 담지 않는다. 남의 지갑이 보이면 자랑하려고 숫자를 부풀리는 쪽으로 놀이가 기운다.
  *
  * 실패해도 조용히 넘어간다. 서버가 없어도(정적 호스팅) 게임은 그대로 돌아가야 한다.
  */
-async function publishCurrentZoo(): Promise<void> {
+async function publishCurrentZoo(force = false): Promise<void> {
   const s = useGameStore.getState()
   if (!s.userId) return
 
+  const now = performance.now()
+  // 미룬 것은 `zooDirty` 가 그대로 들고 있다. 다음 기회에 나간다.
+  if (!force && now - lastPublishAt < PUBLISH_INTERVAL_MS) return
+
   const animals = s.animals.filter((a) => a.status === 'PLACED')
-  if (animals.length === 0) return
+  if (animals.length === 0 && !publishedEver) {
+    zooDirty = false
+    return
+  }
+  lastPublishAt = now
+  zooDirty = false
+  publishedEver = true
   const props = s.props.filter((p) => p.status === 'PLACED')
 
   const images: Record<string, string> = {}
