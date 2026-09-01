@@ -132,7 +132,7 @@ async function loadCatalogSheet(id: string): Promise<ImageBitmap | null> {
  * 실패할 때마다 서버를 찔러 보게 하면, 방금 판 동물의 그림을 찾다가도 네트워크를 탄다.
  * **구경에 들어갈 때 명시적으로** 미리 받아 둔다.
  */
-export async function preloadRemote(ids: readonly string[]): Promise<void> {
+export async function preloadRemote(userId: string, ids: readonly string[]): Promise<void> {
   await Promise.all(
     ids.map(async (id) => {
       if (bitmaps.has(id)) return
@@ -142,7 +142,7 @@ export async function preloadRemote(ids: readonly string[]): Promise<void> {
         return
       }
       try {
-        const res = await fetch(remoteImageUrl(id))
+        const res = await fetch(remoteImageUrl(userId, id))
         if (!res.ok) return
         bitmaps.set(id, await createImageBitmap(await res.blob()))
       } catch {

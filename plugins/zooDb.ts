@@ -1,5 +1,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import {
+  existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import type { Connect, Plugin, ViteDevServer, PreviewServer } from 'vite'
 
@@ -29,13 +31,45 @@ import type { Connect, Plugin, ViteDevServer, PreviewServer } from 'vite'
  * | GET | `/api/v1/zoos/random` | — | 본인 제외 랜덤 |
  * | GET | `/api/v1/zoos/:id` | — | 동물원 한 채 |
  * | PUT | `/api/v1/zoos/:id` | 계정이면 토큰 | 공개 |
- * | GET | `/api/v1/images/:id` | — | 그림 |
+ * | GET | `/api/v1/users/:id/images/:imageId` | — | 그림 |
+ */
+/**
+ * ## 저장소 배치
+ *
+ * ```
+ * db/
+ *   users/<ID>/account.json      계정 (비회원에게는 없다)
+ *   users/<ID>/save.json         이어하기에 필요한 전부
+ *   users/<ID>/zoo.json          남에게 보이는 동물원
+ *   users/<ID>/images/*.png      그 사람이 그린 것
+ *   _index/zoos.json             검색용 요약 캐시
+ *   _orphans/*.png               주인을 못 찾은 옛 그림
+ * ```
+ *
+ * 예전에는 `accounts/ saves/ zoos/ images/` 로 **종류별**로 나눠 두었다.
+ * 문서 셋은 그래도 아이디가 파일명이라 주인을 알 수 있었지만 그림은 아니었다 —
+ * 한 폴더에 모두의 그림이 평평하게 쌓였고, 누구 것인지도, 아직 쓰이는지도
+ * 알 방법이 없어 지운 동물의 그림이 영영 남았다.
+ *
+ * 유저별로 묶으면 셋 다 풀린다. 주인은 경로가 말해 주고, 한 사람을 통째로
+ * 지우거나 옮기는 것이 폴더 하나를 다루는 일이 되고, 안 쓰는 그림은
+ * **그 폴더 안에서만** 찾으면 된다.
  */
 const ROOT = 'db'
-const ZOOS = join(ROOT, 'zoos')
-const IMAGES = join(ROOT, 'images')
-const ACCOUNTS = join(ROOT, 'accounts')
-const SAVES = join(ROOT, 'saves')
+const USERS = join(ROOT, 'users')
+/** 검색용 요약 캐시. 원본은 늘 각 유저 폴더의 `zoo.json` 이다. */
+const INDEX_DIR = join(ROOT, '_index')
+const ZOO_INDEX = join(INDEX_DIR, 'zoos.json')
+/** 옛 평면 저장소에서 주인을 못 찾은 그림. 지우지 않고 여기 모아 둔다. */
+const ORPHANS = join(ROOT, '_orphans')
+
+const userDir = (userId: string): string => join(USERS, userId)
+const accountFile = (userId: string): string => join(userDir(userId), 'account.json')
+const saveFile = (userId: string): string => join(userDir(userId), 'save.json')
+const zooFile = (userId: string): string => join(userDir(userId), 'zoo.json')
+const imageDir = (userId: string): string => join(userDir(userId), 'images')
+const imageFile = (userId: string, imageId: string): string =>
+  join(imageDir(userId), `${imageId}.png`)
 
 const API_PREFIX = '/v1'
 
@@ -108,7 +142,8 @@ interface ZooDoc {
 
 export function zooDb(): Plugin {
   const attach = (server: ViteDevServer | PreviewServer): void => {
-    ensureDirs()
+    ensureRoot()
+    migrateFlatLayout()
     server.middlewares.use('/api', handle)
   }
 
@@ -163,8 +198,16 @@ const handle: Connect.NextHandleFunction = (req, res, next) => {
     return void fail(res, 405, 'BAD_METHOD', 'METHOD NOT ALLOWED')
   }
 
-  const image = /^\/images\/([^/]+)$/.exec(route)
-  if (image && req.method === 'GET') return void readImage(image[1] ?? '', res)
+  /*
+    그림은 **주인을 지나서** 읽는다. 예전에는 `/images/:id` 하나였는데,
+    그러면 주소만으로는 누구 그림인지 알 수 없고 서버도 한 폴더를 뒤져야 했다.
+  */
+  const image = /^\/users\/([^/]+)\/images\/([^/]+)$/.exec(route)
+  if (image && req.method === 'GET') {
+    const id = decodeURIComponent(image[1] ?? '')
+    if (!SAFE_ID.test(id)) return void fail(res, 400, 'BAD_ID', 'BAD ID')
+    return void readImage(id, image[2] ?? '', res)
+  }
 
   fail(res, 404, 'NOT_FOUND', 'UNKNOWN ENDPOINT')
 }
@@ -200,7 +243,7 @@ function signup(req: IncomingMessage, res: ServerResponse): void {
       tokenIssuedAt: now,
       createdAt: now,
     }
-    ensureDirs()
+    ensureUser(userId)
     writeFileSync(accountFile(userId), JSON.stringify(account), 'utf8')
     ok(res, { userId, token: account.token })
   })
@@ -257,9 +300,6 @@ function loadAccount(userId: string): Account | null {
     return null
   }
 }
-
-const accountFile = (userId: string): string => join(ACCOUNTS, `${userId}.json`)
-const saveFile = (userId: string): string => join(SAVES, `${userId}.json`)
 
 /**
  * 이 요청이 그 아이디의 주인인가.
@@ -326,14 +366,15 @@ function writeSave(userId: string, req: IncomingMessage, res: ServerResponse): v
 
   void readJson(req, res).then((body) => {
     if (!body) return
-    if (!storeImages(body.images, res)) return
+    if (!storeImages(userId, body.images, res)) return
     delete body.images
 
     if (!Array.isArray(body.animals) || body.animals.length > MAX_ANIMALS) {
       return fail(res, 400, 'BAD_SAVE', 'BAD SAVE')
     }
-    ensureDirs()
+    ensureUser(userId)
     writeFileSync(saveFile(userId), JSON.stringify(body), 'utf8')
+    pruneImages(userId)
     ok(res, {})
   })
 }
@@ -347,10 +388,9 @@ function search(url: URL, res: ServerResponse): void {
   const exclude = text(url.searchParams.get('exclude'))
 
   // 아이디로도 동물원 이름으로도 찾는다. 둘 중 뭘 들고 왔는지 유저는 신경 쓸 필요 없다.
-  const zoos = allZoos()
+  const zoos = readIndex()
     .filter((zoo) => zoo.userId !== exclude)
     .filter((zoo) => q === '' || zoo.userId.includes(q) || zoo.zooName.toUpperCase().includes(q))
-    .map(summary)
     .sort((a, b) => b.updatedAt - a.updatedAt)
     .slice(0, 20)
 
@@ -359,11 +399,16 @@ function search(url: URL, res: ServerResponse): void {
 
 function random(url: URL, res: ServerResponse): void {
   const exclude = text(url.searchParams.get('exclude'))
-  const others = allZoos().filter((zoo) => zoo.userId !== exclude)
+  const others = readIndex().filter((zoo) => zoo.userId !== exclude)
   // 저장된 동물원이 자기 것뿐이면 갈 데가 없다. 빈 목록이 아니라 실패로 알린다.
   if (others.length === 0) return void fail(res, 404, 'NO_OTHER_ZOOS', 'NO OTHER ZOOS')
 
-  ok(res, { zoo: others[Math.floor(Math.random() * others.length)] })
+  // 목록에는 요약만 있다. 고른 다음 그 한 채를 원본에서 읽는다.
+  const picked = others[Math.floor(Math.random() * others.length)]
+  const zoo = picked ? loadZoo(picked.userId) : null
+  if (!zoo) return void fail(res, 404, 'NO_OTHER_ZOOS', 'NO OTHER ZOOS')
+
+  ok(res, { zoo })
 }
 
 function readZoo(id: string, res: ServerResponse): void {
@@ -378,14 +423,17 @@ function writeZoo(id: string, req: IncomingMessage, res: ServerResponse): void {
 
   void readJson(req, res).then((body) => {
     if (!body) return
-    if (!storeImages(body.images, res)) return
+    if (!storeImages(id, body.images, res)) return
     delete body.images
 
     const doc = asZooDoc(id, body)
     if (!doc) return void fail(res, 400, 'BAD_ZOO', 'BAD ZOO DATA')
 
-    ensureDirs()
-    writeFileSync(join(ZOOS, `${id}.json`), JSON.stringify(doc), 'utf8')
+    ensureUser(id)
+    writeFileSync(zooFile(id), JSON.stringify(doc), 'utf8')
+    // 목록은 요약만 들고 있다. 한 채가 바뀌면 그 한 줄만 갈아 끼운다.
+    updateIndex(doc)
+    pruneImages(id)
     ok(res, {})
   })
 }
@@ -446,11 +494,11 @@ function countMap(value: unknown): Record<string, number> {
 // 그림
 // ─────────────────────────────────────────────────────────────
 
-function readImage(name: string, res: ServerResponse): void {
+function readImage(userId: string, name: string, res: ServerResponse): void {
   const id = name.replace(/\.png$/, '')
   if (!SAFE_IMAGE_ID.test(id)) return void fail(res, 400, 'BAD_ID', 'BAD ID')
 
-  const file = join(IMAGES, `${id}.png`)
+  const file = imageFile(userId, id)
   if (!existsSync(file)) return void fail(res, 404, 'NOT_FOUND', 'NO IMAGE')
 
   res.statusCode = 200
@@ -466,7 +514,7 @@ function readImage(name: string, res: ServerResponse): void {
  *
  * 실패하면 응답까지 마치고 `false` 를 준다 — 호출한 쪽이 이어서 쓰지 않도록.
  */
-function storeImages(value: unknown, res: ServerResponse): boolean {
+function storeImages(userId: string, value: unknown, res: ServerResponse): boolean {
   if (value === undefined || value === null) return true
   if (typeof value !== 'object') {
     fail(res, 400, 'BAD_IMAGES', 'BAD IMAGES')
@@ -479,7 +527,7 @@ function storeImages(value: unknown, res: ServerResponse): boolean {
     return false
   }
 
-  ensureDirs()
+  ensureUser(userId)
   for (const [imageId, dataUrl] of entries) {
     if (!SAFE_IMAGE_ID.test(imageId)) continue
     if (typeof dataUrl !== 'string') continue
@@ -490,7 +538,7 @@ function storeImages(value: unknown, res: ServerResponse): boolean {
     if (buffer.length === 0 || buffer.length > MAX_IMAGE_BYTES) continue
     if (!isPng(buffer)) continue
 
-    writeFileSync(join(IMAGES, `${imageId}.png`), buffer)
+    writeFileSync(imageFile(userId, imageId), buffer)
   }
   return true
 }
@@ -503,31 +551,34 @@ const isPng = (buffer: Buffer): boolean => buffer.subarray(0, 8).equals(PNG_MAGI
 // 저장소
 // ─────────────────────────────────────────────────────────────
 
-function ensureDirs(): void {
-  for (const dir of [ROOT, ZOOS, IMAGES, ACCOUNTS, SAVES]) {
+function ensureRoot(): void {
+  for (const dir of [ROOT, USERS, INDEX_DIR]) {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   }
 }
 
-function allZoos(): ZooDoc[] {
-  ensureDirs()
-  const docs: ZooDoc[] = []
-  for (const file of readdirSync(ZOOS)) {
-    if (!file.endsWith('.json')) continue
-    const doc = parse(join(ZOOS, file))
-    if (doc) docs.push(doc)
-  }
-  return docs
+/** 이 사람의 자리를 마련한다. 그림 폴더까지 함께 만든다. */
+function ensureUser(userId: string): void {
+  ensureRoot()
+  if (!existsSync(imageDir(userId))) mkdirSync(imageDir(userId), { recursive: true })
 }
 
-function loadZoo(id: string): ZooDoc | null {
-  ensureDirs()
-  return parse(join(ZOOS, `${id}.json`))
+/** 자리를 가진 사람들. 폴더 이름이 곧 아이디다. */
+function userIds(): string[] {
+  ensureRoot()
+  return readdirSync(USERS).filter(
+    (name) => SAFE_ID.test(name) && statSync(join(USERS, name)).isDirectory(),
+  )
 }
 
-function parse(file: string): ZooDoc | null {
+function loadZoo(userId: string): ZooDoc | null {
+  ensureRoot()
+  return parseFile<ZooDoc>(zooFile(userId))
+}
+
+function parseFile<T>(file: string): T | null {
   try {
-    return JSON.parse(readFileSync(file, 'utf8')) as ZooDoc
+    return JSON.parse(readFileSync(file, 'utf8')) as T
   } catch {
     // 쓰는 도중에 읽었거나 손으로 건드려 깨진 파일. 하나 때문에 목록 전체가 죽으면 안 된다.
     return null
@@ -535,7 +586,16 @@ function parse(file: string): ZooDoc | null {
 }
 
 /** 목록에 필요한 만큼만. 동물 배열까지 실어 보내면 검색 한 번이 수 MB 가 된다. */
-function summary(zoo: ZooDoc) {
+interface ZooSummary {
+  userId: string
+  zooName: string
+  reputation: number
+  day: number
+  animalCount: number
+  updatedAt: number
+}
+
+function summary(zoo: ZooDoc): ZooSummary {
   return {
     userId: zoo.userId,
     zooName: zoo.zooName,
@@ -544,6 +604,180 @@ function summary(zoo: ZooDoc) {
     animalCount: Array.isArray(zoo.animals) ? zoo.animals.length : 0,
     updatedAt: zoo.updatedAt,
   }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 검색용 요약 캐시
+//
+// 검색 한 번에 모든 사람의 zoo.json 을 열어 볼 이유가 없다 — 동물 배열까지
+// 통째로 읽고 요약 여섯 줄만 쓴다. **캐시일 뿐 원본이 아니다.** 어긋났다고
+// 판단되면 그 자리에서 원본으로 다시 만든다.
+// ─────────────────────────────────────────────────────────────
+
+function rebuildIndex(): ZooSummary[] {
+  const list: ZooSummary[] = []
+  for (const id of userIds()) {
+    const zoo = loadZoo(id)
+    if (zoo) list.push(summary(zoo))
+  }
+  writeIndex(list)
+  return list
+}
+
+function writeIndex(list: readonly ZooSummary[]): void {
+  ensureRoot()
+  writeFileSync(ZOO_INDEX, JSON.stringify(list), 'utf8')
+}
+
+/**
+ * 요약 목록.
+ *
+ * 캐시에 든 아이디와 실제로 zoo.json 을 가진 아이디가 다르면 다시 만든다.
+ * 폴더 목록을 읽는 건 싸고 문서를 전부 파싱하는 건 비싸다 — 싼 쪽으로 확인한다.
+ */
+function readIndex(): ZooSummary[] {
+  const cached = parseFile<ZooSummary[]>(ZOO_INDEX)
+  if (!Array.isArray(cached)) return rebuildIndex()
+
+  const onDisk = userIds().filter((id) => existsSync(zooFile(id)))
+  if (onDisk.length !== cached.length) return rebuildIndex()
+
+  const known = new Set(cached.map((z) => z.userId))
+  if (onDisk.some((id) => !known.has(id))) return rebuildIndex()
+  return cached
+}
+
+/** 한 채가 바뀌었다. 그 한 줄만 갈아 끼운다. */
+function updateIndex(zoo: ZooDoc): void {
+  const list = readIndex().filter((z) => z.userId !== zoo.userId)
+  list.push(summary(zoo))
+  writeIndex(list)
+}
+
+// ─────────────────────────────────────────────────────────────
+// 안 쓰는 그림 치우기
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 이 사람의 문서가 아직 가리키고 있는 그림들.
+ *
+ * 문서가 하나도 없거나 읽다 깨졌으면 null 이다 — **모른다는 것과 없다는 것은
+ * 다르다.** 모르는 채로 지우면 멀쩡한 그림이 날아간다.
+ */
+function referencedImages(userId: string): Set<string> | null {
+  const ids = new Set<string>()
+  let read = 0
+
+  for (const file of [saveFile(userId), zooFile(userId)]) {
+    if (!existsSync(file)) continue
+    const doc = parseFile<unknown>(file)
+    if (doc === null) return null
+    collectImageIds(doc, ids)
+    read++
+  }
+  return read > 0 ? ids : null
+}
+
+/**
+ * 문서 어디에 그림 아이디가 있는지 미리 알 수 없다 — 동물에도 프롭에도 시트에도
+ * 리그 파츠 표에도 있다. 모양을 따라가지 말고 **이름으로 줍는다.**
+ */
+function collectImageIds(node: unknown, into: Set<string>): void {
+  if (!node || typeof node !== 'object') return
+  if (Array.isArray(node)) {
+    for (const item of node) collectImageIds(item, into)
+    return
+  }
+
+  for (const [key, value] of Object.entries(node as Record<string, unknown>)) {
+    if (key === 'imageId' && typeof value === 'string') {
+      if (SAFE_IMAGE_ID.test(value)) into.add(value)
+      continue
+    }
+    // 리그는 부위마다 아이디를 든 표다. 값이 전부 그림 아이디다.
+    if (key === 'rig' && value && typeof value === 'object' && !Array.isArray(value)) {
+      for (const part of Object.values(value as Record<string, unknown>)) {
+        if (typeof part === 'string' && SAFE_IMAGE_ID.test(part)) into.add(part)
+      }
+      continue
+    }
+    collectImageIds(value, into)
+  }
+}
+
+/** 아무 문서도 가리키지 않는 그림을 지운다. 판 동물과 다시 그린 파츠가 여기 남는다. */
+function pruneImages(userId: string): void {
+  const dir = imageDir(userId)
+  if (!existsSync(dir)) return
+
+  const keep = referencedImages(userId)
+  if (!keep) return
+
+  for (const file of readdirSync(dir)) {
+    if (!file.endsWith('.png')) continue
+    if (keep.has(file.slice(0, -4))) continue
+    rmSync(join(dir, file), { force: true })
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 옛 배치에서 옮겨 오기
+//
+// 한 번만 돈다. 옛 폴더가 없으면 아무 일도 하지 않는다.
+// ─────────────────────────────────────────────────────────────
+
+function migrateFlatLayout(): void {
+  const legacyDocs: readonly (readonly [string, string])[] = [
+    [join(ROOT, 'accounts'), 'account.json'],
+    [join(ROOT, 'saves'), 'save.json'],
+    [join(ROOT, 'zoos'), 'zoo.json'],
+  ]
+  const legacyImages = join(ROOT, 'images')
+  if (![...legacyDocs.map(([dir]) => dir), legacyImages].some(existsSync)) return
+
+  for (const [dir, name] of legacyDocs) {
+    if (!existsSync(dir)) continue
+    for (const file of readdirSync(dir)) {
+      if (!file.endsWith('.json')) continue
+      const id = file.slice(0, -5)
+      if (!SAFE_ID.test(id)) continue
+      ensureUser(id)
+      renameSync(join(dir, file), join(userDir(id), name))
+    }
+    rmSync(dir, { recursive: true, force: true })
+  }
+
+  if (existsSync(legacyImages)) migrateImages(legacyImages)
+  rebuildIndex()
+}
+
+/**
+ * 평평하게 쌓인 그림에 주인을 찾아 준다.
+ *
+ * 옮겨 놓은 문서들이 무엇을 가리키는지 먼저 모으고 그 표로 나눈다.
+ * 아무도 안 가리키는 그림은 **지우지 않고** _orphans/ 로 보낸다 —
+ * 여기서 판단을 틀리면 되돌릴 방법이 없다.
+ */
+function migrateImages(from: string): void {
+  const owner = new Map<string, string>()
+  for (const id of userIds()) {
+    const ids = referencedImages(id)
+    if (!ids) continue
+    for (const imageId of ids) owner.set(imageId, id)
+  }
+
+  for (const file of readdirSync(from)) {
+    if (!file.endsWith('.png')) continue
+    const id = owner.get(file.slice(0, -4))
+    if (id) {
+      ensureUser(id)
+      renameSync(join(from, file), join(imageDir(id), file))
+      continue
+    }
+    if (!existsSync(ORPHANS)) mkdirSync(ORPHANS, { recursive: true })
+    renameSync(join(from, file), join(ORPHANS, file))
+  }
+  rmSync(from, { recursive: true, force: true })
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -477,7 +477,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       ]),
       ...(doc.props ?? []).map((p) => p.imageId).filter((id): id is string => id !== null),
     ]
-    await preloadRemote(ids)
+    await preloadRemote(doc.userId, ids)
     set({ travel: 'OUT', pendingTravel: { visiting: doc }, modal: null })
   },
 
@@ -635,9 +635,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     const target = animals.find((a) => a.id === id)
     if (!target || target.status !== 'STORED') return false
 
-    // 그림은 더 이상 참조되지 않는다. 저장소와 메모리 양쪽에서 지운다.
-    void deleteImage(target.imageId)
-    forgetBitmap(target.imageId)
+    /*
+      그림은 더 이상 참조되지 않는다. 저장소와 메모리 양쪽에서 지운다.
+      **파츠까지 지운다** — 대표 그림 하나만 지우면 부위 다섯 장이 IndexedDB 에
+      영영 남는다. 판 동물이 자리만 차지하지 않고 용량까지 물고 있었다.
+    */
+    for (const imageId of [target.imageId, ...Object.values(target.rig ?? {})]) {
+      void deleteImage(imageId)
+      forgetBitmap(imageId)
+    }
 
     set((s) => ({
       gold: s.gold + sellRefund(target),
@@ -887,7 +893,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
 
     // 다른 기기에서 그린 그림은 이 기기에 없다. 들어가기 전에 받아 둔다.
-    await preloadRemote(imageIdsOf(cloud))
+    await preloadRemote(result.account.userId, imageIdsOf(cloud))
     writeSave(cloud)
     set({ account: result.account, sync: 'SYNCED' })
     get().continueGame()
@@ -1270,6 +1276,8 @@ function imageIdsOf(save: SaveV2): string[] {
   for (const animal of save.animals) {
     ids.add(animal.imageId)
     if (animal.spriteSheet) ids.add(animal.spriteSheet.imageId)
+    // 파츠도 그림이다. 이게 빠져 있어서 다른 기기에서 이어하면 리그 동물이 몸통만 남았다.
+    for (const partId of Object.values(animal.rig ?? {})) ids.add(partId)
   }
   for (const prop of save.props ?? []) {
     if (prop.imageId) ids.add(prop.imageId)

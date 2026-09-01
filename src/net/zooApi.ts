@@ -67,7 +67,11 @@ export async function publishZoo(
   return result.ok
 }
 
-/** 남의 동물원 그림이 있는 자리. IndexedDB 가 아니라 서버에서 읽는다. */
-export function remoteImageUrl(imageId: string): string {
-  return imageUrl(imageId)
+/**
+ * 남의 동물원 그림이 있는 자리. IndexedDB 가 아니라 서버에서 읽는다.
+ *
+ * 주인을 함께 넘긴다 — 그림은 그린 사람의 폴더에 있고, 주소가 그걸 그대로 말한다.
+ */
+export function remoteImageUrl(userId: string, imageId: string): string {
+  return imageUrl(userId, imageId)
 }
